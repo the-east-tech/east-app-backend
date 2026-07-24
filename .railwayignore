@@ -1,0 +1,9 @@
+.git/
+.idea/
+target/
+*.iml
+.DS_Store
+compose.yaml
+compose.yml
+Dockerfile
+README-local.md

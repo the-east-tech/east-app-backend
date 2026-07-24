@@ -1,0 +1,39 @@
+package com.eastapp.backend.identity.api;
+
+import com.eastapp.backend.identity.auth.AuthenticatedUser;
+import com.eastapp.backend.identity.auth.AuthenticationService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/auth")
+public class AuthenticationController {
+
+    private final AuthenticationService authenticationService;
+
+    public AuthenticationController(AuthenticationService authenticationService) {
+        this.authenticationService = authenticationService;
+    }
+
+    @PostMapping("/login")
+    LoginResponse login(@Valid @RequestBody LoginRequest request) {
+        return authenticationService.login(request);
+    }
+
+    @GetMapping("/me")
+    CurrentUserResponse me(@AuthenticationPrincipal AuthenticatedUser principal) {
+        return authenticationService.currentUser(principal);
+    }
+
+    @PostMapping("/logout")
+    ResponseEntity<Void> logout(@AuthenticationPrincipal AuthenticatedUser principal) {
+        authenticationService.logout(principal.sessionId(), principal.userId());
+        return ResponseEntity.noContent().build();
+    }
+}

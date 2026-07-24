@@ -1,0 +1,41 @@
+server:
+  address: 0.0.0.0
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: east-app
+
+  docker:
+    compose:
+      enabled: ${SPRING_DOCKER_COMPOSE_ENABLED:true}
+      lifecycle-management: start-only
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+
+eastapp:
+  bootstrap:
+    enabled: ${EASTAPP_BOOTSTRAP_ENABLED:false}
+    company-code: ${EASTAPP_BOOTSTRAP_COMPANY_CODE:}
+    company-name: ${EASTAPP_BOOTSTRAP_COMPANY_NAME:}
+    employee-id: ${EASTAPP_BOOTSTRAP_EMPLOYEE_ID:E0001}
+    full-name: ${EASTAPP_BOOTSTRAP_FULL_NAME:}
+    phone-e164: ${EASTAPP_BOOTSTRAP_PHONE_E164:}
+    password: ${EASTAPP_BOOTSTRAP_PASSWORD:}
+
+  attendance:
+    time-zone: ${EASTAPP_ATTENDANCE_TIME_ZONE:Asia/Kuala_Lumpur}
+    location-name: ${EASTAPP_ATTENDANCE_LOCATION_NAME:Secret Coffee House}
+    latitude: ${EASTAPP_ATTENDANCE_LATITUDE:4.3272472}
+    longitude: ${EASTAPP_ATTENDANCE_LONGITUDE:101.1329829}
+    allowed-radius-meters: ${EASTAPP_ATTENDANCE_ALLOWED_RADIUS_METERS:100}

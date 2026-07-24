@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: eastapp
+      POSTGRES_USER: eastapp
+      POSTGRES_PASSWORD: eastapp_dev
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - eastapp-postgres-data:/var/lib/postgresql
+
+volumes:
+  eastapp-postgres-data:

@@ -1,0 +1,63 @@
+@baseUrl = http://localhost:8080
+
+### Login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "companyCode": "EAST",
+  "employeeId": "E0001",
+  "phoneE164": "+60XXXXXXXXX",
+  "password": "XXXX"
+}
+
+> {%
+  client.global.set("eastappToken", response.body.token);
+%}
+
+### Attendance today
+GET {{baseUrl}}/api/v1/attendance/today
+Authorization: Bearer {{eastappToken}}
+
+### Create clock-in event (replace coordinates before running)
+POST {{baseUrl}}/api/v1/attendance/events
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "clientEventId": "manual-test-{{$timestamp}}",
+  "eventType": "CLOCK_IN",
+  "deviceCapturedAt": "{{$isoTimestamp}}",
+  "latitude": 4.3272472,
+  "longitude": 101.1329829,
+  "accuracyMeters": 10,
+  "cameraCaptureValid": true,
+  "faceValid": true,
+  "faceCount": 1,
+  "faceBoxWidth": 180,
+  "faceBoxHeight": 220,
+  "faceYaw": 0,
+  "faceRoll": 0,
+  "facePitch": 0,
+  "qrCheckpointValid": true,
+  "devicePlatform": "INTELLIJ_TEST",
+  "deviceOsVersion": "macOS",
+  "appVersion": "east_app_v228",
+  "validationMethod": "MANUAL_API_TEST"
+}
+
+### Daily People Audit
+GET {{baseUrl}}/api/v1/attendance/audit?period=DAY&anchor=2026-07-25
+Authorization: Bearer {{eastappToken}}
+
+### Weekly People Audit
+GET {{baseUrl}}/api/v1/attendance/audit?period=WEEK&anchor=2026-07-25
+Authorization: Bearer {{eastappToken}}
+
+### Monthly People Audit
+GET {{baseUrl}}/api/v1/attendance/audit?period=MONTH&anchor=2026-07-25
+Authorization: Bearer {{eastappToken}}
+
+### Yearly People Audit
+GET {{baseUrl}}/api/v1/attendance/audit?period=YEAR&anchor=2026-07-25
+Authorization: Bearer {{eastappToken}}
