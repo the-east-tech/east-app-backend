@@ -7,8 +7,8 @@ Content-Type: application/json
 {
   "companyCode": "EAST",
   "employeeId": "E0001",
-  "phoneE164": "+60XXXXXXXXX",
-  "password": "XXXX"
+  "phoneE164": "+60166016488",
+  "password": "1111"
 }
 
 > {%

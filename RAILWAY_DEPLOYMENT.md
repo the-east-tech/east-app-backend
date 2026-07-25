@@ -56,7 +56,7 @@ cd ~/IdeaProjects/east-app
 railway up
 ```
 
-Railpack detects Maven from `pom.xml`, builds with Java 25 and starts the Spring Boot JAR. Flyway applies V1 and V2 automatically.
+Railpack detects Maven from `pom.xml`, builds with Java 25 and starts the Spring Boot JAR. Flyway applies V1, V2 and V3 automatically.
 
 ## 5. Public HTTPS domain
 
