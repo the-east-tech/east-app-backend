@@ -1,5 +1,6 @@
 package com.eastapp.backend.identity.api;
 
+import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.identity.auth.AuthenticatedUser;
 import com.eastapp.backend.identity.service.UserAccountService;
 import jakarta.validation.Valid;
@@ -14,9 +15,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -31,8 +32,14 @@ public class UserController {
     }
 
     @GetMapping
-    List<UserResponse> list(@AuthenticationPrincipal AuthenticatedUser principal) {
-        return userAccountService.list(principal.tenantId());
+    PageResponse<UserResponse> list(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return userAccountService.list(principal.tenantId(), search, active, page, size);
     }
 
     @GetMapping("/{userId}")

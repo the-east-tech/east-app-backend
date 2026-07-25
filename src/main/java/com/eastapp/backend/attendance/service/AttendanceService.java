@@ -9,6 +9,8 @@ import com.eastapp.backend.attendance.api.AttendanceAuditSummaryResponse;
 import com.eastapp.backend.attendance.api.AttendanceEventResponse;
 import com.eastapp.backend.attendance.api.AttendanceTodayResponse;
 import com.eastapp.backend.attendance.api.AttendanceUserAuditResponse;
+import com.eastapp.backend.attendance.api.AttendanceUserDetailResponse;
+import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.attendance.api.CreateAttendanceEventRequest;
 import com.eastapp.backend.attendance.config.AttendanceProperties;
 import com.eastapp.backend.identity.Tenant;
@@ -19,6 +21,7 @@ import com.eastapp.backend.identity.UserSession;
 import com.eastapp.backend.identity.UserSessionRepository;
 import com.eastapp.backend.identity.auth.AuthenticatedUser;
 import com.eastapp.backend.identity.support.ApiException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -254,6 +257,66 @@ public class AttendanceService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public AttendanceUserDetailResponse userAudit(
+            AuthenticatedUser principal,
+            UUID userId,
+            AttendanceReportPeriod period,
+            LocalDate anchor,
+            int page,
+            int size
+    ) {
+        ZoneId zoneId = properties.zoneId();
+        LocalDate resolvedAnchor = anchor == null ? LocalDate.now(zoneId) : anchor;
+        DateRange dateRange = dateRange(period, resolvedAnchor);
+        TimeRange timeRange = timeRange(dateRange.startDate(), dateRange.endDate(), zoneId);
+
+        UserAccount user = userAccountRepository
+                .findByIdAndTenant_Id(userId, principal.tenantId())
+                .orElseThrow(() -> notFound("USER_NOT_FOUND", "User not found."));
+
+        List<AttendanceEvent> periodEvents = attendanceEventRepository
+                .findAllByTenant_IdAndUserAccount_IdAndOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtAsc(
+                        principal.tenantId(),
+                        userId,
+                        timeRange.fromInclusive(),
+                        timeRange.toExclusive()
+                );
+
+        AttendanceUserAuditResponse summary = buildUserReport(
+                user,
+                periodEvents,
+                dateRange,
+                period,
+                zoneId
+        );
+
+        PageRequest pageable = PageRequest.of(
+                Math.max(page, 0),
+                Math.min(Math.max(size, 1), 100)
+        );
+        PageResponse<AttendanceEventResponse> events = PageResponse.from(
+                attendanceEventRepository
+                        .findAllByTenant_IdAndUserAccount_IdAndOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtDesc(
+                                principal.tenantId(),
+                                userId,
+                                timeRange.fromInclusive(),
+                                timeRange.toExclusive(),
+                                pageable
+                        ),
+                AttendanceEventResponse::from
+        );
+
+        return new AttendanceUserDetailResponse(
+                period,
+                dateRange.startDate(),
+                dateRange.endDate(),
+                periodLabel(period, dateRange),
+                summary,
+                events
+        );
+    }
+
     private AttendanceTodayResponse toTodayResponse(
             LocalDate date,
             List<AttendanceEvent> events
@@ -262,10 +325,7 @@ public class AttendanceService {
         AttendanceEvent clockOut = null;
         Instant openClockIn = null;
         long totalMinutes = 0;
-        boolean requiresReview = false;
-
         for (AttendanceEvent event : events) {
-            requiresReview |= event.requiresReview();
             if (event.getEventType() == AttendanceEventType.CLOCK_IN) {
                 if (clockIn == null) {
                     clockIn = event;
@@ -282,9 +342,9 @@ public class AttendanceService {
         if (clockIn == null) {
             status = "NOT_STARTED";
         } else if (openClockIn != null) {
-            status = requiresReview ? "REVIEW" : "WORKING";
+            status = "WORKING";
         } else {
-            status = requiresReview ? "REVIEW" : "COMPLETED";
+            status = "COMPLETED";
         }
 
         return new AttendanceTodayResponse(
@@ -292,8 +352,7 @@ public class AttendanceService {
                 status,
                 clockIn == null ? null : AttendanceEventResponse.from(clockIn),
                 clockOut == null ? null : AttendanceEventResponse.from(clockOut),
-                totalMinutes,
-                requiresReview
+                totalMinutes
         );
     }
 
@@ -320,8 +379,6 @@ public class AttendanceService {
         int clockInDayCount = 0;
         Instant firstClockInAt = null;
         Instant lastClockOutAt = null;
-        boolean reviewRequired = false;
-
         for (List<AttendanceEvent> dayEvents : eventsByDay.values()) {
             DaySummary day = summariseDay(dayEvents, zoneId);
             if (day.present()) {
@@ -340,14 +397,11 @@ public class AttendanceService {
             }
             outsideGeofenceEvents += day.outsideGeofenceEvents();
             validEvents += day.validEvents();
-            reviewRequired |= day.outsideGeofenceEvents() > 0;
         }
 
         String status;
         if (presentDays == 0) {
             status = "NO_RECORD";
-        } else if (reviewRequired) {
-            status = "REVIEW";
         } else if (missingCheckOutDays > 0) {
             LocalDate today = LocalDate.now(zoneId);
             status = period == AttendanceReportPeriod.DAY
@@ -531,10 +585,9 @@ public class AttendanceService {
 
     private static int statusPriority(String status) {
         return switch (status) {
-            case "REVIEW" -> 0;
-            case "MISSING_OUT", "WORKING" -> 1;
-            case "COMPLETED" -> 2;
-            default -> 3;
+            case "MISSING_OUT", "WORKING" -> 0;
+            case "COMPLETED" -> 1;
+            default -> 2;
         };
     }
 

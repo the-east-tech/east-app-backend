@@ -25,7 +25,6 @@ public record AttendanceEventResponse(
         String devicePlatform,
         String appVersion,
         String validationMethod,
-        boolean requiresReview,
         boolean photoStored
 ) {
     public static AttendanceEventResponse from(AttendanceEvent event) {
@@ -48,7 +47,6 @@ public record AttendanceEventResponse(
                 event.getDevicePlatform(),
                 event.getAppVersion(),
                 event.getValidationMethod(),
-                event.requiresReview(),
                 false
         );
     }

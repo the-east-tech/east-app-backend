@@ -10,11 +10,24 @@ import java.util.UUID;
 public interface UserSessionRepository extends JpaRepository<UserSession, UUID> {
 
     @EntityGraph(attributePaths = {
+            "identity",
             "userAccount",
+            "userAccount.identity",
             "userAccount.tenant",
             "userAccount.role"
     })
     Optional<UserSession> findByTokenHashAndRevokedAtIsNull(byte[] tokenHash);
 
+    @EntityGraph(attributePaths = {
+            "identity",
+            "userAccount",
+            "userAccount.identity",
+            "userAccount.tenant",
+            "userAccount.role"
+    })
+    Optional<UserSession> findByIdAndRevokedAtIsNull(UUID id);
+
     List<UserSession> findAllByUserAccount_IdAndRevokedAtIsNull(UUID userAccountId);
+
+    List<UserSession> findAllByIdentity_IdAndRevokedAtIsNull(UUID identityId);
 }

@@ -7,13 +7,18 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "eastapp.bootstrap")
 public class BootstrapProperties {
 
-    private boolean enabled;
-    private String companyCode;
-    private String companyName;
+    private boolean enabled = true;
+    private String companyCode = "EAST";
+    private String companyName = "The East";
     private String employeeId = "E0001";
-    private String fullName;
+    private String fullName = "Jenssen";
     private String phoneE164;
-    private String password;
+    private String password = "1111";
+    private boolean secondaryHeadEnabled = true;
+    private String secondaryHeadEmployeeId = "E0002";
+    private String secondaryHeadFullName = "Nicky Chang";
+    private String secondaryHeadPhoneE164 = "+60165076207";
+    private String secondaryHeadPassword = "2222";
 
     public boolean isEnabled() {
         return enabled;
@@ -69,5 +74,45 @@ public class BootstrapProperties {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public boolean isSecondaryHeadEnabled() {
+        return secondaryHeadEnabled;
+    }
+
+    public void setSecondaryHeadEnabled(boolean secondaryHeadEnabled) {
+        this.secondaryHeadEnabled = secondaryHeadEnabled;
+    }
+
+    public String getSecondaryHeadEmployeeId() {
+        return secondaryHeadEmployeeId;
+    }
+
+    public void setSecondaryHeadEmployeeId(String secondaryHeadEmployeeId) {
+        this.secondaryHeadEmployeeId = secondaryHeadEmployeeId;
+    }
+
+    public String getSecondaryHeadFullName() {
+        return secondaryHeadFullName;
+    }
+
+    public void setSecondaryHeadFullName(String secondaryHeadFullName) {
+        this.secondaryHeadFullName = secondaryHeadFullName;
+    }
+
+    public String getSecondaryHeadPhoneE164() {
+        return secondaryHeadPhoneE164;
+    }
+
+    public void setSecondaryHeadPhoneE164(String secondaryHeadPhoneE164) {
+        this.secondaryHeadPhoneE164 = secondaryHeadPhoneE164;
+    }
+
+    public String getSecondaryHeadPassword() {
+        return secondaryHeadPassword;
+    }
+
+    public void setSecondaryHeadPassword(String secondaryHeadPassword) {
+        this.secondaryHeadPassword = secondaryHeadPassword;
     }
 }

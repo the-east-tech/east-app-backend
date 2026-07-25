@@ -6,6 +6,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.CreationTimestamp;
@@ -29,7 +30,11 @@ public class UserSession {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false, updatable = false)
+    @JoinColumn(name = "identity_id", nullable = false, updatable = false)
+    private LoginIdentity identity;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "active_user_id", nullable = false)
     private UserAccount userAccount;
 
     @Column(name = "token_hash", nullable = false, columnDefinition = "bytea", updatable = false)
@@ -39,7 +44,6 @@ public class UserSession {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @CreationTimestamp
     @Column(name = "last_used_at", nullable = false)
     private Instant lastUsedAt;
 
@@ -49,13 +53,25 @@ public class UserSession {
     protected UserSession() {
     }
 
-    public UserSession(UserAccount userAccount, byte[] tokenHash) {
-        this.userAccount = Objects.requireNonNull(userAccount, "userAccount must not be null");
+    public UserSession(LoginIdentity identity, UserAccount userAccount, byte[] tokenHash) {
+        this.identity = Objects.requireNonNull(identity, "identity must not be null");
+        this.userAccount = requireMatchingUser(identity, userAccount);
         this.tokenHash = copyAndValidateTokenHash(tokenHash);
+        this.lastUsedAt = Instant.now();
+    }
+
+    @PrePersist
+    void initialiseLastUsedAt() {
+        if (lastUsedAt == null) lastUsedAt = Instant.now();
     }
 
     public void markUsed(Instant usedAt) {
         this.lastUsedAt = Objects.requireNonNull(usedAt, "usedAt must not be null");
+    }
+
+    public void switchContext(UserAccount userAccount) {
+        this.userAccount = requireMatchingUser(identity, userAccount);
+        markUsed(Instant.now());
     }
 
     public void revoke(Instant revokedAt) {
@@ -68,6 +84,10 @@ public class UserSession {
 
     public UUID getId() {
         return id;
+    }
+
+    public LoginIdentity getIdentity() {
+        return identity;
     }
 
     public UserAccount getUserAccount() {
@@ -88,6 +108,17 @@ public class UserSession {
 
     public Instant getRevokedAt() {
         return revokedAt;
+    }
+
+    private static UserAccount requireMatchingUser(
+            LoginIdentity identity,
+            UserAccount userAccount
+    ) {
+        UserAccount resolved = Objects.requireNonNull(userAccount, "userAccount must not be null");
+        if (!resolved.getIdentity().getId().equals(identity.getId())) {
+            throw new IllegalArgumentException("userAccount must belong to the session identity");
+        }
+        return resolved;
     }
 
     private static byte[] copyAndValidateTokenHash(byte[] tokenHash) {

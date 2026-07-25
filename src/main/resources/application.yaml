@@ -3,6 +3,10 @@ server:
   port: ${PORT:8080}
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   application:
     name: east-app
 
@@ -24,14 +28,23 @@ management:
 
 
 eastapp:
+  database:
+    reset-on-start: ${EASTAPP_DATABASE_RESET_ON_START:false}
+
   bootstrap:
-    enabled: ${EASTAPP_BOOTSTRAP_ENABLED:false}
-    company-code: ${EASTAPP_BOOTSTRAP_COMPANY_CODE:}
-    company-name: ${EASTAPP_BOOTSTRAP_COMPANY_NAME:}
+    enabled: ${EASTAPP_BOOTSTRAP_ENABLED:true}
+    company-code: ${EASTAPP_BOOTSTRAP_COMPANY_CODE:EAST}
+    company-name: ${EASTAPP_BOOTSTRAP_COMPANY_NAME:The East}
     employee-id: ${EASTAPP_BOOTSTRAP_EMPLOYEE_ID:E0001}
-    full-name: ${EASTAPP_BOOTSTRAP_FULL_NAME:}
+    full-name: ${EASTAPP_BOOTSTRAP_FULL_NAME:Jenssen}
     phone-e164: ${EASTAPP_BOOTSTRAP_PHONE_E164:}
-    password: ${EASTAPP_BOOTSTRAP_PASSWORD:}
+    password: ${EASTAPP_BOOTSTRAP_PASSWORD:1111}
+    secondary-head-enabled: ${EASTAPP_BOOTSTRAP_SECONDARY_HEAD_ENABLED:false}
+    secondary-head-employee-id: ${EASTAPP_BOOTSTRAP_SECONDARY_HEAD_EMPLOYEE_ID:E0002}
+    secondary-head-full-name: ${EASTAPP_BOOTSTRAP_SECONDARY_HEAD_FULL_NAME:Nicky Chang}
+    secondary-head-phone-e164: ${EASTAPP_BOOTSTRAP_SECONDARY_HEAD_PHONE_E164:+60165076207}
+    secondary-head-password: ${EASTAPP_BOOTSTRAP_SECONDARY_HEAD_PASSWORD:}
+
 
   attendance:
     time-zone: ${EASTAPP_ATTENDANCE_TIME_ZONE:Asia/Kuala_Lumpur}

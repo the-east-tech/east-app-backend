@@ -1,8 +1,11 @@
 package com.eastapp.backend.identity.support;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -13,6 +16,9 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+    private static final int MAX_TECHNICAL_MESSAGE_LENGTH = 1200;
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ApiErrorResponse> handleApiException(ApiException exception) {
@@ -41,12 +47,45 @@ public class ApiExceptionHandler {
                 .body(ApiErrorResponse.of("INVALID_REQUEST", exception.getMessage()));
     }
 
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ResponseEntity<ApiErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException exception) {
+        return ResponseEntity.badRequest()
+                .body(ApiErrorResponse.of(
+                        "IMAGE_TOO_LARGE",
+                        "SKU thumbnail must not exceed 5 MB."
+                ));
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiErrorResponse> handleDataIntegrity(DataIntegrityViolationException exception) {
+        log.error("Database integrity conflict", exception);
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiErrorResponse.of(
                         "DATA_CONFLICT",
-                        "The request conflicts with existing data."
+                        technicalMessage(exception)
                 ));
+    }
+
+    @ExceptionHandler(Exception.class)
+    ResponseEntity<ApiErrorResponse> handleUnexpected(Exception exception) {
+        log.error("Unhandled backend error", exception);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiErrorResponse.of(
+                        "INTERNAL_SERVER_ERROR",
+                        technicalMessage(exception)
+                ));
+    }
+
+    private static String technicalMessage(Throwable exception) {
+        Throwable root = exception;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+
+        String rootMessage = root.getMessage();
+        String message = "Backend error (" + root.getClass().getSimpleName() + ")"
+                + (rootMessage == null || rootMessage.isBlank() ? "." : ": " + rootMessage.trim());
+        if (message.length() <= MAX_TECHNICAL_MESSAGE_LENGTH) return message;
+        return message.substring(0, MAX_TECHNICAL_MESSAGE_LENGTH - 3) + "...";
     }
 }

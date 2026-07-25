@@ -313,10 +313,6 @@ public class AttendanceEvent {
         return createdAt;
     }
 
-    public boolean requiresReview() {
-        return !withinGeofence;
-    }
-
     private static String normaliseOptionalText(String value) {
         if (value == null) {
             return null;

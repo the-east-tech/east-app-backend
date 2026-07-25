@@ -1,13 +1,29 @@
+### EastApp API requests
+### IntelliJ HTTP Client file. Run Login first; the response stores eastappToken automatically.
+
 @baseUrl = http://localhost:8080
+@companyCode = EAST
+@employeeId = E0001
+@phoneE164 = {{$processEnv EASTAPP_BOOTSTRAP_PHONE_E164}}
+@userId = 00000000-0000-0000-0000-000000000000
+@roleId = 00000000-0000-0000-0000-000000000000
+@tagId = 00000000-0000-0000-0000-000000000000
+@tag2Id = 00000000-0000-0000-0000-000000000000
+@supplierId = 00000000-0000-0000-0000-000000000000
+@skuId = 00000000-0000-0000-0000-000000000000
+@countId = 00000000-0000-0000-0000-000000000000
+@receivingId = 00000000-0000-0000-0000-000000000000
+@thumbnailKey = 00000000-0000-0000-0000-000000000000.jpg
+@thumbnailFile = /absolute/path/to/sku-thumbnail.jpg
 
 ### Login
 POST {{baseUrl}}/api/v1/auth/login
 Content-Type: application/json
 
 {
-  "companyCode": "EAST",
-  "employeeId": "E0001",
-  "phoneE164": "+60166016488",
+  "companyCode": "{{companyCode}}",
+  "employeeId": "{{employeeId}}",
+  "phoneE164": "{{phoneE164}}",
   "password": "1111"
 }
 
@@ -15,49 +31,403 @@ Content-Type: application/json
   client.global.set("eastappToken", response.body.token);
 %}
 
+
+### Nicky login — The East
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "companyCode": "{{companyCode}}",
+  "employeeId": "E0002",
+  "phoneE164": "+60165076207",
+  "password": "2222"
+}
+
+> {%
+  client.global.set("eastappToken", response.body.token);
+%}
+
+### Current session
+GET {{baseUrl}}/api/v1/auth/me
+Authorization: Bearer {{eastappToken}}
+
+### Logout
+POST {{baseUrl}}/api/v1/auth/logout
+Authorization: Bearer {{eastappToken}}
+
+### Available business contexts
+GET {{baseUrl}}/api/v1/auth/contexts
+Authorization: Bearer {{eastappToken}}
+
+### Switch business context
+POST {{baseUrl}}/api/v1/auth/context
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}"
+}
+
+### Search users — paged and active only
+GET {{baseUrl}}/api/v1/users?search=&active=true&page=0&size=20
+Authorization: Bearer {{eastappToken}}
+
+### Get user
+GET {{baseUrl}}/api/v1/users/{{userId}}
+Authorization: Bearer {{eastappToken}}
+
+### Create user
+POST {{baseUrl}}/api/v1/users
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "employeeId": "STAFF003",
+  "password": "change-me",
+  "fullName": "Example Staff",
+  "phoneE164": "+60123456780",
+  "roleId": "{{roleId}}",
+  "profilePhotoKey": null,
+  "birthDate": "1995-01-01",
+  "startDate": "2026-07-25",
+  "endDate": null
+}
+
+### Update user
+PATCH {{baseUrl}}/api/v1/users/{{userId}}
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "fullName": "Updated Staff",
+  "phoneE164": "+60123456780",
+  "roleId": "{{roleId}}",
+  "active": true,
+  "profilePhotoKey": null,
+  "birthDate": "1995-01-01",
+  "startDate": "2026-07-25",
+  "endDate": null
+}
+
+### Reset user password
+PUT {{baseUrl}}/api/v1/users/{{userId}}/password
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "password": "new-password"
+}
+
+### List roles
+GET {{baseUrl}}/api/v1/roles
+Authorization: Bearer {{eastappToken}}
+
+### Create custom role
+POST {{baseUrl}}/api/v1/roles
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "name": "Barista"
+}
+
+### Update role
+PATCH {{baseUrl}}/api/v1/roles/{{roleId}}
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "name": "Senior Barista",
+  "active": true
+}
+
+### Delete custom role
+DELETE {{baseUrl}}/api/v1/roles/{{roleId}}
+Authorization: Bearer {{eastappToken}}
+
 ### Attendance today
 GET {{baseUrl}}/api/v1/attendance/today
 Authorization: Bearer {{eastappToken}}
 
-### Create clock-in event (replace coordinates before running)
+### Create attendance event
 POST {{baseUrl}}/api/v1/attendance/events
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
 
 {
-  "clientEventId": "manual-test-{{$timestamp}}",
+  "clientEventId": "attendance-{{$timestamp}}",
   "eventType": "CLOCK_IN",
-  "deviceCapturedAt": "{{$isoTimestamp}}",
+  "deviceCapturedAt": "2026-07-25T05:00:00Z",
   "latitude": 4.3272472,
   "longitude": 101.1329829,
-  "accuracyMeters": 10,
+  "accuracyMeters": 8.0,
   "cameraCaptureValid": true,
   "faceValid": true,
   "faceCount": 1,
-  "faceBoxWidth": 180,
-  "faceBoxHeight": 220,
-  "faceYaw": 0,
-  "faceRoll": 0,
-  "facePitch": 0,
-  "qrCheckpointValid": true,
-  "devicePlatform": "INTELLIJ_TEST",
-  "deviceOsVersion": "macOS",
-  "appVersion": "east_app_v228",
-  "validationMethod": "MANUAL_API_TEST"
+  "faceBoxWidth": 220.0,
+  "faceBoxHeight": 280.0,
+  "faceYaw": 0.0,
+  "faceRoll": 0.0,
+  "facePitch": 0.0,
+  "qrCheckpointValid": false,
+  "devicePlatform": "android",
+  "deviceOsVersion": "Android",
+  "appVersion": "east_app_v234",
+  "validationMethod": "camera-face-geofence"
 }
 
-### Daily People Audit
+### Tenant-wide attendance audit — compatibility endpoint
 GET {{baseUrl}}/api/v1/attendance/audit?period=DAY&anchor=2026-07-25
 Authorization: Bearer {{eastappToken}}
 
-### Weekly People Audit
-GET {{baseUrl}}/api/v1/attendance/audit?period=WEEK&anchor=2026-07-25
+### Employee-specific attendance audit — deferred and paged
+GET {{baseUrl}}/api/v1/attendance/users/{{userId}}?period=MONTH&anchor=2026-07-25&page=0&size=20
 Authorization: Bearer {{eastappToken}}
 
-### Monthly People Audit
-GET {{baseUrl}}/api/v1/attendance/audit?period=MONTH&anchor=2026-07-25
+### Stock snapshot — compatibility endpoint
+GET {{baseUrl}}/api/v1/stock/snapshot
 Authorization: Bearer {{eastappToken}}
 
-### Yearly People Audit
-GET {{baseUrl}}/api/v1/attendance/audit?period=YEAR&anchor=2026-07-25
+### List stock tags — paged
+GET {{baseUrl}}/api/v1/stock/tags?search=&page=0&size=50
+Authorization: Bearer {{eastappToken}}
+
+### Create stock tag
+POST {{baseUrl}}/api/v1/stock/tags
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "tag": "Chiller"
+}
+
+### Update stock tag
+PATCH {{baseUrl}}/api/v1/stock/tags/{{tagId}}
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "tag": "Cold Storage"
+}
+
+### Delete stock tag
+DELETE {{baseUrl}}/api/v1/stock/tags/{{tagId}}
+Authorization: Bearer {{eastappToken}}
+
+### List suppliers — paged
+GET {{baseUrl}}/api/v1/stock/suppliers?search=&page=0&size=50
+Authorization: Bearer {{eastappToken}}
+
+### Create supplier
+POST {{baseUrl}}/api/v1/stock/suppliers
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "supplierName": "Example Supplier",
+  "supplierItem": "Coffee Beans",
+  "contactPerson": "Alex",
+  "phone": "+60123456789",
+  "address": "Ipoh, Perak",
+  "notes": "Weekly delivery",
+  "unit": "kg",
+  "recommendedPurchaseAmount": 10,
+  "recommendedPurchaseFrequency": "Weekly",
+  "pricingPerUnit": 45,
+  "minimumBalanceValue": 5,
+  "maximumBalanceValue": 30,
+  "currentBalanceValue": 10
+}
+
+### Update supplier
+PATCH {{baseUrl}}/api/v1/stock/suppliers/{{supplierId}}
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "supplierName": "Example Supplier",
+  "supplierItem": "Coffee Beans",
+  "contactPerson": "Alex",
+  "phone": "+60123456789",
+  "address": "Ipoh, Perak",
+  "notes": "Delivery every Monday",
+  "unit": "kg",
+  "recommendedPurchaseAmount": 12,
+  "recommendedPurchaseFrequency": "Weekly",
+  "pricingPerUnit": 45,
+  "minimumBalanceValue": 5,
+  "maximumBalanceValue": 30,
+  "currentBalanceValue": 10
+}
+
+### Delete supplier
+DELETE {{baseUrl}}/api/v1/stock/suppliers/{{supplierId}}
+Authorization: Bearer {{eastappToken}}
+
+### Update supplier balance
+PATCH {{baseUrl}}/api/v1/stock/suppliers/{{supplierId}}/balance
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "balance": 18.5
+}
+
+### Upload SKU thumbnail
+POST {{baseUrl}}/api/v1/stock/media/sku-thumbnails
+Authorization: Bearer {{eastappToken}}
+Content-Type: multipart/form-data; boundary=EastAppBoundary
+
+--EastAppBoundary
+Content-Disposition: form-data; name="file"; filename="sku-thumbnail.jpg"
+Content-Type: image/jpeg
+
+< {{thumbnailFile}}
+--EastAppBoundary--
+
+### Download SKU thumbnail
+GET {{baseUrl}}/api/v1/stock/media/sku-thumbnails/{{thumbnailKey}}
+Authorization: Bearer {{eastappToken}}
+Accept: image/jpeg,image/png
+
+### List SKUs — paged
+GET {{baseUrl}}/api/v1/stock/skus?search=&active=true&page=0&size=50
+Authorization: Bearer {{eastappToken}}
+
+### Create SKU
+POST {{baseUrl}}/api/v1/stock/skus
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "name": "Arabica Beans",
+  "tag1Id": "{{tagId}}",
+  "tag2Id": "{{tag2Id}}",
+  "unit": "kg",
+  "minimumBalanceValue": 5,
+  "maximumBalanceValue": 30,
+  "currentBalanceValue": 10,
+  "recoveryPercent": 100,
+  "minimumPriceRm": 40,
+  "maximumPriceRm": 50,
+  "supplierIds": ["{{supplierId}}"],
+  "photoPath": "{{thumbnailKey}}",
+  "assignedStaffNames": ["Example Staff"],
+  "receivingChecklist": ["Check packaging", "Check expiry date"],
+  "stockCheckFrequencyDays": 1,
+  "resetTime": "08:00",
+  "active": true,
+  "coolingPeriod": true
+}
+
+### Update SKU
+PATCH {{baseUrl}}/api/v1/stock/skus/{{skuId}}
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "name": "Arabica Beans",
+  "tag1Id": "{{tagId}}",
+  "tag2Id": "{{tag2Id}}",
+  "unit": "kg",
+  "minimumBalanceValue": 5,
+  "maximumBalanceValue": 30,
+  "currentBalanceValue": 12,
+  "recoveryPercent": 100,
+  "minimumPriceRm": 40,
+  "maximumPriceRm": 50,
+  "supplierIds": ["{{supplierId}}"],
+  "photoPath": "{{thumbnailKey}}",
+  "assignedStaffNames": ["Example Staff"],
+  "receivingChecklist": ["Check packaging", "Check expiry date"],
+  "stockCheckFrequencyDays": 1,
+  "resetTime": "08:00",
+  "active": true,
+  "coolingPeriod": true
+}
+
+### Update SKU balance
+PATCH {{baseUrl}}/api/v1/stock/skus/{{skuId}}/balance
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "balance": 14.5
+}
+
+### List my stock counts — paged
+GET {{baseUrl}}/api/v1/stock/counts?mine=true&from=2026-07-01&to=2026-07-31&page=0&size=50
+Authorization: Bearer {{eastappToken}}
+
+### List review stock counts — paged
+GET {{baseUrl}}/api/v1/stock/counts?mine=false&reviewStatus=Pending%20Review&page=0&size=50
+Authorization: Bearer {{eastappToken}}
+
+### Submit daily stock count
+POST {{baseUrl}}/api/v1/stock/counts
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "skuId": "{{skuId}}",
+  "capturedAt": "2026-07-25T05:00:00Z",
+  "stockPhotoName": "stock-count.jpg",
+  "invoicePhotoName": "invoice.jpg",
+  "currentBalanceValue": 9.5,
+  "checkedItems": {
+    "Packaging": true,
+    "Expiry": true
+  },
+  "remarks": {
+    "General": "Count verified"
+  }
+}
+
+### Review stock count
+PATCH {{baseUrl}}/api/v1/stock/counts/{{countId}}/review
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "status": "Approved",
+  "note": "Verified"
+}
+
+### List receiving records — paged
+GET {{baseUrl}}/api/v1/stock/receivings?reviewStatus=Pending%20Review&page=0&size=50
+Authorization: Bearer {{eastappToken}}
+
+### Submit receiving
+POST {{baseUrl}}/api/v1/stock/receivings
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "supplierId": "{{supplierId}}",
+  "capturedAt": "2026-07-25T05:00:00Z",
+  "invoicePhotoName": "invoice.jpg",
+  "goodsPhotoName": "goods.jpg",
+  "items": [
+    {
+      "skuId": "{{skuId}}",
+      "invoiceQuantity": 10,
+      "receivedQuantity": 10,
+      "condition": "Good",
+      "note": ""
+    }
+  ]
+}
+
+### Review receiving
+PATCH {{baseUrl}}/api/v1/stock/receivings/{{receivingId}}/review
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "status": "Approved",
+  "note": "Invoice and goods verified"
+}
+
+### Stock audit — paged
+GET {{baseUrl}}/api/v1/stock/audit?from=2026-07-01&to=2026-07-31&page=0&size=50
 Authorization: Bearer {{eastappToken}}

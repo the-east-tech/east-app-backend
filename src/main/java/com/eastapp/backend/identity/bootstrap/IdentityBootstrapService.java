@@ -1,5 +1,7 @@
 package com.eastapp.backend.identity.bootstrap;
 
+import com.eastapp.backend.identity.LoginIdentity;
+import com.eastapp.backend.identity.LoginIdentityRepository;
 import com.eastapp.backend.identity.Role;
 import com.eastapp.backend.identity.RoleRepository;
 import com.eastapp.backend.identity.SystemRole;
@@ -11,7 +13,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -20,17 +24,20 @@ public class IdentityBootstrapService {
     private static final Map<SystemRole, String> DEFAULT_ROLE_NAMES = roleNames();
 
     private final TenantRepository tenantRepository;
+    private final LoginIdentityRepository loginIdentityRepository;
     private final RoleRepository roleRepository;
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
 
     public IdentityBootstrapService(
             TenantRepository tenantRepository,
+            LoginIdentityRepository loginIdentityRepository,
             RoleRepository roleRepository,
             UserAccountRepository userAccountRepository,
             PasswordEncoder passwordEncoder
     ) {
         this.tenantRepository = tenantRepository;
+        this.loginIdentityRepository = loginIdentityRepository;
         this.roleRepository = roleRepository;
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
@@ -46,6 +53,44 @@ public class IdentityBootstrapService {
                         new Tenant(companyCode, properties.getCompanyName())
                 ));
 
+        Map<SystemRole, Role> roles = ensureRoles(tenant);
+        UserCreation primary = ensureHead(
+                tenant,
+                roles.get(SystemRole.HEAD),
+                properties.getEmployeeId(),
+                properties.getFullName(),
+                properties.getPhoneE164(),
+                properties.getPassword()
+        );
+
+        List<UserAccount> owners = new ArrayList<>();
+        owners.add(primary.user());
+        boolean secondaryCreated = false;
+        if (properties.isSecondaryHeadEnabled()) {
+            validateSecondaryHead(properties);
+            UserCreation secondary = ensureHead(
+                    tenant,
+                    roles.get(SystemRole.HEAD),
+                    properties.getSecondaryHeadEmployeeId(),
+                    properties.getSecondaryHeadFullName(),
+                    properties.getSecondaryHeadPhoneE164(),
+                    properties.getSecondaryHeadPassword()
+            );
+            owners.add(secondary.user());
+            secondaryCreated = secondary.created();
+        }
+
+        int contextProfilesCreated = grantContexts(owners);
+        return new BootstrapResult(
+                tenant.getCompanyCode(),
+                primary.user().getEmployeeId(),
+                primary.created(),
+                secondaryCreated,
+                contextProfilesCreated
+        );
+    }
+
+    private Map<SystemRole, Role> ensureRoles(Tenant tenant) {
         Map<SystemRole, Role> roles = new EnumMap<>(SystemRole.class);
         DEFAULT_ROLE_NAMES.forEach((systemRole, name) -> {
             Role role = roleRepository
@@ -55,23 +100,85 @@ public class IdentityBootstrapService {
                     ));
             roles.put(systemRole, role);
         });
+        return roles;
+    }
 
-        String employeeId = UserAccount.normaliseEmployeeId(properties.getEmployeeId());
-        boolean userCreated = false;
-        if (!userAccountRepository.existsByTenant_IdAndEmployeeId(tenant.getId(), employeeId)) {
-            UserAccount head = new UserAccount(
-                    tenant,
-                    employeeId,
-                    passwordEncoder.encode(properties.getPassword()),
-                    properties.getFullName(),
-                    properties.getPhoneE164(),
-                    roles.get(SystemRole.HEAD)
-            );
-            userAccountRepository.save(head);
-            userCreated = true;
+    private UserCreation ensureHead(
+            Tenant tenant,
+            Role headRole,
+            String employeeIdValue,
+            String fullName,
+            String phoneE164,
+            String password
+    ) {
+        String employeeId = UserAccount.normaliseEmployeeId(employeeIdValue);
+        return userAccountRepository.findByTenant_IdAndEmployeeId(tenant.getId(), employeeId)
+                .map(existing -> new UserCreation(existing, false))
+                .orElseGet(() -> {
+                    LoginIdentity identity = loginIdentityRepository.save(
+                            new LoginIdentity(passwordEncoder.encode(password))
+                    );
+                    UserAccount user = userAccountRepository.save(new UserAccount(
+                            tenant,
+                            identity,
+                            employeeId,
+                            fullName,
+                            phoneE164,
+                            headRole
+                    ));
+                    return new UserCreation(user, true);
+                });
+    }
+
+    private int grantContexts(List<UserAccount> owners) {
+        int created = 0;
+        for (Tenant targetTenant : tenantRepository.findAll()) {
+            if (!targetTenant.isActive()) {
+                continue;
+            }
+            Role targetHeadRole = roleRepository
+                    .findByTenant_IdAndSystemKey(targetTenant.getId(), SystemRole.HEAD)
+                    .filter(Role::isActive)
+                    .orElse(null);
+            if (targetHeadRole == null) {
+                continue;
+            }
+            for (UserAccount owner : owners) {
+                if (userAccountRepository.existsByIdentity_IdAndTenant_Id(
+                        owner.getIdentity().getId(), targetTenant.getId()
+                )) {
+                    continue;
+                }
+                if (userAccountRepository.existsByTenant_IdAndEmployeeId(
+                        targetTenant.getId(), owner.getEmployeeId()
+                )) {
+                    throw new IllegalStateException(
+                            "Employee ID " + owner.getEmployeeId()
+                                    + " already belongs to another login in tenant "
+                                    + targetTenant.getCompanyCode()
+                    );
+                }
+                UserAccount context = new UserAccount(
+                        targetTenant,
+                        owner.getIdentity(),
+                        owner.getEmployeeId(),
+                        owner.getFullName(),
+                        owner.getPhoneE164(),
+                        targetHeadRole
+                );
+                context.updateProfile(
+                        owner.getFullName(),
+                        owner.getPhoneE164(),
+                        owner.getProfilePhotoKey(),
+                        owner.getBirthDate(),
+                        owner.getStartDate(),
+                        owner.getEndDate()
+                );
+                userAccountRepository.save(context);
+                created++;
+            }
         }
-
-        return new BootstrapResult(tenant.getCompanyCode(), employeeId, userCreated);
+        return created;
     }
 
     private static void validate(BootstrapProperties properties) {
@@ -82,14 +189,32 @@ public class IdentityBootstrapService {
         UserAccount.normalisePhone(
                 requireText(properties.getPhoneE164(), "EASTAPP_BOOTSTRAP_PHONE_E164")
         );
-        String password = requireText(
-                properties.getPassword(),
-                "EASTAPP_BOOTSTRAP_PASSWORD"
+        validatePassword(properties.getPassword(), "EASTAPP_BOOTSTRAP_PASSWORD");
+    }
+
+    private static void validateSecondaryHead(BootstrapProperties properties) {
+        requireText(
+                properties.getSecondaryHeadEmployeeId(),
+                "EASTAPP_BOOTSTRAP_SECONDARY_HEAD_EMPLOYEE_ID"
         );
-        if (password.length() < 4) {
-            throw new IllegalStateException(
-                    "EASTAPP_BOOTSTRAP_PASSWORD must contain at least 4 characters"
-            );
+        requireText(
+                properties.getSecondaryHeadFullName(),
+                "EASTAPP_BOOTSTRAP_SECONDARY_HEAD_FULL_NAME"
+        );
+        UserAccount.normalisePhone(requireText(
+                properties.getSecondaryHeadPhoneE164(),
+                "EASTAPP_BOOTSTRAP_SECONDARY_HEAD_PHONE_E164"
+        ));
+        validatePassword(
+                properties.getSecondaryHeadPassword(),
+                "EASTAPP_BOOTSTRAP_SECONDARY_HEAD_PASSWORD"
+        );
+    }
+
+    private static void validatePassword(String password, String variableName) {
+        String value = requireText(password, variableName);
+        if (value.length() < 4) {
+            throw new IllegalStateException(variableName + " must contain at least 4 characters");
         }
     }
 
@@ -110,10 +235,15 @@ public class IdentityBootstrapService {
         return Map.copyOf(values);
     }
 
+    private record UserCreation(UserAccount user, boolean created) {
+    }
+
     public record BootstrapResult(
             String companyCode,
             String employeeId,
-            boolean userCreated
+            boolean userCreated,
+            boolean secondaryHeadCreated,
+            int contextProfilesCreated
     ) {
     }
 }

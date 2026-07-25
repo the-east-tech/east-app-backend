@@ -7,7 +7,6 @@ public record AttendanceTodayResponse(
         String status,
         AttendanceEventResponse clockIn,
         AttendanceEventResponse clockOut,
-        long totalWorkingMinutes,
-        boolean requiresReview
+        long totalWorkingMinutes
 ) {
 }

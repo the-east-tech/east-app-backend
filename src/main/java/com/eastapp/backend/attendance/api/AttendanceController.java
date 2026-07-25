@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
@@ -55,4 +56,19 @@ public class AttendanceController {
     ) {
         return attendanceService.audit(principal, period, anchor);
     }
+    @GetMapping("/users/{userId}")
+    @PreAuthorize("hasRole('HEAD')")
+    AttendanceUserDetailResponse userAudit(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable java.util.UUID userId,
+            @RequestParam(defaultValue = "DAY") AttendanceReportPeriod period,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate anchor,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return attendanceService.userAudit(principal, userId, period, anchor, page, size);
+    }
+
 }

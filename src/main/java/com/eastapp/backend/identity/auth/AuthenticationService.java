@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -54,15 +55,18 @@ public class AuthenticationService {
                 )
                 .orElseThrow(AuthenticationService::invalidCredentials);
 
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(
+                request.password(),
+                user.getIdentity().getPasswordHash()
+        )) {
             throw invalidCredentials();
         }
 
         assertLoginAllowed(user);
 
         SessionTokenService.GeneratedSessionToken generatedToken = sessionTokenService.generate();
-        UserSession session = userSessionRepository.save(
-                new UserSession(user, generatedToken.tokenHash())
+        userSessionRepository.save(
+                new UserSession(user.getIdentity(), user, generatedToken.tokenHash())
         );
 
         return new LoginResponse(
@@ -86,15 +90,7 @@ public class AuthenticationService {
             session.markUsed(now);
         }
 
-        return new AuthenticatedUser(
-                session.getId(),
-                user.getId(),
-                user.getTenant().getId(),
-                user.getRole().getId(),
-                user.getEmployeeId(),
-                user.getFullName(),
-                user.getRole().getSystemKey()
-        );
+        return authenticatedUser(session, user);
     }
 
     @Transactional(readOnly = true)
@@ -106,22 +102,72 @@ public class AuthenticationService {
         return CurrentUserResponse.from(user);
     }
 
+    @Transactional(readOnly = true)
+    public List<CurrentUserResponse> contexts(AuthenticatedUser principal) {
+        UserSession session = currentSession(principal.sessionId());
+        return userAccountRepository.findAllContexts(session.getIdentity().getId()).stream()
+                .filter(AuthenticationService::isLoginAllowed)
+                .map(CurrentUserResponse::from)
+                .toList();
+    }
+
     @Transactional
-    public void logout(UUID sessionId, UUID userId) {
-        UserSession session = userSessionRepository.findById(sessionId)
-                .filter(value -> value.getUserAccount().getId().equals(userId))
-                .orElseThrow(AuthenticationService::invalidSession);
+    public CurrentUserResponse switchContext(
+            AuthenticatedUser principal,
+            UUID targetUserId
+    ) {
+        UserSession session = currentSession(principal.sessionId());
+        UserAccount target = userAccountRepository
+                .findByIdAndIdentity_Id(targetUserId, session.getIdentity().getId())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.FORBIDDEN,
+                        "CONTEXT_ACCESS_DENIED",
+                        "This business context is not assigned to this login."
+                ));
+        assertLoginAllowed(target);
+        session.switchContext(target);
+        return CurrentUserResponse.from(target);
+    }
+
+    @Transactional
+    public void logout(UUID sessionId) {
+        UserSession session = currentSession(sessionId);
         if (!session.isRevoked()) {
             session.revoke(Instant.now());
         }
     }
 
+    private UserSession currentSession(UUID sessionId) {
+        return userSessionRepository.findByIdAndRevokedAtIsNull(sessionId)
+                .orElseThrow(AuthenticationService::invalidSession);
+    }
+
+    private static AuthenticatedUser authenticatedUser(
+            UserSession session,
+            UserAccount user
+    ) {
+        return new AuthenticatedUser(
+                session.getId(),
+                user.getId(),
+                user.getTenant().getId(),
+                user.getRole().getId(),
+                user.getEmployeeId(),
+                user.getFullName(),
+                user.getRole().getSystemKey()
+        );
+    }
+
     private static void assertLoginAllowed(UserAccount user) {
-        if (!user.getTenant().isActive()
-                || !user.isActive()
-                || !user.getRole().isActive()) {
+        if (!isLoginAllowed(user)) {
             throw invalidCredentials();
         }
+    }
+
+    private static boolean isLoginAllowed(UserAccount user) {
+        return user.getIdentity().isActive()
+                && user.getTenant().isActive()
+                && user.isActive()
+                && user.getRole().isActive();
     }
 
     private static ApiException invalidCredentials() {

@@ -32,11 +32,12 @@ public class UserAccount {
     @JoinColumn(name = "tenant_id", nullable = false, updatable = false)
     private Tenant tenant;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "identity_id", nullable = false, updatable = false)
+    private LoginIdentity identity;
+
     @Column(name = "employee_id", nullable = false, length = 32, updatable = false)
     private String employeeId;
-
-    @Column(name = "password_hash", nullable = false, length = 255)
-    private String passwordHash;
 
     @Column(name = "full_name", nullable = false, length = 120)
     private String fullName;
@@ -76,22 +77,18 @@ public class UserAccount {
 
     public UserAccount(
             Tenant tenant,
+            LoginIdentity identity,
             String employeeId,
-            String passwordHash,
             String fullName,
             String phoneE164,
             Role role
     ) {
         this.tenant = Objects.requireNonNull(tenant, "tenant must not be null");
+        this.identity = Objects.requireNonNull(identity, "identity must not be null");
         this.employeeId = normaliseEmployeeId(employeeId);
-        this.passwordHash = requireText(passwordHash, "passwordHash");
         this.fullName = requireText(fullName, "fullName");
         this.phoneE164 = normalisePhone(phoneE164);
         this.role = Objects.requireNonNull(role, "role must not be null");
-    }
-
-    public void changePasswordHash(String passwordHash) {
-        this.passwordHash = requireText(passwordHash, "passwordHash");
     }
 
     public void updateProfile(
@@ -133,12 +130,12 @@ public class UserAccount {
         return tenant;
     }
 
-    public String getEmployeeId() {
-        return employeeId;
+    public LoginIdentity getIdentity() {
+        return identity;
     }
 
-    public String getPasswordHash() {
-        return passwordHash;
+    public String getEmployeeId() {
+        return employeeId;
     }
 
     public String getFullName() {

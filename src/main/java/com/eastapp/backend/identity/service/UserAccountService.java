@@ -1,5 +1,8 @@
 package com.eastapp.backend.identity.service;
 
+import com.eastapp.backend.common.api.PageResponse;
+import com.eastapp.backend.identity.LoginIdentity;
+import com.eastapp.backend.identity.LoginIdentityRepository;
 import com.eastapp.backend.identity.Role;
 import com.eastapp.backend.identity.RoleRepository;
 import com.eastapp.backend.identity.SystemRole;
@@ -15,6 +18,8 @@ import com.eastapp.backend.identity.api.UpdateUserRequest;
 import com.eastapp.backend.identity.api.UserResponse;
 import com.eastapp.backend.identity.auth.AuthenticatedUser;
 import com.eastapp.backend.identity.support.ApiException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,6 +33,7 @@ import java.util.UUID;
 public class UserAccountService {
 
     private final UserAccountRepository userAccountRepository;
+    private final LoginIdentityRepository loginIdentityRepository;
     private final UserSessionRepository userSessionRepository;
     private final TenantRepository tenantRepository;
     private final RoleRepository roleRepository;
@@ -35,12 +41,14 @@ public class UserAccountService {
 
     public UserAccountService(
             UserAccountRepository userAccountRepository,
+            LoginIdentityRepository loginIdentityRepository,
             UserSessionRepository userSessionRepository,
             TenantRepository tenantRepository,
             RoleRepository roleRepository,
             PasswordEncoder passwordEncoder
     ) {
         this.userAccountRepository = userAccountRepository;
+        this.loginIdentityRepository = loginIdentityRepository;
         this.userSessionRepository = userSessionRepository;
         this.tenantRepository = tenantRepository;
         this.roleRepository = roleRepository;
@@ -48,11 +56,26 @@ public class UserAccountService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserResponse> list(UUID tenantId) {
-        return userAccountRepository.findAllByTenant_IdOrderByFullNameAsc(tenantId)
-                .stream()
-                .map(UserResponse::from)
-                .toList();
+    public PageResponse<UserResponse> list(
+            UUID tenantId,
+            String search,
+            Boolean active,
+            int page,
+            int size
+    ) {
+        String resolvedSearch = search == null ? "" : search.trim();
+        PageRequest pageable = PageRequest.of(
+                Math.max(page, 0),
+                Math.min(Math.max(size, 1), 100),
+                Sort.by(
+                        Sort.Order.asc("fullName").ignoreCase(),
+                        Sort.Order.asc("id")
+                )
+        );
+        return PageResponse.from(
+                userAccountRepository.searchByTenant(tenantId, resolvedSearch, active, pageable),
+                UserResponse::from
+        );
     }
 
     @Transactional(readOnly = true)
@@ -72,10 +95,13 @@ public class UserAccountService {
         Role role = findActiveRole(actor.tenantId(), request.roleId());
         assertRoleMayBeAssigned(actor, role);
 
+        LoginIdentity identity = loginIdentityRepository.save(
+                new LoginIdentity(passwordEncoder.encode(request.password()))
+        );
         UserAccount user = new UserAccount(
                 tenant,
+                identity,
                 employeeId,
-                passwordEncoder.encode(request.password()),
                 request.fullName(),
                 request.phoneE164(),
                 role
@@ -133,8 +159,8 @@ public class UserAccountService {
     ) {
         UserAccount target = findUser(actor.tenantId(), userId);
         assertActorMayManageUser(actor, target);
-        target.changePasswordHash(passwordEncoder.encode(request.password()));
-        revokeSessions(target.getId());
+        target.getIdentity().changePasswordHash(passwordEncoder.encode(request.password()));
+        revokeIdentitySessions(target.getIdentity().getId());
     }
 
     private UserAccount findUser(UUID tenantId, UUID userId) {
@@ -211,6 +237,13 @@ public class UserAccountService {
                     "At least one active Head user must remain."
             );
         }
+    }
+
+    private void revokeIdentitySessions(UUID identityId) {
+        Instant now = Instant.now();
+        List<UserSession> sessions = userSessionRepository
+                .findAllByIdentity_IdAndRevokedAtIsNull(identityId);
+        sessions.forEach(session -> session.revoke(now));
     }
 
     private void revokeSessions(UUID userId) {

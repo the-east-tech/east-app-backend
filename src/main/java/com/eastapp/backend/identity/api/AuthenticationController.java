@@ -3,6 +3,8 @@ package com.eastapp.backend.identity.api;
 import com.eastapp.backend.identity.auth.AuthenticatedUser;
 import com.eastapp.backend.identity.auth.AuthenticationService;
 import jakarta.validation.Valid;
+
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,9 +33,24 @@ public class AuthenticationController {
         return authenticationService.currentUser(principal);
     }
 
+    @GetMapping("/contexts")
+    List<CurrentUserResponse> contexts(
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return authenticationService.contexts(principal);
+    }
+
+    @PostMapping("/context")
+    CurrentUserResponse switchContext(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody SwitchContextRequest request
+    ) {
+        return authenticationService.switchContext(principal, request.userId());
+    }
+
     @PostMapping("/logout")
     ResponseEntity<Void> logout(@AuthenticationPrincipal AuthenticatedUser principal) {
-        authenticationService.logout(principal.sessionId(), principal.userId());
+        authenticationService.logout(principal.sessionId());
         return ResponseEntity.noContent().build();
     }
 }
