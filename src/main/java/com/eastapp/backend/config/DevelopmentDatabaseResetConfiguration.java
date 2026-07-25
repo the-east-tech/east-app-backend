@@ -2,7 +2,7 @@ package com.eastapp.backend.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.flyway.autoconfigure.FlywayConfigurationCustomizer;
 import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy;
 import org.springframework.context.annotation.Bean;
@@ -14,28 +14,34 @@ public class DevelopmentDatabaseResetConfiguration {
             LoggerFactory.getLogger(DevelopmentDatabaseResetConfiguration.class);
 
     @Bean
-    @ConditionalOnProperty(
-            prefix = "eastapp.database",
-            name = "reset-on-start",
-            havingValue = "true"
-    )
-    FlywayConfigurationCustomizer allowFlywayCleanForDevelopmentReset() {
-        return configuration -> configuration.cleanDisabled(false);
+    FlywayConfigurationCustomizer eastAppFlywayConfigurationCustomizer(
+            @Value("${eastapp.database.reset-on-start:true}") boolean resetOnStart
+    ) {
+        return configuration -> {
+            if (resetOnStart) {
+                configuration.cleanDisabled(false);
+            }
+        };
     }
 
     @Bean
-    @ConditionalOnProperty(
-            prefix = "eastapp.database",
-            name = "reset-on-start",
-            havingValue = "true"
-    )
-    FlywayMigrationStrategy cleanAndMigrateDevelopmentDatabase() {
+    FlywayMigrationStrategy eastAppFlywayMigrationStrategy(
+            @Value("${eastapp.database.reset-on-start:true}") boolean resetOnStart
+    ) {
         return flyway -> {
-            log.warn(
-                    "EASTAPP_DATABASE_RESET_ON_START=true: deleting all database objects "
-                            + "and recreating the schema from Flyway V1"
-            );
-            flyway.clean();
+            if (resetOnStart) {
+                log.warn(
+                        "EASTAPP_DATABASE_RESET_ON_START=true: deleting all database objects "
+                                + "and recreating the schema from Flyway V1"
+                );
+                flyway.clean();
+            } else {
+                log.info(
+                        "EASTAPP_DATABASE_RESET_ON_START=false: preserving existing data "
+                                + "and applying pending Flyway migrations only"
+                );
+            }
+
             flyway.migrate();
         };
     }
