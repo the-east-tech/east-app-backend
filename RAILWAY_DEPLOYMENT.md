@@ -1,16 +1,62 @@
-# EastApp Railway deployment (disposable development database)
+# EastApp Railway deployment — disposable development database
 
-EastApp currently treats its development database as disposable. The backend uses one Flyway V1 and automatically cleans the database before migrating while `EASTAPP_DATABASE_RESET_ON_START=true`.
+EastApp currently treats development data as disposable. While
+`EASTAPP_DATABASE_RESET_ON_START=true`, every backend startup cleans the database,
+applies the single Flyway V1, then creates development users from one private JSON list.
 
-## Railway backend variables
+Flyway contains schema and non-personal reference data only. Jenssen, Nicky, and future
+users all use the same bootstrap mechanism.
+
+## 1. Create the private user list locally
+
+Run once:
+
+```bash
+./scripts/configure-bootstrap-users.sh
+```
+
+This creates:
+
+```text
+config/bootstrap-users.local.json
+```
+
+The file is permission `600` and added to the repository's local Git exclude file.
+Edit this JSON file whenever development users, credentials, roles, or business
+memberships need to change.
+
+## 2. Local fresh run
+
+```bash
+./scripts/run-fresh-local.sh
+```
+
+The script recreates local PostgreSQL, applies Flyway V1, and bootstraps every user
+from `config/bootstrap-users.local.json`.
+
+## 3. Configure the same list in Railway
+
+Generate a compact one-line copy of the local JSON:
+
+```bash
+./scripts/print-railway-bootstrap-users.sh
+```
+
+In the Railway backend service, create one sealed/private variable and paste that
+complete output as its value:
+
+```text
+EASTAPP_BOOTSTRAP_USERS_JSON=<complete compact JSON>
+```
+
+Required backend variables:
 
 ```text
 RAILPACK_JDK_VERSION=25
 SPRING_DOCKER_COMPOSE_ENABLED=false
 EASTAPP_DATABASE_RESET_ON_START=true
 EASTAPP_BOOTSTRAP_ENABLED=true
-EASTAPP_BOOTSTRAP_PHONE_E164=<sealed Railway variable>
-EASTAPP_BOOTSTRAP_PASSWORD=1111
+EASTAPP_BOOTSTRAP_USERS_JSON=<sealed compact JSON>
 ```
 
 Datasource references:
@@ -22,20 +68,29 @@ SPRING_DATASOURCE_PASSWORD=${{Postgres.PGPASSWORD}}
 SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
 ```
 
-The Flyway strategy is always registered. When reset is enabled it performs `clean()` before `migrate()`, so an older V1 checksum cannot block startup. When production data exists, set `EASTAPP_DATABASE_RESET_ON_START=false`; the same strategy then preserves the database and runs normal Flyway migration only.
+The backend gives `EASTAPP_BOOTSTRAP_USERS_JSON` precedence over the local file path,
+so Railway does not require a file upload.
 
-## Deploy
+## 4. Add or change users during development
 
-Replace the backend source with this package, commit, and push to the GitHub branch connected to Railway. Confirm the Railway deployment uses that commit. The startup log must contain:
+1. Edit `config/bootstrap-users.local.json`.
+2. Run locally and verify login/context switching.
+3. Run `./scripts/print-railway-bootstrap-users.sh`.
+4. Replace the Railway `EASTAPP_BOOTSTRAP_USERS_JSON` value.
+5. Redeploy the backend.
+
+Each user has one login identity and one or more business memberships. Passwords are
+BCrypt-hashed by Spring before database storage. Raw phone numbers and passwords are
+never written to Flyway, Git-tracked configuration, application logs, or changelogs.
+
+## 5. Production transition
+
+Before retaining production data:
 
 ```text
-EASTAPP_DATABASE_RESET_ON_START=true: deleting all database objects and recreating the schema from Flyway V1
+EASTAPP_DATABASE_RESET_ON_START=false
+EASTAPP_BOOTSTRAP_ENABLED=false
 ```
 
-If that line is absent, Railway is deploying an older commit or overriding the variable with `false`.
-
-## Local fresh run
-
-```bash
-./scripts/run-fresh-local.sh
-```
+After that point, create normal employees through People → User and use append-only
+Flyway migrations instead of rewriting V1.

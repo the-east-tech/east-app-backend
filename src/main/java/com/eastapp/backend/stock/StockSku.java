@@ -1,7 +1,7 @@
 package com.eastapp.backend.stock;
 
-import com.eastapp.backend.identity.Tenant;
-import com.eastapp.backend.identity.UserAccount;
+import com.eastapp.backend.organisation.Tenant;
+import com.eastapp.backend.people.UserAccount;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;

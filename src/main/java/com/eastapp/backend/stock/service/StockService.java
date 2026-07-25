@@ -1,12 +1,12 @@
 package com.eastapp.backend.stock.service;
 
 import com.eastapp.backend.common.api.PageResponse;
-import com.eastapp.backend.identity.Tenant;
-import com.eastapp.backend.identity.TenantRepository;
-import com.eastapp.backend.identity.UserAccount;
-import com.eastapp.backend.identity.UserAccountRepository;
-import com.eastapp.backend.identity.auth.AuthenticatedUser;
-import com.eastapp.backend.identity.support.ApiException;
+import com.eastapp.backend.organisation.Tenant;
+import com.eastapp.backend.organisation.TenantRepository;
+import com.eastapp.backend.people.UserAccount;
+import com.eastapp.backend.people.UserAccountRepository;
+import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.stock.StockAuditEntry;
 import com.eastapp.backend.stock.StockAuditEntryRepository;
 import com.eastapp.backend.stock.StockCountSubmission;

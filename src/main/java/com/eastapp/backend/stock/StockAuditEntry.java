@@ -1,7 +1,7 @@
 package com.eastapp.backend.stock;
 
-import com.eastapp.backend.identity.Tenant;
-import com.eastapp.backend.identity.auth.AuthenticatedUser;
+import com.eastapp.backend.organisation.Tenant;
+import com.eastapp.backend.auth.security.AuthenticatedUser;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

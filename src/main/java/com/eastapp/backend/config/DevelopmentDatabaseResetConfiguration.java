@@ -15,7 +15,7 @@ public class DevelopmentDatabaseResetConfiguration {
 
     @Bean
     FlywayConfigurationCustomizer eastAppFlywayConfigurationCustomizer(
-            @Value("${eastapp.database.reset-on-start:true}") boolean resetOnStart
+            @Value("${eastapp.database.reset-on-start:false}") boolean resetOnStart
     ) {
         return configuration -> {
             if (resetOnStart) {
@@ -26,7 +26,7 @@ public class DevelopmentDatabaseResetConfiguration {
 
     @Bean
     FlywayMigrationStrategy eastAppFlywayMigrationStrategy(
-            @Value("${eastapp.database.reset-on-start:true}") boolean resetOnStart
+            @Value("${eastapp.database.reset-on-start:false}") boolean resetOnStart
     ) {
         return flyway -> {
             if (resetOnStart) {

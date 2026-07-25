@@ -1,6 +1,6 @@
 package com.eastapp.backend.stock;
 
-import com.eastapp.backend.identity.Tenant;
+import com.eastapp.backend.organisation.Tenant;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;

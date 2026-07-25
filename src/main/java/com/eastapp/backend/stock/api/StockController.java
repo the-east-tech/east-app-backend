@@ -1,7 +1,7 @@
 package com.eastapp.backend.stock.api;
 
 import com.eastapp.backend.common.api.PageResponse;
-import com.eastapp.backend.identity.auth.AuthenticatedUser;
+import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.stock.service.StockMediaService;
 import com.eastapp.backend.stock.service.StockService;
 import jakarta.validation.Valid;

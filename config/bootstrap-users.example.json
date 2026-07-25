@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "users": [
+    {
+      "key": "jenssen",
+      "fullName": "Jenssen",
+      "phoneE164": "+<PRIVATE_E164_PHONE>",
+      "password": "1111",
+      "active": true,
+      "birthDate": null,
+      "memberships": [
+        {
+          "businessCode": "EAST",
+          "employeeId": "E0001",
+          "roleCode": "HEAD",
+          "active": true,
+          "startDate": null,
+          "endDate": null
+        },
+        {
+          "businessCode": "JUNE",
+          "employeeId": "E0001",
+          "roleCode": "HEAD",
+          "active": true,
+          "startDate": null,
+          "endDate": null
+        },
+        {
+          "businessCode": "SECRET",
+          "employeeId": "E0001",
+          "roleCode": "HEAD",
+          "active": true,
+          "startDate": null,
+          "endDate": null
+        }
+      ]
+    },
+    {
+      "key": "nicky",
+      "fullName": "Nicky Chang",
+      "phoneE164": "+<PRIVATE_E164_PHONE>",
+      "password": "2222",
+      "active": true,
+      "birthDate": null,
+      "memberships": [
+        {
+          "businessCode": "EAST",
+          "employeeId": "E0002",
+          "roleCode": "HEAD",
+          "active": true,
+          "startDate": null,
+          "endDate": null
+        },
+        {
+          "businessCode": "JUNE",
+          "employeeId": "E0002",
+          "roleCode": "HEAD",
+          "active": true,
+          "startDate": null,
+          "endDate": null
+        },
+        {
+          "businessCode": "SECRET",
+          "employeeId": "E0002",
+          "roleCode": "HEAD",
+          "active": true,
+          "startDate": null,
+          "endDate": null
+        }
+      ]
+    }
+  ]
+}

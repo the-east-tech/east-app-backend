@@ -1,8 +1,8 @@
 package com.eastapp.backend.attendance;
 
-import com.eastapp.backend.identity.Tenant;
-import com.eastapp.backend.identity.UserAccount;
-import com.eastapp.backend.identity.UserSession;
+import com.eastapp.backend.organisation.Tenant;
+import com.eastapp.backend.people.UserAccount;
+import com.eastapp.backend.auth.UserSession;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

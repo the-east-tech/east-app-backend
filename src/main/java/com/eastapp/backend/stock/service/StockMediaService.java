@@ -1,9 +1,9 @@
 package com.eastapp.backend.stock.service;
 
-import com.eastapp.backend.identity.Tenant;
-import com.eastapp.backend.identity.TenantRepository;
-import com.eastapp.backend.identity.auth.AuthenticatedUser;
-import com.eastapp.backend.identity.support.ApiException;
+import com.eastapp.backend.organisation.Tenant;
+import com.eastapp.backend.organisation.TenantRepository;
+import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.stock.StockMedia;
 import com.eastapp.backend.stock.StockMediaRepository;
 import com.eastapp.backend.stock.api.StockMediaUploadResponse;

@@ -2,17 +2,40 @@
 -- Until production release, the development database is disposable and this
 -- single V1 file is the source of truth for the complete schema.
 
+CREATE TABLE application_setup (
+    id SMALLINT PRIMARY KEY,
+    setup_code_hash BYTEA,
+    setup_code_expires_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_application_setup_singleton CHECK (id = 1),
+    CONSTRAINT ck_application_setup_code_hash_length CHECK (
+        setup_code_hash IS NULL OR octet_length(setup_code_hash) = 32
+    ),
+    CONSTRAINT ck_application_setup_code_pair CHECK (
+        (setup_code_hash IS NULL) = (setup_code_expires_at IS NULL)
+    )
+);
+
+INSERT INTO application_setup (id) VALUES (1);
+
 CREATE TABLE tenants (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     company_code VARCHAR(32) NOT NULL,
-    name VARCHAR(120) NOT NULL,
+    business_name VARCHAR(120) NOT NULL,
+    employee_id_prefix VARCHAR(3) NOT NULL,
+    next_employee_number BIGINT NOT NULL DEFAULT 1,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_tenants_company_code UNIQUE (company_code),
+    CONSTRAINT uq_tenants_employee_id_prefix UNIQUE (employee_id_prefix),
     CONSTRAINT ck_tenants_company_code_uppercase CHECK (company_code = upper(company_code)),
     CONSTRAINT ck_tenants_company_code_format CHECK (company_code ~ '^[A-Z0-9][A-Z0-9_-]{1,31}$'),
-    CONSTRAINT ck_tenants_name_not_blank CHECK (btrim(name) <> '')
+    CONSTRAINT ck_tenants_business_name_not_blank CHECK (btrim(business_name) <> ''),
+    CONSTRAINT ck_tenants_employee_id_prefix_uppercase CHECK (employee_id_prefix = upper(employee_id_prefix)),
+    CONSTRAINT ck_tenants_employee_id_prefix_format CHECK (employee_id_prefix ~ '^[A-Z]{1,3}$'),
+    CONSTRAINT ck_tenants_next_employee_number CHECK (next_employee_number >= 1)
 );
 
 CREATE TABLE roles (
@@ -417,43 +440,6 @@ CREATE TABLE stock_audit_changes (
     CONSTRAINT ck_stock_audit_changes_position CHECK (position >= 0)
 );
 
--- Development business contexts. Data is intentionally recreated with the
--- disposable development database until the production baseline is frozen.
-INSERT INTO tenants (id, company_code, name) VALUES
-    ('00000000-0000-7000-8000-000000000001', 'EAST', 'The East'),
-    ('00000000-0000-7000-8000-000000000002', 'JUNE', 'June Coffee'),
-    ('00000000-0000-7000-8000-000000000003', 'SECRET', 'Secret Coffee');
-
-INSERT INTO roles (tenant_id, system_key, name)
-SELECT tenant.id, role.system_key, role.name
-FROM tenants tenant
-CROSS JOIN (VALUES
-    ('HEAD', 'Head'),
-    ('MANAGER', 'Manager'),
-    ('SUPERVISOR', 'Supervisor'),
-    ('STAFF_1', 'Staff1'),
-    ('STAFF_2', 'Staff2')
-) AS role(system_key, name);
-
--- Nicky's development login: E0002 / 2222. Only the BCrypt hash is stored.
-INSERT INTO login_identities (id, password_hash)
-VALUES (
-    '00000000-0000-7000-8000-000000000102',
-    '{bcrypt}$2y$10$Ng4bEVxAkgqSbDoI0zyM6eY8MW/jVs9w0rXJB7tn/NZJLSMQvnEES'
-);
-
-INSERT INTO users (
-    tenant_id, identity_id, employee_id, full_name, phone_e164, role_id, active
-)
-SELECT
-    tenant.id,
-    '00000000-0000-7000-8000-000000000102',
-    'E0002',
-    'Nicky Chang',
-    '+60165076207',
-    role.id,
-    TRUE
-FROM tenants tenant
-JOIN roles role
-  ON role.tenant_id = tenant.id
- AND role.system_key = 'HEAD';
+-- The first tenant, its default roles and the first Head account are created
+-- through the one-time Initial Setup API. Later tenants are created through
+-- People -> Tenant, and later users through People -> User.

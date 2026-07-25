@@ -1,12 +1,24 @@
 ### EastApp API requests
-### IntelliJ HTTP Client file. Run Login first; the response stores eastappToken automatically.
+### IntelliJ HTTP Client file. Run Initial setup once on an empty database, then run Login.
+### Login stores eastappToken automatically.
 
 @baseUrl = http://localhost:8080
 @companyCode = EAST
+@businessName = The East
+@employeeIdPrefix = E
+@setupCode = ABCDE23456
+@setupPhoneE164 = +60123456789
+@setupPassword = change-me
 @employeeId = E0001
-@phoneE164 = {{$processEnv EASTAPP_BOOTSTRAP_PHONE_E164}}
+@phoneE164 = {{$processEnv EASTAPP_HTTP_PHONE_E164}}
+@password = {{$processEnv EASTAPP_HTTP_PASSWORD}}
+@anchorDate = 2026-07-26
+@fromDate = 2026-07-01
+@toDate = 2026-07-31
+@capturedAt = 2026-07-26T00:00:00Z
 @userId = 00000000-0000-0000-0000-000000000000
 @roleId = 00000000-0000-0000-0000-000000000000
+@tenantId = 00000000-0000-0000-0000-000000000000
 @tagId = 00000000-0000-0000-0000-000000000000
 @tag2Id = 00000000-0000-0000-0000-000000000000
 @supplierId = 00000000-0000-0000-0000-000000000000
@@ -16,6 +28,23 @@
 @thumbnailKey = 00000000-0000-0000-0000-000000000000.jpg
 @thumbnailFile = /absolute/path/to/sku-thumbnail.jpg
 
+### Initial setup status
+GET {{baseUrl}}/api/v1/setup/status
+
+### Complete initial setup — empty database only
+POST {{baseUrl}}/api/v1/setup/owner
+Content-Type: application/json
+
+{
+  "setupCode": "{{setupCode}}",
+  "businessName": "{{businessName}}",
+  "companyCode": "{{companyCode}}",
+  "employeeIdPrefix": "{{employeeIdPrefix}}",
+  "fullName": "Initial Head",
+  "phoneE164": "{{setupPhoneE164}}",
+  "password": "{{setupPassword}}"
+}
+
 ### Login
 POST {{baseUrl}}/api/v1/auth/login
 Content-Type: application/json
@@ -24,23 +53,7 @@ Content-Type: application/json
   "companyCode": "{{companyCode}}",
   "employeeId": "{{employeeId}}",
   "phoneE164": "{{phoneE164}}",
-  "password": "1111"
-}
-
-> {%
-  client.global.set("eastappToken", response.body.token);
-%}
-
-
-### Nicky login — The East
-POST {{baseUrl}}/api/v1/auth/login
-Content-Type: application/json
-
-{
-  "companyCode": "{{companyCode}}",
-  "employeeId": "E0002",
-  "phoneE164": "+60165076207",
-  "password": "2222"
+  "password": "{{password}}"
 }
 
 > {%
@@ -68,6 +81,31 @@ Content-Type: application/json
   "userId": "{{userId}}"
 }
 
+### List tenants assigned to the current Head login
+GET {{baseUrl}}/api/v1/tenants
+Authorization: Bearer {{eastappToken}}
+
+### Create tenant and assign the current Head
+POST {{baseUrl}}/api/v1/tenants
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "businessName": "June Coffee",
+  "companyCode": "JUNE",
+  "employeeIdPrefix": "J"
+}
+
+### Update tenant
+PATCH {{baseUrl}}/api/v1/tenants/{{tenantId}}
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "businessName": "June Coffee",
+  "active": true
+}
+
 ### Search users — paged and active only
 GET {{baseUrl}}/api/v1/users?search=&active=true&page=0&size=20
 Authorization: Bearer {{eastappToken}}
@@ -82,7 +120,6 @@ Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
 
 {
-  "employeeId": "STAFF003",
   "password": "change-me",
   "fullName": "Example Staff",
   "phoneE164": "+60123456780",
@@ -157,7 +194,7 @@ Content-Type: application/json
 {
   "clientEventId": "attendance-{{$timestamp}}",
   "eventType": "CLOCK_IN",
-  "deviceCapturedAt": "2026-07-25T05:00:00Z",
+  "deviceCapturedAt": "{{capturedAt}}",
   "latitude": 4.3272472,
   "longitude": 101.1329829,
   "accuracyMeters": 8.0,
@@ -172,19 +209,19 @@ Content-Type: application/json
   "qrCheckpointValid": false,
   "devicePlatform": "android",
   "deviceOsVersion": "Android",
-  "appVersion": "east_app_v234",
+  "appVersion": "east_app_v238",
   "validationMethod": "camera-face-geofence"
 }
 
-### Tenant-wide attendance audit — compatibility endpoint
-GET {{baseUrl}}/api/v1/attendance/audit?period=DAY&anchor=2026-07-25
+### Tenant-wide attendance audit
+GET {{baseUrl}}/api/v1/attendance/audit?period=DAY&anchor={{anchorDate}}
 Authorization: Bearer {{eastappToken}}
 
 ### Employee-specific attendance audit — deferred and paged
-GET {{baseUrl}}/api/v1/attendance/users/{{userId}}?period=MONTH&anchor=2026-07-25&page=0&size=20
+GET {{baseUrl}}/api/v1/attendance/users/{{userId}}?period=MONTH&anchor={{anchorDate}}&page=0&size=20
 Authorization: Bearer {{eastappToken}}
 
-### Stock snapshot — compatibility endpoint
+### Stock snapshot
 GET {{baseUrl}}/api/v1/stock/snapshot
 Authorization: Bearer {{eastappToken}}
 
@@ -356,7 +393,7 @@ Content-Type: application/json
 }
 
 ### List my stock counts — paged
-GET {{baseUrl}}/api/v1/stock/counts?mine=true&from=2026-07-01&to=2026-07-31&page=0&size=50
+GET {{baseUrl}}/api/v1/stock/counts?mine=true&from={{fromDate}}&to={{toDate}}&page=0&size=50
 Authorization: Bearer {{eastappToken}}
 
 ### List review stock counts — paged
@@ -370,7 +407,7 @@ Content-Type: application/json
 
 {
   "skuId": "{{skuId}}",
-  "capturedAt": "2026-07-25T05:00:00Z",
+  "capturedAt": "{{capturedAt}}",
   "stockPhotoName": "stock-count.jpg",
   "invoicePhotoName": "invoice.jpg",
   "currentBalanceValue": 9.5,
@@ -404,7 +441,7 @@ Content-Type: application/json
 
 {
   "supplierId": "{{supplierId}}",
-  "capturedAt": "2026-07-25T05:00:00Z",
+  "capturedAt": "{{capturedAt}}",
   "invoicePhotoName": "invoice.jpg",
   "goodsPhotoName": "goods.jpg",
   "items": [
@@ -429,5 +466,5 @@ Content-Type: application/json
 }
 
 ### Stock audit — paged
-GET {{baseUrl}}/api/v1/stock/audit?from=2026-07-01&to=2026-07-31&page=0&size=50
+GET {{baseUrl}}/api/v1/stock/audit?from={{fromDate}}&to={{toDate}}&page=0&size=50
 Authorization: Bearer {{eastappToken}}

@@ -1,9 +1,10 @@
 package com.eastapp.backend.config;
 
-import com.eastapp.backend.identity.auth.ApiAccessDeniedHandler;
-import com.eastapp.backend.identity.auth.ApiAuthenticationEntryPoint;
-import com.eastapp.backend.identity.auth.AuthenticationService;
-import com.eastapp.backend.identity.auth.OpaqueSessionAuthenticationFilter;
+import com.eastapp.backend.auth.security.ApiAccessDeniedHandler;
+import com.eastapp.backend.auth.security.ApiAuthenticationEntryPoint;
+import com.eastapp.backend.auth.service.AuthenticationService;
+import com.eastapp.backend.auth.security.OpaqueSessionAuthenticationFilter;
+import com.eastapp.backend.common.logging.RequestLoggingFilter;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -76,12 +77,17 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
                                 "/actuator/health/**",
-                                "/api/v1/auth/login"
+                                "/api/v1/auth/login",
+                                "/api/v1/setup/**"
                         ).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(
                         new OpaqueSessionAuthenticationFilter(authenticationService),
                         UsernamePasswordAuthenticationFilter.class
+                )
+                .addFilterBefore(
+                        new RequestLoggingFilter(),
+                        OpaqueSessionAuthenticationFilter.class
                 )
                 .build();
     }

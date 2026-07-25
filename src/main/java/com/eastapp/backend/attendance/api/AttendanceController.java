@@ -2,7 +2,7 @@ package com.eastapp.backend.attendance.api;
 
 import com.eastapp.backend.attendance.AttendanceReportPeriod;
 import com.eastapp.backend.attendance.service.AttendanceService;
-import com.eastapp.backend.identity.auth.AuthenticatedUser;
+import com.eastapp.backend.auth.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
