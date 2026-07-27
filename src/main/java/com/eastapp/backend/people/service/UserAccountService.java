@@ -89,6 +89,7 @@ public class UserAccountService {
 
     @Transactional
     public UserResponse create(AuthenticatedUser actor, CreateUserRequest request) {
+        assertUserCreationAllowed(actor);
         UUID targetTenantId = request.tenantId();
         assertTenantMayBeManaged(actor, targetTenantId);
 
@@ -165,6 +166,15 @@ public class UserAccountService {
         assertActorMayManageUser(actor, target);
         target.getIdentity().changePasswordHash(passwordEncoder.encode(request.password()));
         revokeIdentitySessions(target.getIdentity().getId());
+    }
+
+    private static void assertUserCreationAllowed(AuthenticatedUser actor) {
+        if (!actor.isOwner() && actor.systemRole() != SystemRole.HEAD) {
+            throw forbidden(
+                    "USER_CREATION_DENIED",
+                    "Only Owner and Head users may create users."
+            );
+        }
     }
 
     private void assertTenantMayBeManaged(AuthenticatedUser actor, UUID targetTenantId) {

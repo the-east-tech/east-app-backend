@@ -20,7 +20,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/tenants")
-@PreAuthorize("hasRole('OWNER')")
+@PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
 public class TenantController {
 
     private final TenantService tenantService;
@@ -35,6 +35,7 @@ public class TenantController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('OWNER')")
     ResponseEntity<TenantResponse> create(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody CreateTenantRequest request

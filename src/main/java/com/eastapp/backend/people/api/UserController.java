@@ -51,6 +51,7 @@ public class UserController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<UserResponse> create(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody CreateUserRequest request

@@ -39,8 +39,11 @@ public class TenantService {
 
     @Transactional(readOnly = true)
     public List<TenantResponse> list(AuthenticatedUser actor) {
-        assertOwner(actor);
+        assertOwnerOrHead(actor);
         UserAccount current = currentActor(actor);
+        if (!actor.isOwner()) {
+            return List.of(TenantResponse.from(current.getTenant()));
+        }
         return userAccountRepository.findAllContexts(current.getIdentity().getId()).stream()
                 .filter(UserAccount::isActive)
                 .filter(user -> user.getRole().isActive())
@@ -91,27 +94,40 @@ public class TenantService {
             UUID tenantId,
             UpdateTenantRequest request
     ) {
-        assertOwner(actor);
+        assertOwnerOrHead(actor);
         UserAccount current = currentActor(actor);
         if (tenantId.equals(actor.tenantId()) && !request.active()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "CURRENT_TENANT_DEACTIVATION",
-                    "Switch to another business before deactivating the current tenant."
+                    "The current business cannot be deactivated while it is active in this session."
             );
         }
-        UserAccount targetMembership = userAccountRepository
-                .findByTenant_IdAndIdentity_Id(tenantId, current.getIdentity().getId())
-                .filter(UserAccount::isActive)
-                .filter(user -> user.getRole().isActive())
-                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
-                .orElseThrow(() -> new ApiException(
+
+        Tenant tenant;
+        if (actor.isOwner()) {
+            UserAccount targetMembership = userAccountRepository
+                    .findByTenant_IdAndIdentity_Id(tenantId, current.getIdentity().getId())
+                    .filter(UserAccount::isActive)
+                    .filter(user -> user.getRole().isActive())
+                    .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
+                    .orElseThrow(() -> new ApiException(
+                            HttpStatus.FORBIDDEN,
+                            "TENANT_ACCESS_DENIED",
+                            "This tenant is not assigned to the current Owner login."
+                    ));
+            tenant = targetMembership.getTenant();
+        } else {
+            if (!tenantId.equals(actor.tenantId())) {
+                throw new ApiException(
                         HttpStatus.FORBIDDEN,
                         "TENANT_ACCESS_DENIED",
-                        "This tenant is not assigned to the current Owner login."
-                ));
+                        "Head users may manage only their current tenant."
+                );
+            }
+            tenant = current.getTenant();
+        }
 
-        Tenant tenant = targetMembership.getTenant();
         tenant.update(request.businessName(), request.active());
         return TenantResponse.from(tenant);
     }
@@ -121,7 +137,17 @@ public class TenantService {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "OWNER_REQUIRED",
-                    "Only Owner users may manage tenants."
+                    "Only Owner users may create tenants."
+            );
+        }
+    }
+
+    private static void assertOwnerOrHead(AuthenticatedUser actor) {
+        if (!actor.isOwner() && actor.systemRole() != SystemRole.HEAD) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "TENANT_MANAGEMENT_DENIED",
+                    "Only Owner and Head users may manage tenants."
             );
         }
     }

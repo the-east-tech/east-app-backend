@@ -81,11 +81,11 @@ Content-Type: application/json
   "userId": "{{userId}}"
 }
 
-### List tenants assigned to the current Owner login
+### List tenants — Owner sees assigned businesses; Head sees current tenant
 GET {{baseUrl}}/api/v1/tenants
 Authorization: Bearer {{eastappToken}}
 
-### Create tenant and assign the current Owner
+### Create tenant and assign the current Owner — Owner only
 POST {{baseUrl}}/api/v1/tenants
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
@@ -96,7 +96,7 @@ Content-Type: application/json
   "employeeIdPrefix": "J"
 }
 
-### Update tenant
+### Update tenant — Owner or Head; Head may update current tenant only
 PATCH {{baseUrl}}/api/v1/tenants/{{tenantId}}
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
@@ -114,7 +114,7 @@ Authorization: Bearer {{eastappToken}}
 GET {{baseUrl}}/api/v1/users/{{userId}}
 Authorization: Bearer {{eastappToken}}
 
-### Create user
+### Create user — Owner or Head only
 POST {{baseUrl}}/api/v1/users
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
@@ -214,7 +214,7 @@ Content-Type: application/json
   "qrCheckpointValid": false,
   "devicePlatform": "android",
   "deviceOsVersion": "Android",
-  "appVersion": "east_app_v238",
+  "appVersion": "east_app_v242",
   "validationMethod": "camera-face-geofence"
 }
 
@@ -484,6 +484,6 @@ Content-Type: application/json
   "note": "Invoice and goods verified"
 }
 
-### Stock audit — paged
+### Stock audit — Owner or Head only, paged
 GET {{baseUrl}}/api/v1/stock/audit?from={{fromDate}}&to={{toDate}}&page=0&size=50
 Authorization: Bearer {{eastappToken}}
