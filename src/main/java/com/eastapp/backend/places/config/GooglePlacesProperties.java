@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 public class GooglePlacesProperties {
 
     // Development setup: replace this single value with the Google Maps server key.
-    private static final String HARDCODED_API_KEY = "PASTE_GOOGLE_MAPS_API_KEY_HERE";
+    private static final String HARDCODED_API_KEY = "AIzaSyDqshOy7FWWwqJsX5I1WA59-BSkfKohHdk";
 
     private String regionCode = "MY";
     private String languageCode = "en";
