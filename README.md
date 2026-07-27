@@ -1,0 +1,328 @@
+# EastApp Backend
+
+Backend API for **EastApp**, a multi-business operations application covering identity, access control, attendance, stock, tenants and Google business locations.
+
+## Current development model
+
+- One clean Flyway migration: `V1__create_eastapp_schema.sql`
+- No seeded tenants or users
+- Initial Setup creates the first tenant and first `OWNER`
+- Development data is disposable and may be recreated during schema changes
+- Each tenant represents one independent business location
+- Business codes are globally unique
+- Every tenant must have a Google business location and attendance geofence
+
+## Technology stack
+
+- Java 25
+- Spring Boot 4.1
+- Spring MVC
+- Spring Data JPA
+- Spring Security
+- PostgreSQL 18
+- Flyway
+- Maven Wrapper
+- Docker Compose
+- Railway Railpack
+- Google Places API (New)
+
+## Main capabilities
+
+### Identity and access
+
+- Login using company code, employee ID, phone number and password
+- Opaque bearer-session authentication
+- Password hashing through Spring Security
+- Tenant-aware access control
+- Owner-only business context switching
+
+Built-in roles:
+
+```text
+OWNER
+HEAD
+MANAGER
+SUPERVISOR
+STAFF_1
+STAFF_2
+```
+
+### Tenants
+
+- Create and update business tenants
+- Globally unique company codes
+- Tenant-specific employee ID prefixes
+- Compulsory Google business location
+- Tenant-specific attendance geofence
+- Every Owner can access every tenant
+
+### People
+
+- Users
+- Roles
+- Password reset
+- Tenant-specific employee IDs
+- Attendance audit and reporting
+
+### Attendance
+
+- Clock In and Clock Out events
+- Device-captured timestamp and location
+- Tenant-specific geofence validation
+- Camera and face-validation metadata
+- Daily, monthly and yearly audit views
+- Behaviour and employee-level reporting
+
+Attendance stores validation metadata only. Captured face photos are not stored by the backend.
+
+### Stock
+
+- SKUs
+- Tags
+- Suppliers
+- Daily stock counts
+- Receiving records
+- Media metadata
+- Approval and rejection workflow
+- Audit trail
+- Cross-business SKU copy for Owners
+
+Cross-business copying duplicates the selected SKUs together with their tags and suppliers. The copied records are independent from the source tenant.
+
+### Google Places
+
+- Business-location autocomplete
+- Place details and coordinates
+- Google Maps URL
+- Google rating and review count
+- Tenant-specific rating display in EastApp
+- Configurable rating cache
+
+The current development shortcut keeps the Google Places server key in one Java constant:
+
+```text
+src/main/java/com/eastapp/backend/places/config/GooglePlacesProperties.java
+```
+
+Replace:
+
+```java
+private static final String HARDCODED_API_KEY =
+        "PASTE_GOOGLE_MAPS_API_KEY_HERE";
+```
+
+Enable **Places API (New)** for that key.
+
+> This hardcoded-key approach is intentionally simple for current development. Before production, move the key to a backend secret and restrict its API access and quota.
+
+## Prerequisites
+
+- JDK 25
+- Docker Desktop
+- Git
+
+Maven does not need to be installed separately because the repository includes `mvnw`.
+
+## Run locally with a fresh database
+
+From the repository root:
+
+```bash
+./scripts/run-fresh-local.sh
+```
+
+The script:
+
+1. Deletes the local EastApp PostgreSQL volume
+2. Starts PostgreSQL 18
+3. Applies the single Flyway V1 migration
+4. Starts Spring Boot
+5. Prints a one-time Initial Setup code in the terminal
+
+The setup code is valid for 30 minutes.
+
+Health check:
+
+```bash
+curl http://localhost:8080/actuator/health
+```
+
+Expected response:
+
+```json
+{"status":"UP"}
+```
+
+## Initial Setup
+
+On an empty database:
+
+1. Start the backend
+2. Read the setup code from the backend terminal
+3. Open EastApp Flutter
+4. Complete Initial Setup
+5. Select the tenant's Google business location
+6. Create the first Owner account
+
+Initial Setup creates:
+
+- The first tenant
+- Built-in roles
+- The first Owner
+- The first tenant-specific employee ID
+
+No tenant or user is seeded automatically.
+
+The same flow can be tested through `requests.http`:
+
+```http
+GET /api/v1/setup/status
+POST /api/v1/setup/owner
+```
+
+## Normal local startup without deleting data
+
+```bash
+./mvnw spring-boot:run
+```
+
+By default, Spring Boot Docker Compose support starts the PostgreSQL service when required.
+
+## API testing
+
+Use the IntelliJ HTTP Client file:
+
+```text
+requests.http
+```
+
+It contains requests for:
+
+- Initial Setup
+- Login and logout
+- Business context switching
+- Tenants
+- Users and roles
+- Attendance
+- Stock
+- Google Places
+
+The Login request stores `eastappToken` automatically for authenticated requests.
+
+## Authentication
+
+Authenticated endpoints use:
+
+```http
+Authorization: Bearer <opaque-session-token>
+```
+
+EastApp currently uses opaque session tokens rather than JWT.
+
+## Access summary
+
+| Capability | Owner | Head | Other roles |
+|---|---:|---:|---:|
+| Switch business context | Yes | No | No |
+| View all businesses | Yes | No | No |
+| Create tenant | Yes | No | No |
+| Update current tenant | Yes | Yes | No |
+| Create user | Yes | Yes | No |
+| Stock Audit Trail | Yes | Yes | No |
+| People → Tenant | Yes | Yes | No |
+| Cross-business SKU copy | Yes | No | No |
+
+Heads remain limited to their current tenant. Owners share access across all tenants.
+
+## Database and Flyway
+
+During the current development stage:
+
+- Keep one clean `V1__create_eastapp_schema.sql`
+- Do not add V2/V3 migrations yet
+- Recreate the disposable database after schema changes
+- Do not seed tenants, owners or employees in Flyway
+
+Before retaining production data, switch to append-only Flyway migrations and stop rewriting V1.
+
+## Railway deployment
+
+Railway uses Railpack and checks:
+
+```text
+/actuator/health
+```
+
+Core Railway settings:
+
+```text
+RAILPACK_JDK_VERSION=25
+SPRING_DOCKER_COMPOSE_ENABLED=false
+EASTAPP_DATABASE_RESET_ON_START=true
+```
+
+Datasource variables should reference the Railway PostgreSQL service:
+
+```text
+SPRING_DATASOURCE_URL=jdbc:postgresql://${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}
+SPRING_DATASOURCE_USERNAME=${{Postgres.PGUSER}}
+SPRING_DATASOURCE_PASSWORD=${{Postgres.PGPASSWORD}}
+SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
+```
+
+`EASTAPP_DATABASE_RESET_ON_START=true` is for disposable development data only. Set it to `false` before retaining real production data.
+
+Detailed deployment guidance should live in:
+
+```text
+docs/RAILWAY_DEPLOYMENT.md
+```
+
+## Project structure
+
+```text
+src/main/java/com/eastapp/backend/
+├── attendance/
+├── auth/
+├── common/
+├── config/
+├── organisation/
+├── people/
+├── places/
+├── setup/
+└── stock/
+
+src/main/resources/
+├── application.yaml
+└── db/migration/V1__create_eastapp_schema.sql
+
+scripts/
+└── run-fresh-local.sh
+
+requests.http
+compose.yaml
+railway.json
+```
+
+## Development workflow
+
+For every backend change:
+
+1. Apply the change locally
+2. Start Spring Boot locally
+3. Let Flyway recreate or validate the schema
+4. Verify Hibernate validation
+5. Test affected endpoints in `requests.http`
+6. Keep all changed and newly added endpoints represented in `requests.http`
+7. Commit and push only after local success
+
+Use `./mvnw spring-boot:run` for normal development. Run the full test suite for schema, security, risky changes and release preparation.
+
+## Documentation
+
+Keep detailed guides separate from this README:
+
+- [Railway deployment](docs/RAILWAY_DEPLOYMENT.md)
+- [Google Places setup](docs/GOOGLE_PLACES_SETUP.md)
+
+Remove obsolete bootstrap documentation and scripts. Initial Setup is now the only supported first-user creation flow.

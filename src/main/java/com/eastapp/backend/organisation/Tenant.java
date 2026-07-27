@@ -51,9 +51,6 @@ public class Tenant {
     @Column(nullable = false)
     private double longitude;
 
-    @Column(name = "geofence_radius_meters", nullable = false)
-    private int geofenceRadiusMeters = 100;
-
     @Column(name = "google_maps_uri", length = 500)
     private String googleMapsUri;
 
@@ -101,7 +98,6 @@ public class Tenant {
             String formattedAddress,
             double latitude,
             double longitude,
-            int geofenceRadiusMeters,
             String googleMapsUri
     ) {
         if (latitude < -90 || latitude > 90) {
@@ -110,15 +106,11 @@ public class Tenant {
         if (longitude < -180 || longitude > 180) {
             throw new IllegalArgumentException("longitude must be between -180 and 180");
         }
-        if (geofenceRadiusMeters < 20 || geofenceRadiusMeters > 1000) {
-            throw new IllegalArgumentException("geofenceRadiusMeters must be between 20 and 1000");
-        }
         this.googlePlaceId = requireText(googlePlaceId, "googlePlaceId");
         this.googlePlaceName = requireText(googlePlaceName, "googlePlaceName");
         this.formattedAddress = requireText(formattedAddress, "formattedAddress");
         this.latitude = latitude;
         this.longitude = longitude;
-        this.geofenceRadiusMeters = geofenceRadiusMeters;
         this.googleMapsUri = optionalText(googleMapsUri);
     }
 
@@ -160,10 +152,6 @@ public class Tenant {
 
     public double getLongitude() {
         return longitude;
-    }
-
-    public int getGeofenceRadiusMeters() {
-        return geofenceRadiusMeters;
     }
 
     public String getGoogleMapsUri() {

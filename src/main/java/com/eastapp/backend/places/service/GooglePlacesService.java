@@ -31,6 +31,8 @@ public class GooglePlacesService {
             URI.create("https://places.googleapis.com/v1/places:autocomplete");
     private static final String PLACE_DETAILS_BASE =
             "https://places.googleapis.com/v1/places/";
+    private static final String REVERSE_GEOCODING_BASE =
+            "https://maps.googleapis.com/maps/api/geocode/json";
     private static final String DETAILS_FIELD_MASK =
             "id,displayName,formattedAddress,location,googleMapsUri,rating,userRatingCount";
 
@@ -137,19 +139,68 @@ public class GooglePlacesService {
         return details;
     }
 
-    private HttpRequest.Builder requestBuilder(URI uri) {
-        String apiKey = properties.getApiKey();
-        if (apiKey == null || apiKey.isBlank() || apiKey.startsWith("PASTE_")) {
+
+    public String reverseGeocodeAddress(double latitude, double longitude) {
+        if (latitude < -90 || latitude > 90) {
+            throw new IllegalArgumentException("latitude must be between -90 and 90");
+        }
+        if (longitude < -180 || longitude > 180) {
+            throw new IllegalArgumentException("longitude must be between -180 and 180");
+        }
+
+        String apiKey = requireApiKey();
+        String latLng = latitude + "," + longitude;
+        URI uri = URI.create(REVERSE_GEOCODING_BASE
+                + "?latlng=" + URLEncoder.encode(latLng, StandardCharsets.UTF_8)
+                + "&language=" + URLEncoder.encode(properties.getLanguageCode(), StandardCharsets.UTF_8)
+                + "&region=" + URLEncoder.encode(properties.getRegionCode(), StandardCharsets.UTF_8)
+                + "&key=" + URLEncoder.encode(apiKey, StandardCharsets.UTF_8));
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(Duration.ofSeconds(15))
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+        JsonNode root = send(request);
+        String status = root.path("status").asString("").trim();
+        if ("ZERO_RESULTS".equals(status)) {
+            return null;
+        }
+        if (!"OK".equals(status)) {
+            String message = root.path("error_message")
+                    .asString("Google Geocoding request failed.");
             throw new ApiException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "GOOGLE_PLACES_NOT_CONFIGURED",
-                    "Replace HARDCODED_API_KEY in GooglePlacesProperties.java with the Google Maps server key."
+                    HttpStatus.BAD_GATEWAY,
+                    "GOOGLE_GEOCODING_ERROR",
+                    message
             );
         }
+        JsonNode results = root.path("results");
+        if (!results.isArray() || results.isEmpty()) {
+            return null;
+        }
+        String address = results.get(0).path("formatted_address").asString("").trim();
+        return address.isEmpty() ? null : address;
+    }
+
+    private HttpRequest.Builder requestBuilder(URI uri) {
+        String apiKey = requireApiKey();
         return HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofSeconds(15))
                 .header("Accept", "application/json")
                 .header("X-Goog-Api-Key", apiKey);
+    }
+
+
+    private String requireApiKey() {
+        String apiKey = properties.getApiKey();
+        if (apiKey == null || apiKey.isBlank() || apiKey.startsWith("PASTE_")) {
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "GOOGLE_MAPS_NOT_CONFIGURED",
+                    "Replace HARDCODED_API_KEY in GooglePlacesProperties.java with the Google Maps server key."
+            );
+        }
+        return apiKey;
     }
 
     private JsonNode send(HttpRequest request) {

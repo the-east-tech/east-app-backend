@@ -13,7 +13,6 @@ public record AttendanceUserAuditResponse(
         int presentDays,
         int completedDays,
         int missingCheckOutDays,
-        int outsideGeofenceEvents,
         int validEvents,
         Instant firstClockInAt,
         Instant lastClockOutAt,

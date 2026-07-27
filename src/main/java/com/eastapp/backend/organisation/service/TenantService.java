@@ -75,7 +75,7 @@ public class TenantService {
 
         TenantProvisioningService.ProvisionedTenant provisioned = tenantProvisioningService.provision(
                 companyCode, request.businessName(), prefix,
-                googlePlace, request.geofenceRadiusMeters(),
+                googlePlace,
                 creator.getIdentity(), creator.getFullName(), creator.getPhoneE164(),
                 creator.getProfilePhotoKey(), creator.getBirthDate(),
                 creator.getStartDate(), creator.getEndDate()
@@ -131,7 +131,6 @@ public class TenantService {
                 googlePlace.formattedAddress(),
                 googlePlace.latitude(),
                 googlePlace.longitude(),
-                request.geofenceRadiusMeters(),
                 googlePlace.googleMapsUri()
         );
         return TenantResponse.from(tenant);

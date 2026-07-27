@@ -14,7 +14,6 @@ public record BusinessResponse(
         String formattedAddress,
         double latitude,
         double longitude,
-        int geofenceRadiusMeters,
         String googleMapsUri
 ) {
     public static BusinessResponse from(Tenant tenant) {
@@ -28,7 +27,6 @@ public record BusinessResponse(
                 tenant.getFormattedAddress(),
                 tenant.getLatitude(),
                 tenant.getLongitude(),
-                tenant.getGeofenceRadiusMeters(),
                 tenant.getGoogleMapsUri()
         );
     }

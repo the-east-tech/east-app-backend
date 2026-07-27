@@ -109,7 +109,6 @@ public class InitialSetupService {
                 request.businessName(),
                 prefix,
                 googlePlace,
-                request.geofenceRadiusMeters(),
                 identity,
                 request.fullName(),
                 request.phoneE164(),

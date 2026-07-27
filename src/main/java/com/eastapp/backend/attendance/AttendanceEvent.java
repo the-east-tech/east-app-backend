@@ -1,8 +1,8 @@
 package com.eastapp.backend.attendance;
 
+import com.eastapp.backend.auth.UserSession;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.people.UserAccount;
-import com.eastapp.backend.auth.UserSession;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -65,8 +65,14 @@ public class AttendanceEvent {
     @Column(name = "accuracy_meters", nullable = false, updatable = false)
     private double accuracyMeters;
 
-    @Column(name = "work_location_name", nullable = false, length = 120, updatable = false)
+    @Column(name = "captured_address", nullable = false, length = 500, updatable = false)
+    private String capturedAddress;
+
+    @Column(name = "work_location_name", nullable = false, length = 200, updatable = false)
     private String workLocationName;
+
+    @Column(name = "work_location_address", nullable = false, length = 500, updatable = false)
+    private String workLocationAddress;
 
     @Column(name = "work_location_latitude", nullable = false, updatable = false)
     private double workLocationLatitude;
@@ -74,14 +80,8 @@ public class AttendanceEvent {
     @Column(name = "work_location_longitude", nullable = false, updatable = false)
     private double workLocationLongitude;
 
-    @Column(name = "allowed_radius_meters", nullable = false, updatable = false)
-    private int allowedRadiusMeters;
-
     @Column(name = "distance_meters", nullable = false, updatable = false)
     private double distanceMeters;
-
-    @Column(name = "within_geofence", nullable = false, updatable = false)
-    private boolean withinGeofence;
 
     @Column(name = "camera_capture_valid", nullable = false, updatable = false)
     private boolean cameraCaptureValid;
@@ -139,12 +139,12 @@ public class AttendanceEvent {
             double latitude,
             double longitude,
             double accuracyMeters,
+            String capturedAddress,
             String workLocationName,
+            String workLocationAddress,
             double workLocationLatitude,
             double workLocationLongitude,
-            int allowedRadiusMeters,
             double distanceMeters,
-            boolean withinGeofence,
             boolean cameraCaptureValid,
             boolean faceValid,
             int faceCount,
@@ -168,12 +168,12 @@ public class AttendanceEvent {
         this.latitude = latitude;
         this.longitude = longitude;
         this.accuracyMeters = accuracyMeters;
+        this.capturedAddress = requireText(capturedAddress, "capturedAddress");
         this.workLocationName = requireText(workLocationName, "workLocationName");
+        this.workLocationAddress = requireText(workLocationAddress, "workLocationAddress");
         this.workLocationLatitude = workLocationLatitude;
         this.workLocationLongitude = workLocationLongitude;
-        this.allowedRadiusMeters = allowedRadiusMeters;
         this.distanceMeters = distanceMeters;
-        this.withinGeofence = withinGeofence;
         this.cameraCaptureValid = cameraCaptureValid;
         this.faceValid = faceValid;
         this.faceCount = faceCount;
@@ -189,134 +189,40 @@ public class AttendanceEvent {
         this.validationMethod = requireText(validationMethod, "validationMethod");
     }
 
-    public UUID getId() {
-        return id;
-    }
-
-    public Tenant getTenant() {
-        return tenant;
-    }
-
-    public UserAccount getUserAccount() {
-        return userAccount;
-    }
-
-    public UserSession getUserSession() {
-        return userSession;
-    }
-
-    public String getClientEventId() {
-        return clientEventId;
-    }
-
-    public AttendanceEventType getEventType() {
-        return eventType;
-    }
-
-    public Instant getOccurredAt() {
-        return occurredAt;
-    }
-
-    public Instant getDeviceCapturedAt() {
-        return deviceCapturedAt;
-    }
-
-    public double getLatitude() {
-        return latitude;
-    }
-
-    public double getLongitude() {
-        return longitude;
-    }
-
-    public double getAccuracyMeters() {
-        return accuracyMeters;
-    }
-
-    public String getWorkLocationName() {
-        return workLocationName;
-    }
-
-    public double getWorkLocationLatitude() {
-        return workLocationLatitude;
-    }
-
-    public double getWorkLocationLongitude() {
-        return workLocationLongitude;
-    }
-
-    public int getAllowedRadiusMeters() {
-        return allowedRadiusMeters;
-    }
-
-    public double getDistanceMeters() {
-        return distanceMeters;
-    }
-
-    public boolean isWithinGeofence() {
-        return withinGeofence;
-    }
-
-    public boolean isCameraCaptureValid() {
-        return cameraCaptureValid;
-    }
-
-    public boolean isFaceValid() {
-        return faceValid;
-    }
-
-    public int getFaceCount() {
-        return faceCount;
-    }
-
-    public Double getFaceBoxWidth() {
-        return faceBoxWidth;
-    }
-
-    public Double getFaceBoxHeight() {
-        return faceBoxHeight;
-    }
-
-    public Double getFaceYaw() {
-        return faceYaw;
-    }
-
-    public Double getFaceRoll() {
-        return faceRoll;
-    }
-
-    public Double getFacePitch() {
-        return facePitch;
-    }
-
-    public boolean isQrCheckpointValid() {
-        return qrCheckpointValid;
-    }
-
-    public String getDevicePlatform() {
-        return devicePlatform;
-    }
-
-    public String getDeviceOsVersion() {
-        return deviceOsVersion;
-    }
-
-    public String getAppVersion() {
-        return appVersion;
-    }
-
-    public String getValidationMethod() {
-        return validationMethod;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
+    public UUID getId() { return id; }
+    public Tenant getTenant() { return tenant; }
+    public UserAccount getUserAccount() { return userAccount; }
+    public UserSession getUserSession() { return userSession; }
+    public String getClientEventId() { return clientEventId; }
+    public AttendanceEventType getEventType() { return eventType; }
+    public Instant getOccurredAt() { return occurredAt; }
+    public Instant getDeviceCapturedAt() { return deviceCapturedAt; }
+    public double getLatitude() { return latitude; }
+    public double getLongitude() { return longitude; }
+    public double getAccuracyMeters() { return accuracyMeters; }
+    public String getCapturedAddress() { return capturedAddress; }
+    public String getWorkLocationName() { return workLocationName; }
+    public String getWorkLocationAddress() { return workLocationAddress; }
+    public double getWorkLocationLatitude() { return workLocationLatitude; }
+    public double getWorkLocationLongitude() { return workLocationLongitude; }
+    public double getDistanceMeters() { return distanceMeters; }
+    public boolean isCameraCaptureValid() { return cameraCaptureValid; }
+    public boolean isFaceValid() { return faceValid; }
+    public int getFaceCount() { return faceCount; }
+    public Double getFaceBoxWidth() { return faceBoxWidth; }
+    public Double getFaceBoxHeight() { return faceBoxHeight; }
+    public Double getFaceYaw() { return faceYaw; }
+    public Double getFaceRoll() { return faceRoll; }
+    public Double getFacePitch() { return facePitch; }
+    public boolean isQrCheckpointValid() { return qrCheckpointValid; }
+    public String getDevicePlatform() { return devicePlatform; }
+    public String getDeviceOsVersion() { return deviceOsVersion; }
+    public String getAppVersion() { return appVersion; }
+    public String getValidationMethod() { return validationMethod; }
+    public Instant getCreatedAt() { return createdAt; }
 
     private static String normaliseOptionalText(String value) {
-        if (value == null) {
-            return null;
-        }
+        if (value == null) return null;
         String normalised = value.trim();
         return normalised.isEmpty() ? null : normalised;
     }

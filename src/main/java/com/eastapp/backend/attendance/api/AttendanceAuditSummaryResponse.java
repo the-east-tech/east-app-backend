@@ -6,7 +6,6 @@ public record AttendanceAuditSummaryResponse(
         int presentDays,
         int completedDays,
         int missingCheckOutDays,
-        int outsideGeofenceEvents,
         double completionPercent
 ) {
 }

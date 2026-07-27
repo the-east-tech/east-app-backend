@@ -38,7 +38,6 @@ public class TenantProvisioningService {
             String businessName,
             String employeeIdPrefix,
             GooglePlaceDetails googlePlace,
-            int geofenceRadiusMeters,
             LoginIdentity ownerIdentity,
             String ownerFullName,
             String ownerPhoneE164,
@@ -54,7 +53,6 @@ public class TenantProvisioningService {
                 googlePlace.formattedAddress(),
                 googlePlace.latitude(),
                 googlePlace.longitude(),
-                geofenceRadiusMeters,
                 googlePlace.googleMapsUri()
         );
         tenant = tenantRepository.save(tenant);

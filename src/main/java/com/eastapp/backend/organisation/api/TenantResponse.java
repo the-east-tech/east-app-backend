@@ -15,7 +15,6 @@ public record TenantResponse(
         String formattedAddress,
         double latitude,
         double longitude,
-        int geofenceRadiusMeters,
         String googleMapsUri
 ) {
     public static TenantResponse from(Tenant tenant) {
@@ -30,7 +29,6 @@ public record TenantResponse(
                 tenant.getFormattedAddress(),
                 tenant.getLatitude(),
                 tenant.getLongitude(),
-                tenant.getGeofenceRadiusMeters(),
                 tenant.getGoogleMapsUri()
         );
     }

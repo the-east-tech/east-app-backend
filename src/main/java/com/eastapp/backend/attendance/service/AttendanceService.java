@@ -17,10 +17,13 @@ import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
+import com.eastapp.backend.places.service.GooglePlacesService;
 import com.eastapp.backend.auth.UserSession;
 import com.eastapp.backend.auth.UserSessionRepository;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -47,6 +50,7 @@ import java.util.UUID;
 @Service
 public class AttendanceService {
 
+    private static final Logger log = LoggerFactory.getLogger(AttendanceService.class);
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
     private static final DateTimeFormatter DAY_LABEL =
             DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH);
@@ -60,19 +64,22 @@ public class AttendanceService {
     private final UserAccountRepository userAccountRepository;
     private final UserSessionRepository userSessionRepository;
     private final AttendanceProperties properties;
+    private final GooglePlacesService googlePlacesService;
 
     public AttendanceService(
             AttendanceEventRepository attendanceEventRepository,
             TenantRepository tenantRepository,
             UserAccountRepository userAccountRepository,
             UserSessionRepository userSessionRepository,
-            AttendanceProperties properties
+            AttendanceProperties properties,
+            GooglePlacesService googlePlacesService
     ) {
         this.attendanceEventRepository = attendanceEventRepository;
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
         this.userSessionRepository = userSessionRepository;
         this.properties = properties;
+        this.googlePlacesService = googlePlacesService;
     }
 
     @Transactional
@@ -125,7 +132,10 @@ public class AttendanceService {
                 tenant.getLatitude(),
                 tenant.getLongitude()
         );
-        boolean withinGeofence = distanceMeters <= tenant.getGeofenceRadiusMeters();
+        String capturedAddress = resolveCapturedAddress(
+                request.latitude(),
+                request.longitude()
+        );
 
         AttendanceEvent event = new AttendanceEvent(
                 tenant,
@@ -137,12 +147,12 @@ public class AttendanceService {
                 request.latitude(),
                 request.longitude(),
                 request.accuracyMeters(),
+                capturedAddress,
                 tenant.getGooglePlaceName(),
+                tenant.getFormattedAddress(),
                 tenant.getLatitude(),
                 tenant.getLongitude(),
-                tenant.getGeofenceRadiusMeters(),
                 distanceMeters,
-                withinGeofence,
                 request.cameraCaptureValid(),
                 request.faceValid(),
                 request.faceCount(),
@@ -233,17 +243,12 @@ public class AttendanceService {
         int missingCheckOutDays = userReports.stream()
                 .mapToInt(AttendanceUserAuditResponse::missingCheckOutDays)
                 .sum();
-        int outsideGeofenceEvents = userReports.stream()
-                .mapToInt(AttendanceUserAuditResponse::outsideGeofenceEvents)
-                .sum();
-
         AttendanceAuditSummaryResponse summary = new AttendanceAuditSummaryResponse(
                 users.size(),
                 peopleWithAttendance,
                 presentDays,
                 completedDays,
                 missingCheckOutDays,
-                outsideGeofenceEvents,
                 percentage(completedDays, presentDays)
         );
 
@@ -372,7 +377,6 @@ public class AttendanceService {
         int presentDays = 0;
         int completedDays = 0;
         int missingCheckOutDays = 0;
-        int outsideGeofenceEvents = 0;
         int validEvents = 0;
         long totalCompletedMinutes = 0;
         int totalFirstClockInMinutes = 0;
@@ -395,7 +399,6 @@ public class AttendanceService {
             if (day.missingClockOut()) {
                 missingCheckOutDays++;
             }
-            outsideGeofenceEvents += day.outsideGeofenceEvents();
             validEvents += day.validEvents();
         }
 
@@ -435,7 +438,6 @@ public class AttendanceService {
                 presentDays,
                 completedDays,
                 missingCheckOutDays,
-                outsideGeofenceEvents,
                 validEvents,
                 firstClockInAt,
                 lastClockOutAt,
@@ -451,15 +453,10 @@ public class AttendanceService {
         Instant openClockIn = null;
         long workingMinutes = 0;
         boolean missingClockOut = false;
-        int outsideGeofenceEvents = 0;
         int validEvents = 0;
 
         for (AttendanceEvent event : events) {
-            if (!event.isWithinGeofence()) {
-                outsideGeofenceEvents++;
-            }
-            if (event.isWithinGeofence()
-                    && event.isCameraCaptureValid()
+            if (event.isCameraCaptureValid()
                     && event.isFaceValid()
                     && event.getFaceCount() == 1
                     && event.isQrCheckpointValid()) {
@@ -498,7 +495,6 @@ public class AttendanceService {
                 firstClockInAt,
                 lastClockOutAt,
                 firstClockInMinuteOfDay,
-                outsideGeofenceEvents,
                 validEvents
         );
     }
@@ -617,6 +613,24 @@ public class AttendanceService {
         return current;
     }
 
+    private String resolveCapturedAddress(double latitude, double longitude) {
+        try {
+            String address = googlePlacesService.reverseGeocodeAddress(latitude, longitude);
+            if (address != null && !address.isBlank()) {
+                return address;
+            }
+        } catch (ApiException exception) {
+            log.warn(
+                    "Attendance reverse geocoding unavailable code={} latitude={} longitude={}",
+                    exception.getCode(),
+                    latitude,
+                    longitude
+            );
+        }
+        return "Address unavailable · "
+                + String.format(Locale.ROOT, "%.6f, %.6f", latitude, longitude);
+    }
+
     private static double distanceMeters(
             double latitude,
             double longitude,
@@ -663,7 +677,6 @@ public class AttendanceService {
             Instant firstClockInAt,
             Instant lastClockOutAt,
             int firstClockInMinuteOfDay,
-            int outsideGeofenceEvents,
             int validEvents
     ) {
     }

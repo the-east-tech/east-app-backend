@@ -46,8 +46,7 @@ Content-Type: application/json
   "fullName": "Initial Owner",
   "phoneE164": "{{setupPhoneE164}}",
   "password": "{{setupPassword}}",
-  "googlePlaceId": "{{googlePlaceId}}",
-  "geofenceRadiusMeters": 100
+  "googlePlaceId": "{{googlePlaceId}}"
 }
 
 ### Login
@@ -99,8 +98,7 @@ Content-Type: application/json
   "businessName": "June Coffee",
   "companyCode": "JUNE",
   "employeeIdPrefix": "J",
-  "googlePlaceId": "{{googlePlaceId}}",
-  "geofenceRadiusMeters": 100
+  "googlePlaceId": "{{googlePlaceId}}"
 }
 
 ### Update tenant — Owner or Head; Head may update current tenant only
@@ -111,8 +109,7 @@ Content-Type: application/json
 {
   "businessName": "June Coffee",
   "active": true,
-  "googlePlaceId": "{{googlePlaceId}}",
-  "geofenceRadiusMeters": 100
+  "googlePlaceId": "{{googlePlaceId}}"
 }
 
 ### Search users — paged and active only
@@ -224,7 +221,7 @@ Content-Type: application/json
   "devicePlatform": "android",
   "deviceOsVersion": "Android",
   "appVersion": "east_app_v245",
-  "validationMethod": "camera-face-geofence"
+  "validationMethod": "camera-face-location"
 }
 
 ### Tenant-wide attendance audit
