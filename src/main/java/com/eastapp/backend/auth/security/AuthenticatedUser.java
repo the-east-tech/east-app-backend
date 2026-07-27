@@ -26,8 +26,12 @@ public record AuthenticatedUser(
         return List.of(new SimpleGrantedAuthority("ROLE_" + systemRole.name()));
     }
 
+    public boolean isOwner() {
+        return systemRole == SystemRole.OWNER;
+    }
+
     public boolean isHead() {
-        return systemRole == SystemRole.HEAD;
+        return systemRole == SystemRole.OWNER || systemRole == SystemRole.HEAD;
     }
 
     public boolean isManager() {

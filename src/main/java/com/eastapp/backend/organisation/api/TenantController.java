@@ -20,7 +20,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/tenants")
-@PreAuthorize("hasRole('HEAD')")
+@PreAuthorize("hasRole('OWNER')")
 public class TenantController {
 
     private final TenantService tenantService;
@@ -30,9 +30,7 @@ public class TenantController {
     }
 
     @GetMapping
-    List<TenantResponse> list(
-            @AuthenticationPrincipal AuthenticatedUser principal
-    ) {
+    List<TenantResponse> list(@AuthenticationPrincipal AuthenticatedUser principal) {
         return tenantService.list(principal);
     }
 

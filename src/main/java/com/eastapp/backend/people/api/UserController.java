@@ -1,7 +1,7 @@
 package com.eastapp.backend.people.api;
 
-import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.people.service.UserAccountService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -22,7 +22,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/users")
-@PreAuthorize("hasAnyRole('HEAD', 'MANAGER')")
+@PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
 public class UserController {
 
     private final UserAccountService userAccountService;

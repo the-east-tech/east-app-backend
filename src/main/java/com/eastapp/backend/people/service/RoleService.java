@@ -1,15 +1,17 @@
 package com.eastapp.backend.people.service;
 
+import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.common.error.ApiException;
+import com.eastapp.backend.organisation.Tenant;
+import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.Role;
 import com.eastapp.backend.people.RoleRepository;
 import com.eastapp.backend.people.SystemRole;
-import com.eastapp.backend.organisation.Tenant;
-import com.eastapp.backend.organisation.TenantRepository;
+import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.people.api.CreateRoleRequest;
 import com.eastapp.backend.people.api.RoleResponse;
 import com.eastapp.backend.people.api.UpdateRoleRequest;
-import com.eastapp.backend.common.error.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,12 +37,13 @@ public class RoleService {
     }
 
     @Transactional(readOnly = true)
-    public List<RoleResponse> list(UUID tenantId) {
+    public List<RoleResponse> list(AuthenticatedUser actor, UUID requestedTenantId) {
+        UUID tenantId = requestedTenantId == null ? actor.tenantId() : requestedTenantId;
+        assertRoleListAccess(actor, tenantId);
         return roleRepository.findAllByTenant_IdOrderByNameAsc(tenantId)
                 .stream()
                 .map(role -> RoleResponse.from(
-                        role,
-                        userAccountRepository.countByRole_Id(role.getId())
+                        role, userAccountRepository.countByRole_Id(role.getId())
                 ))
                 .toList();
     }
@@ -62,15 +65,18 @@ public class RoleService {
         Role role = findRole(tenantId, roleId);
 
         if (roleRepository.existsByTenant_IdAndNameIgnoreCaseAndIdNot(
-                tenantId,
-                request.name().trim(),
-                roleId
+                tenantId, request.name().trim(), roleId
         )) {
             throw conflict("ROLE_NAME_EXISTS", "A role with this name already exists.");
         }
 
-        if (role.getSystemKey() == SystemRole.HEAD && !request.active()) {
-            throw conflict("HEAD_ROLE_REQUIRED", "The Head role cannot be deactivated.");
+        if ((role.getSystemKey() == SystemRole.OWNER
+                || role.getSystemKey() == SystemRole.HEAD)
+                && !request.active()) {
+            throw conflict(
+                    "PROTECTED_ROLE_REQUIRED",
+                    "The Owner and Head roles cannot be deactivated."
+            );
         }
 
         role.rename(request.name());
@@ -81,8 +87,7 @@ public class RoleService {
         }
 
         return RoleResponse.from(
-                role,
-                userAccountRepository.countByRole_Id(role.getId())
+                role, userAccountRepository.countByRole_Id(role.getId())
         );
     }
 
@@ -104,6 +109,27 @@ public class RoleService {
         roleRepository.delete(role);
     }
 
+    private void assertRoleListAccess(AuthenticatedUser actor, UUID tenantId) {
+        if (tenantId.equals(actor.tenantId())) {
+            return;
+        }
+        if (!actor.isOwner()) {
+            throw forbidden("ROLE_ACCESS_DENIED", "Only Owner may view another tenant's roles.");
+        }
+        UserAccount current = userAccountRepository
+                .findByIdAndTenant_Id(actor.userId(), actor.tenantId())
+                .orElseThrow(() -> forbidden("ROLE_ACCESS_DENIED", "Current user is unavailable."));
+        userAccountRepository
+                .findByTenant_IdAndIdentity_Id(tenantId, current.getIdentity().getId())
+                .filter(UserAccount::isActive)
+                .filter(user -> user.getRole().isActive())
+                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
+                .orElseThrow(() -> forbidden(
+                        "ROLE_ACCESS_DENIED",
+                        "This tenant is not assigned to the current Owner login."
+                ));
+    }
+
     private Role findRole(UUID tenantId, UUID roleId) {
         return roleRepository.findByIdAndTenant_Id(roleId, tenantId)
                 .orElseThrow(() -> notFound("ROLE_NOT_FOUND", "Role not found."));
@@ -115,5 +141,9 @@ public class RoleService {
 
     private static ApiException conflict(String code, String message) {
         return new ApiException(HttpStatus.CONFLICT, code, message);
+    }
+
+    private static ApiException forbidden(String code, String message) {
+        return new ApiException(HttpStatus.FORBIDDEN, code, message);
     }
 }

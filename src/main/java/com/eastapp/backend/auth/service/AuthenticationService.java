@@ -1,16 +1,17 @@
 package com.eastapp.backend.auth.service;
 
-import com.eastapp.backend.auth.security.AuthenticatedUser;
-import com.eastapp.backend.auth.security.SessionTokenService;
-import com.eastapp.backend.organisation.Tenant;
-import com.eastapp.backend.people.UserAccount;
-import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.auth.UserSession;
 import com.eastapp.backend.auth.UserSessionRepository;
 import com.eastapp.backend.auth.api.CurrentUserResponse;
 import com.eastapp.backend.auth.api.LoginRequest;
 import com.eastapp.backend.auth.api.LoginResponse;
+import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.auth.security.SessionTokenService;
 import com.eastapp.backend.common.error.ApiException;
+import com.eastapp.backend.organisation.Tenant;
+import com.eastapp.backend.people.SystemRole;
+import com.eastapp.backend.people.UserAccount;
+import com.eastapp.backend.people.UserAccountRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -51,16 +52,11 @@ public class AuthenticationService {
 
         UserAccount user = userAccountRepository
                 .findByTenant_CompanyCodeAndEmployeeIdAndPhoneE164(
-                        companyCode,
-                        employeeId,
-                        phoneE164
+                        companyCode, employeeId, phoneE164
                 )
                 .orElseThrow(AuthenticationService::invalidCredentials);
 
-        if (!passwordEncoder.matches(
-                request.password(),
-                user.getIdentity().getPasswordHash()
-        )) {
+        if (!passwordEncoder.matches(request.password(), user.getIdentity().getPasswordHash())) {
             throw invalidCredentials();
         }
 
@@ -71,10 +67,7 @@ public class AuthenticationService {
                 new UserSession(user.getIdentity(), user, generatedToken.tokenHash())
         );
 
-        return new LoginResponse(
-                generatedToken.rawToken(),
-                CurrentUserResponse.from(user)
-        );
+        return new LoginResponse(generatedToken.rawToken(), CurrentUserResponse.from(user));
     }
 
     @Transactional
@@ -106,27 +99,26 @@ public class AuthenticationService {
 
     @Transactional(readOnly = true)
     public List<CurrentUserResponse> contexts(AuthenticatedUser principal) {
+        assertOwner(principal);
         UserSession session = currentSession(principal.sessionId());
         return userAccountRepository.findAllContexts(session.getIdentity().getId()).stream()
                 .filter(AuthenticationService::isLoginAllowed)
+                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
                 .map(CurrentUserResponse::from)
                 .toList();
     }
 
     @Transactional
-    public CurrentUserResponse switchContext(
-            AuthenticatedUser principal,
-            UUID targetUserId
-    ) {
+    public CurrentUserResponse switchContext(AuthenticatedUser principal, UUID targetUserId) {
+        assertOwner(principal);
         UserSession session = currentSession(principal.sessionId());
         UserAccount target = userAccountRepository
                 .findByIdAndIdentity_Id(targetUserId, session.getIdentity().getId())
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.FORBIDDEN,
-                        "CONTEXT_ACCESS_DENIED",
-                        "This business context is not assigned to this login."
-                ));
+                .orElseThrow(AuthenticationService::contextAccessDenied);
         assertLoginAllowed(target);
+        if (target.getRole().getSystemKey() != SystemRole.OWNER) {
+            throw contextAccessDenied();
+        }
         session.switchContext(target);
         return CurrentUserResponse.from(target);
     }
@@ -144,10 +136,7 @@ public class AuthenticationService {
                 .orElseThrow(AuthenticationService::invalidSession);
     }
 
-    private static AuthenticatedUser authenticatedUser(
-            UserSession session,
-            UserAccount user
-    ) {
+    private static AuthenticatedUser authenticatedUser(UserSession session, UserAccount user) {
         return new AuthenticatedUser(
                 session.getId(),
                 user.getId(),
@@ -161,6 +150,16 @@ public class AuthenticationService {
         );
     }
 
+    private static void assertOwner(AuthenticatedUser principal) {
+        if (!principal.isOwner()) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "OWNER_REQUIRED",
+                    "Only Owner users may switch business context."
+            );
+        }
+    }
+
     private static void assertLoginAllowed(UserAccount user) {
         if (!isLoginAllowed(user)) {
             throw invalidCredentials();
@@ -172,6 +171,14 @@ public class AuthenticationService {
                 && user.getTenant().isActive()
                 && user.isActive()
                 && user.getRole().isActive();
+    }
+
+    private static ApiException contextAccessDenied() {
+        return new ApiException(
+                HttpStatus.FORBIDDEN,
+                "CONTEXT_ACCESS_DENIED",
+                "This Owner business context is not assigned to this login."
+        );
     }
 
     private static ApiException invalidCredentials() {

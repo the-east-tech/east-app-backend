@@ -57,6 +57,12 @@ public interface StockSkuRepository extends JpaRepository<StockSku, UUID> {
     })
     Optional<StockSku> findByIdAndTenant_Id(UUID id, UUID tenantId);
 
+    @EntityGraph(attributePaths = {
+            "tenant", "lastUpdatedBy", "createdBy", "suppliers",
+            "tag1", "tag2", "thumbnailMedia"
+    })
+    List<StockSku> findAllByTenant_IdAndIdIn(UUID tenantId, List<UUID> ids);
+
     boolean existsByTenant_IdAndNameIgnoreCase(UUID tenantId, String name);
 
     boolean existsByTenant_IdAndSuppliers_Id(UUID tenantId, UUID supplierId);

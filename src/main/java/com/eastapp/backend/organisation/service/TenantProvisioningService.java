@@ -49,6 +49,7 @@ public class TenantProvisioningService {
         );
 
         List<Role> roles = List.of(
+                new Role(tenant, SystemRole.OWNER, "Owner"),
                 new Role(tenant, SystemRole.HEAD, "Head"),
                 new Role(tenant, SystemRole.MANAGER, "Manager"),
                 new Role(tenant, SystemRole.SUPERVISOR, "Supervisor"),
@@ -56,18 +57,12 @@ public class TenantProvisioningService {
                 new Role(tenant, SystemRole.STAFF_2, "Staff2")
         );
         roleRepository.saveAll(roles);
-        Role headRole = roles.getFirst();
+        Role ownerRole = roles.getFirst();
 
-        String employeeId = tenant.allocateEmployeeId();
-        UserAccount owner = new UserAccount(
+        UserAccount owner = createOwnerContext(
                 tenant,
+                ownerRole,
                 ownerIdentity,
-                employeeId,
-                ownerFullName,
-                ownerPhoneE164,
-                headRole
-        );
-        owner.updateProfile(
                 ownerFullName,
                 ownerPhoneE164,
                 profilePhotoKey,
@@ -77,9 +72,68 @@ public class TenantProvisioningService {
         );
         userAccountRepository.saveAndFlush(owner);
 
-        return new ProvisionedTenant(tenant, owner);
+        return new ProvisionedTenant(tenant, ownerRole, owner);
     }
 
-    public record ProvisionedTenant(Tenant tenant, UserAccount owner) {
+    @Transactional
+    public UserAccount addOwnerContext(
+            ProvisionedTenant provisioned,
+            UserAccount sourceOwner
+    ) {
+        if (userAccountRepository.existsByIdentity_IdAndTenant_Id(
+                sourceOwner.getIdentity().getId(),
+                provisioned.tenant().getId()
+        )) {
+            return userAccountRepository.findByTenant_IdAndIdentity_Id(
+                    provisioned.tenant().getId(),
+                    sourceOwner.getIdentity().getId()
+            ).orElseThrow();
+        }
+
+        UserAccount owner = createOwnerContext(
+                provisioned.tenant(),
+                provisioned.ownerRole(),
+                sourceOwner.getIdentity(),
+                sourceOwner.getFullName(),
+                sourceOwner.getPhoneE164(),
+                sourceOwner.getProfilePhotoKey(),
+                sourceOwner.getBirthDate(),
+                sourceOwner.getStartDate(),
+                sourceOwner.getEndDate()
+        );
+        return userAccountRepository.save(owner);
+    }
+
+    private static UserAccount createOwnerContext(
+            Tenant tenant,
+            Role ownerRole,
+            LoginIdentity identity,
+            String fullName,
+            String phoneE164,
+            String profilePhotoKey,
+            LocalDate birthDate,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        UserAccount owner = new UserAccount(
+                tenant,
+                identity,
+                tenant.allocateEmployeeId(),
+                fullName,
+                phoneE164,
+                ownerRole
+        );
+        owner.updateProfile(
+                fullName,
+                phoneE164,
+                profilePhotoKey,
+                birthDate,
+                startDate,
+                endDate
+        );
+        return owner;
+    }
+
+    public record ProvisionedTenant(Tenant tenant, Role ownerRole, UserAccount owner) {
     }
 }

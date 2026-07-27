@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -30,13 +31,16 @@ public class RoleController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('HEAD', 'MANAGER')")
-    List<RoleResponse> list(@AuthenticationPrincipal AuthenticatedUser principal) {
-        return roleService.list(principal.tenantId());
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    List<RoleResponse> list(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam(required = false) UUID tenantId
+    ) {
+        return roleService.list(principal, tenantId);
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<RoleResponse> create(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody CreateRoleRequest request
@@ -46,7 +50,7 @@ public class RoleController {
     }
 
     @PatchMapping("/{roleId}")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     RoleResponse update(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID roleId,
@@ -56,7 +60,7 @@ public class RoleController {
     }
 
     @DeleteMapping("/{roleId}")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<Void> delete(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID roleId

@@ -46,7 +46,7 @@ public class AttendanceController {
     }
 
     @GetMapping("/audit")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     AttendanceAuditResponse audit(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(defaultValue = "DAY") AttendanceReportPeriod period,
@@ -57,7 +57,7 @@ public class AttendanceController {
         return attendanceService.audit(principal, period, anchor);
     }
     @GetMapping("/users/{userId}")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     AttendanceUserDetailResponse userAudit(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable java.util.UUID userId,

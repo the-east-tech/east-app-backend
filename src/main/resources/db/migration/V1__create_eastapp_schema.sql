@@ -50,7 +50,7 @@ CREATE TABLE roles (
     CONSTRAINT uq_roles_tenant_id_id UNIQUE (tenant_id, id),
     CONSTRAINT uq_roles_tenant_system_key UNIQUE (tenant_id, system_key),
     CONSTRAINT ck_roles_system_key CHECK (
-        system_key IS NULL OR system_key IN ('HEAD', 'MANAGER', 'SUPERVISOR', 'STAFF_1', 'STAFF_2')
+        system_key IS NULL OR system_key IN ('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR', 'STAFF_1', 'STAFF_2')
     ),
     CONSTRAINT ck_roles_name_not_blank CHECK (btrim(name) <> '')
 );
@@ -201,7 +201,6 @@ CREATE TABLE stock_tags (
     CONSTRAINT uq_stock_tags_tenant_id_id UNIQUE (tenant_id, id),
     CONSTRAINT ck_stock_tags_tag_not_blank CHECK (btrim(tag) <> '')
 );
-CREATE UNIQUE INDEX uq_stock_tags_tenant_tag_ci ON stock_tags (tenant_id, lower(tag));
 
 CREATE TABLE stock_suppliers (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -237,7 +236,6 @@ CREATE TABLE stock_suppliers (
         minimum_balance_value >= 0 AND maximum_balance_value >= minimum_balance_value AND current_balance_value >= 0
     )
 );
-CREATE UNIQUE INDEX uq_stock_suppliers_tenant_name_ci ON stock_suppliers (tenant_id, lower(supplier_name));
 
 CREATE TABLE stock_skus (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -282,7 +280,6 @@ CREATE TABLE stock_skus (
     CONSTRAINT ck_stock_skus_prices CHECK (minimum_price_rm >= 0 AND maximum_price_rm >= minimum_price_rm),
     CONSTRAINT ck_stock_skus_frequency CHECK (stock_check_frequency_days > 0)
 );
-CREATE UNIQUE INDEX uq_stock_skus_tenant_name_ci ON stock_skus (tenant_id, lower(name));
 CREATE INDEX ix_stock_skus_tenant_tag1 ON stock_skus (tenant_id, tag1_id);
 CREATE INDEX ix_stock_skus_tenant_tag2 ON stock_skus (tenant_id, tag2_id);
 
@@ -440,6 +437,6 @@ CREATE TABLE stock_audit_changes (
     CONSTRAINT ck_stock_audit_changes_position CHECK (position >= 0)
 );
 
--- The first tenant, its default roles and the first Head account are created
+-- The first tenant, its default roles and the first Owner account are created
 -- through the one-time Initial Setup API. Later tenants are created through
 -- People -> Tenant, and later users through People -> User.

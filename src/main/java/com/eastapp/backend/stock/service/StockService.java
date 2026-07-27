@@ -3,6 +3,7 @@ package com.eastapp.backend.stock.service;
 import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
+import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
@@ -22,6 +23,8 @@ import com.eastapp.backend.stock.StockSupplier;
 import com.eastapp.backend.stock.StockSupplierRepository;
 import com.eastapp.backend.stock.StockTag;
 import com.eastapp.backend.stock.StockTagRepository;
+import com.eastapp.backend.stock.api.CopyStockSkusRequest;
+import com.eastapp.backend.stock.api.CopyStockSkusResponse;
 import com.eastapp.backend.stock.api.CreateStockCountRequest;
 import com.eastapp.backend.stock.api.CreateStockReceivingItemRequest;
 import com.eastapp.backend.stock.api.CreateStockReceivingRequest;
@@ -50,8 +53,11 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -156,6 +162,160 @@ public class StockService {
                         principal.tenantId(), normaliseSearch(search), active, pageRequest(page, size)
                 ),
                 StockSkuResponse::from
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<StockSkuResponse> listCopySourceSkus(
+            AuthenticatedUser principal,
+            UUID sourceTenantId,
+            String search,
+            Boolean active,
+            int page,
+            int size
+    ) {
+        if (sourceTenantId.equals(principal.tenantId())) {
+            throw badRequest(
+                    "COPY_SOURCE_EQUALS_TARGET",
+                    "Choose a different source business."
+            );
+        }
+        assertOwnerTenantAccess(principal, sourceTenantId);
+        return PageResponse.from(
+                skuRepository.searchByTenant(
+                        sourceTenantId, normaliseSearch(search), active, pageRequest(page, size)
+                ),
+                StockSkuResponse::from
+        );
+    }
+
+    @Transactional
+    public CopyStockSkusResponse copySkus(
+            AuthenticatedUser principal,
+            CopyStockSkusRequest request
+    ) {
+        UUID targetTenantId = principal.tenantId();
+        UUID sourceTenantId = request.sourceTenantId();
+        if (sourceTenantId.equals(targetTenantId)) {
+            throw badRequest(
+                    "COPY_SOURCE_EQUALS_TARGET",
+                    "Choose a different source business."
+            );
+        }
+
+        assertOwnerTenantAccess(principal, sourceTenantId);
+        UserAccount actor = assertOwnerTenantAccess(principal, targetTenantId);
+        Tenant targetTenant = tenant(targetTenantId);
+        Tenant sourceTenant = tenant(sourceTenantId);
+
+        List<UUID> requestedIds = new ArrayList<>(new LinkedHashSet<>(request.skuIds()));
+        List<StockSku> found = skuRepository.findAllByTenant_IdAndIdIn(
+                sourceTenantId, requestedIds
+        );
+        if (found.size() != requestedIds.size()) {
+            throw notFound(
+                    "COPY_SOURCE_SKU_NOT_FOUND",
+                    "One or more selected source SKUs were not found."
+            );
+        }
+        Map<UUID, StockSku> sourceById = new LinkedHashMap<>();
+        found.forEach(item -> sourceById.put(item.getId(), item));
+
+        Map<UUID, StockTag> copiedTags = new LinkedHashMap<>();
+        Map<UUID, StockSupplier> copiedSuppliers = new LinkedHashMap<>();
+        List<StockSkuResponse> copiedSkus = new ArrayList<>();
+
+        for (UUID requestedId : requestedIds) {
+            StockSku source = sourceById.get(requestedId);
+            StockTag targetTag1 = copiedTags.computeIfAbsent(
+                    source.getTag1().getId(),
+                    ignored -> tagRepository.save(
+                            new StockTag(targetTenant, source.getTag1().getTag(), actor)
+                    )
+            );
+            StockTag targetTag2 = copiedTags.computeIfAbsent(
+                    source.getTag2().getId(),
+                    ignored -> tagRepository.save(
+                            new StockTag(targetTenant, source.getTag2().getTag(), actor)
+                    )
+            );
+
+            Set<StockSupplier> targetSuppliers = new LinkedHashSet<>();
+            for (StockSupplier sourceSupplier : source.getSuppliers()) {
+                StockSupplier targetSupplier = copiedSuppliers.computeIfAbsent(
+                        sourceSupplier.getId(),
+                        ignored -> supplierRepository.save(new StockSupplier(
+                                targetTenant,
+                                sourceSupplier.getSupplierName(),
+                                sourceSupplier.getSupplierItem(),
+                                sourceSupplier.getContactPerson(),
+                                sourceSupplier.getPhone(),
+                                sourceSupplier.getAddress(),
+                                sourceSupplier.getNotes(),
+                                sourceSupplier.getUnit(),
+                                sourceSupplier.getRecommendedPurchaseAmount(),
+                                sourceSupplier.getRecommendedPurchaseFrequency(),
+                                sourceSupplier.getPricingPerUnit(),
+                                sourceSupplier.getMinimumBalanceValue(),
+                                sourceSupplier.getMaximumBalanceValue(),
+                                sourceSupplier.getCurrentBalanceValue(),
+                                actor
+                        ))
+                );
+                targetSuppliers.add(targetSupplier);
+            }
+
+            StockMedia sourceMedia = source.getThumbnailMedia();
+            String extension = sourceMedia.getContentType().equals("image/png")
+                    ? ".png"
+                    : ".jpg";
+            StockMedia targetMedia = mediaRepository.save(new StockMedia(
+                    targetTenant,
+                    UUID.randomUUID() + extension,
+                    sourceMedia.getContentType(),
+                    sourceMedia.getContentBytes()
+            ));
+
+            StockSku copied = skuRepository.save(new StockSku(
+                    targetTenant,
+                    source.getName(),
+                    targetTag1,
+                    targetTag2,
+                    source.getUnit(),
+                    source.getMinimumBalanceValue(),
+                    source.getMaximumBalanceValue(),
+                    BigDecimal.ZERO,
+                    source.getRecoveryPercent(),
+                    source.getMinimumPriceRm(),
+                    source.getMaximumPriceRm(),
+                    targetSuppliers,
+                    targetMedia,
+                    List.of(),
+                    List.copyOf(source.getReceivingChecklist()),
+                    source.getStockCheckFrequencyDays(),
+                    source.getResetTime(),
+                    source.isActive(),
+                    source.isCoolingPeriod(),
+                    actor
+            ));
+
+            auditRepository.save(new StockAuditEntry(
+                    targetTenant,
+                    "SKU",
+                    "Copied SKU from another business",
+                    copied.getId(),
+                    copied.getName(),
+                    principal,
+                    "Copied from " + sourceTenant.getBusinessName()
+            ).addChange("Source Business", "-", sourceTenant.getBusinessName()));
+            copiedSkus.add(StockSkuResponse.from(copied));
+        }
+
+        return new CopyStockSkusResponse(
+                copiedSkus.size(),
+                copiedTags.size(),
+                copiedSuppliers.size(),
+                List.copyOf(copiedSkus)
         );
     }
 
@@ -630,6 +790,33 @@ public class StockService {
             boolean filterByTo,
             Instant toExclusive
     ) {}
+
+    private UserAccount assertOwnerTenantAccess(
+            AuthenticatedUser principal,
+            UUID tenantId
+    ) {
+        if (!principal.isOwner()) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "OWNER_REQUIRED",
+                    "Only Owner users may copy SKUs between businesses."
+            );
+        }
+        UserAccount current = actor(principal);
+        if (tenantId.equals(principal.tenantId())) {
+            return current;
+        }
+        return userAccountRepository
+                .findByTenant_IdAndIdentity_Id(tenantId, current.getIdentity().getId())
+                .filter(UserAccount::isActive)
+                .filter(user -> user.getRole().isActive())
+                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.FORBIDDEN,
+                        "TENANT_ACCESS_DENIED",
+                        "This tenant is not assigned to the current Owner login."
+                ));
+    }
 
     private Tenant tenant(UUID tenantId) {
         return tenantRepository.findById(tenantId)

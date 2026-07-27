@@ -15,7 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -37,9 +39,12 @@ public class TenantService {
 
     @Transactional(readOnly = true)
     public List<TenantResponse> list(AuthenticatedUser actor) {
+        assertOwner(actor);
         UserAccount current = currentActor(actor);
         return userAccountRepository.findAllContexts(current.getIdentity().getId()).stream()
-                .filter(user -> user.getRole().getSystemKey() == SystemRole.HEAD)
+                .filter(UserAccount::isActive)
+                .filter(user -> user.getRole().isActive())
+                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
                 .map(UserAccount::getTenant)
                 .distinct()
                 .sorted(Comparator.comparing(Tenant::getBusinessName, String.CASE_INSENSITIVE_ORDER))
@@ -49,23 +54,34 @@ public class TenantService {
 
     @Transactional
     public TenantResponse create(AuthenticatedUser actor, CreateTenantRequest request) {
+        assertOwner(actor);
         String companyCode = Tenant.normaliseCode(request.companyCode());
         String prefix = Tenant.normaliseEmployeeIdPrefix(request.employeeIdPrefix());
         assertUnique(companyCode, prefix);
 
         UserAccount creator = currentActor(actor);
+        Map<UUID, UserAccount> existingOwnersByIdentity = new LinkedHashMap<>();
+        userAccountRepository
+                .findAllByRole_SystemKeyAndActiveTrueOrderByCreatedAtAsc(SystemRole.OWNER)
+                .stream()
+                .filter(user -> user.getIdentity().isActive())
+                .filter(user -> user.getTenant().isActive())
+                .filter(user -> user.getRole().isActive())
+                .forEach(user -> existingOwnersByIdentity.putIfAbsent(
+                        user.getIdentity().getId(), user
+                ));
+
         TenantProvisioningService.ProvisionedTenant provisioned = tenantProvisioningService.provision(
-                companyCode,
-                request.businessName(),
-                prefix,
-                creator.getIdentity(),
-                creator.getFullName(),
-                creator.getPhoneE164(),
-                creator.getProfilePhotoKey(),
-                creator.getBirthDate(),
-                creator.getStartDate(),
-                creator.getEndDate()
+                companyCode, request.businessName(), prefix,
+                creator.getIdentity(), creator.getFullName(), creator.getPhoneE164(),
+                creator.getProfilePhotoKey(), creator.getBirthDate(),
+                creator.getStartDate(), creator.getEndDate()
         );
+
+        existingOwnersByIdentity.values().stream()
+                .filter(owner -> !owner.getIdentity().getId().equals(creator.getIdentity().getId()))
+                .forEach(owner -> tenantProvisioningService.addOwnerContext(provisioned, owner));
+
         return TenantResponse.from(provisioned.tenant());
     }
 
@@ -75,6 +91,7 @@ public class TenantService {
             UUID tenantId,
             UpdateTenantRequest request
     ) {
+        assertOwner(actor);
         UserAccount current = currentActor(actor);
         if (tenantId.equals(actor.tenantId()) && !request.active()) {
             throw new ApiException(
@@ -85,16 +102,28 @@ public class TenantService {
         }
         UserAccount targetMembership = userAccountRepository
                 .findByTenant_IdAndIdentity_Id(tenantId, current.getIdentity().getId())
-                .filter(user -> user.getRole().getSystemKey() == SystemRole.HEAD)
+                .filter(UserAccount::isActive)
+                .filter(user -> user.getRole().isActive())
+                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.FORBIDDEN,
                         "TENANT_ACCESS_DENIED",
-                        "This tenant is not assigned to the current Head login."
+                        "This tenant is not assigned to the current Owner login."
                 ));
 
         Tenant tenant = targetMembership.getTenant();
         tenant.update(request.businessName(), request.active());
         return TenantResponse.from(tenant);
+    }
+
+    private static void assertOwner(AuthenticatedUser actor) {
+        if (!actor.isOwner()) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "OWNER_REQUIRED",
+                    "Only Owner users may manage tenants."
+            );
+        }
     }
 
     private UserAccount currentActor(AuthenticatedUser actor) {
@@ -109,16 +138,12 @@ public class TenantService {
     private void assertUnique(String companyCode, String prefix) {
         if (tenantRepository.existsByCompanyCode(companyCode)) {
             throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "COMPANY_CODE_EXISTS",
-                    "This company code already exists."
+                    HttpStatus.CONFLICT, "COMPANY_CODE_EXISTS", "This company code already exists."
             );
         }
         if (tenantRepository.existsByEmployeeIdPrefix(prefix)) {
             throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "EMPLOYEE_PREFIX_EXISTS",
-                    "This employee ID prefix already exists."
+                    HttpStatus.CONFLICT, "EMPLOYEE_PREFIX_EXISTS", "This employee ID prefix already exists."
             );
         }
     }

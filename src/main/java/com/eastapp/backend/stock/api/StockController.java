@@ -40,7 +40,7 @@ public class StockController {
 
 
     @PostMapping(value = "/media/sku-thumbnails", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<StockMediaUploadResponse> uploadSkuThumbnail(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam("file") MultipartFile file
@@ -97,6 +97,31 @@ public class StockController {
         return stockService.listSkus(principal, search, active, page, size);
     }
 
+    @GetMapping("/skus/copy-source")
+    @PreAuthorize("hasRole('OWNER')")
+    PageResponse<StockSkuResponse> copySourceSkus(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam UUID tenantId,
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size
+    ) {
+        return stockService.listCopySourceSkus(
+                principal, tenantId, search, active, page, size
+        );
+    }
+
+    @PostMapping("/skus/copy")
+    @PreAuthorize("hasRole('OWNER')")
+    ResponseEntity<CopyStockSkusResponse> copySkus(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody CopyStockSkusRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(stockService.copySkus(principal, request));
+    }
+
     @GetMapping("/counts")
     PageResponse<StockCountSubmissionResponse> counts(
             @AuthenticationPrincipal AuthenticatedUser principal,
@@ -111,7 +136,7 @@ public class StockController {
     }
 
     @GetMapping("/receivings")
-    @PreAuthorize("hasAnyRole('HEAD', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     PageResponse<StockReceivingResponse> receivings(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false) String reviewStatus,
@@ -124,7 +149,7 @@ public class StockController {
     }
 
     @PostMapping("/tags")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<StockTagResponse> createTag(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody CreateStockTagRequest request
@@ -133,7 +158,7 @@ public class StockController {
     }
 
     @PatchMapping("/tags/{tagId}")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     StockTagResponse updateTag(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID tagId,
@@ -143,7 +168,7 @@ public class StockController {
     }
 
     @DeleteMapping("/tags/{tagId}")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<Void> deleteTag(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID tagId
@@ -153,7 +178,7 @@ public class StockController {
     }
 
     @PostMapping("/suppliers")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<StockSupplierResponse> createSupplier(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody CreateStockSupplierRequest request
@@ -162,7 +187,7 @@ public class StockController {
     }
 
     @PatchMapping("/suppliers/{supplierId}")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     StockSupplierResponse updateSupplier(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID supplierId,
@@ -172,7 +197,7 @@ public class StockController {
     }
 
     @DeleteMapping("/suppliers/{supplierId}")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<Void> deleteSupplier(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID supplierId
@@ -182,7 +207,7 @@ public class StockController {
     }
 
     @PatchMapping("/suppliers/{supplierId}/balance")
-    @PreAuthorize("hasAnyRole('HEAD', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     StockSupplierResponse updateSupplierBalance(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID supplierId,
@@ -192,7 +217,7 @@ public class StockController {
     }
 
     @PostMapping("/skus")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<StockSkuResponse> createSku(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody UpsertStockSkuRequest request
@@ -201,7 +226,7 @@ public class StockController {
     }
 
     @PatchMapping("/skus/{skuId}")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     StockSkuResponse updateSku(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID skuId,
@@ -211,7 +236,7 @@ public class StockController {
     }
 
     @PatchMapping("/skus/{skuId}/balance")
-    @PreAuthorize("hasAnyRole('HEAD', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     StockSkuResponse updateSkuBalance(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID skuId,
@@ -229,7 +254,7 @@ public class StockController {
     }
 
     @PatchMapping("/counts/{submissionId}/review")
-    @PreAuthorize("hasAnyRole('HEAD', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     StockCountSubmissionResponse reviewCount(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID submissionId,
@@ -239,7 +264,7 @@ public class StockController {
     }
 
     @PostMapping("/receivings")
-    @PreAuthorize("hasAnyRole('HEAD', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     ResponseEntity<StockReceivingResponse> createReceiving(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody CreateStockReceivingRequest request
@@ -248,7 +273,7 @@ public class StockController {
     }
 
     @PatchMapping("/receivings/{receivingId}/review")
-    @PreAuthorize("hasAnyRole('HEAD', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     StockReceivingResponse reviewReceiving(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID receivingId,
@@ -258,7 +283,7 @@ public class StockController {
     }
 
     @GetMapping("/audit")
-    @PreAuthorize("hasRole('HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     PageResponse<StockAuditEntryResponse> audit(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

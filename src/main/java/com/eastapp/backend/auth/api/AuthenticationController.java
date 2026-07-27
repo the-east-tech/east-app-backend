@@ -6,6 +6,7 @@ import jakarta.validation.Valid;
 
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,6 +35,7 @@ public class AuthenticationController {
     }
 
     @GetMapping("/contexts")
+    @PreAuthorize("hasRole('OWNER')")
     List<CurrentUserResponse> contexts(
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
@@ -41,6 +43,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/context")
+    @PreAuthorize("hasRole('OWNER')")
     CurrentUserResponse switchContext(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody SwitchContextRequest request

@@ -72,6 +72,10 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
 
     long countByRole_Id(UUID roleId);
 
+    @EntityGraph(attributePaths = {"identity", "tenant", "role"})
+    List<UserAccount> findAllByRole_SystemKeyAndActiveTrueOrderByCreatedAtAsc(
+            SystemRole systemKey
+    );
 
     long countByTenant_IdAndRole_SystemKeyAndActiveTrue(UUID tenantId, SystemRole systemKey);
 }

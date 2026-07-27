@@ -1,24 +1,24 @@
 package com.eastapp.backend.people.service;
 
-import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.auth.LoginIdentity;
 import com.eastapp.backend.auth.LoginIdentityRepository;
-import com.eastapp.backend.people.Role;
-import com.eastapp.backend.people.RoleRepository;
-import com.eastapp.backend.people.SystemRole;
+import com.eastapp.backend.auth.UserSession;
+import com.eastapp.backend.auth.UserSessionRepository;
+import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.common.api.PageResponse;
+import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.organisation.service.EmployeeIdService;
+import com.eastapp.backend.people.Role;
+import com.eastapp.backend.people.RoleRepository;
+import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
-import com.eastapp.backend.auth.UserSession;
-import com.eastapp.backend.auth.UserSessionRepository;
 import com.eastapp.backend.people.api.CreateUserRequest;
 import com.eastapp.backend.people.api.ResetPasswordRequest;
 import com.eastapp.backend.people.api.UpdateUserRequest;
 import com.eastapp.backend.people.api.UserResponse;
-import com.eastapp.backend.auth.security.AuthenticatedUser;
-import com.eastapp.backend.common.error.ApiException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -89,32 +89,30 @@ public class UserAccountService {
 
     @Transactional
     public UserResponse create(AuthenticatedUser actor, CreateUserRequest request) {
-        Tenant tenant = tenantRepository.findById(actor.tenantId())
-                .orElseThrow(() -> notFound("TENANT_NOT_FOUND", "Tenant not found."));
-        Role role = findActiveRole(actor.tenantId(), request.roleId());
+        UUID targetTenantId = request.tenantId();
+        assertTenantMayBeManaged(actor, targetTenantId);
+
+        Tenant targetTenant = tenantRepository.findById(targetTenantId)
+                .filter(Tenant::isActive)
+                .orElseThrow(() -> notFound("TENANT_NOT_FOUND", "Active tenant not found."));
+        Role role = findActiveRole(targetTenantId, request.roleId());
         assertRoleMayBeAssigned(actor, role);
 
-        String employeeId = employeeIdService.allocate(actor.tenantId());
         LoginIdentity identity = loginIdentityRepository.save(
                 new LoginIdentity(passwordEncoder.encode(request.password()))
         );
-        UserAccount user = new UserAccount(
-                tenant,
-                identity,
-                employeeId,
-                request.fullName(),
-                request.phoneE164(),
-                role
-        );
-        user.updateProfile(
-                request.fullName(),
-                request.phoneE164(),
-                request.profilePhotoKey(),
-                request.birthDate(),
-                request.startDate(),
-                request.endDate()
-        );
 
+        if (role.getSystemKey() == SystemRole.OWNER) {
+            return createOwnerAcrossActiveTenants(identity, request, targetTenantId);
+        }
+
+        UserAccount user = createUserAccount(
+                targetTenant,
+                identity,
+                employeeIdService.allocate(targetTenantId),
+                role,
+                request
+        );
         return UserResponse.from(userAccountRepository.save(user));
     }
 
@@ -129,15 +127,21 @@ public class UserAccountService {
 
         Role newRole = findActiveRole(actor.tenantId(), request.roleId());
         assertRoleMayBeAssigned(actor, newRole);
-        assertActiveHeadRemains(target, newRole, request.active());
+
+        if (target.getRole().getSystemKey() == SystemRole.OWNER) {
+            assertOwnerAccountRemainsOwner(newRole, request.active());
+            userAccountRepository.findAllContexts(target.getIdentity().getId()).forEach(context ->
+                    context.updateProfile(
+                            request.fullName(), request.phoneE164(), request.profilePhotoKey(),
+                            request.birthDate(), request.startDate(), request.endDate()
+                    )
+            );
+            return UserResponse.from(target);
+        }
 
         target.updateProfile(
-                request.fullName(),
-                request.phoneE164(),
-                request.profilePhotoKey(),
-                request.birthDate(),
-                request.startDate(),
-                request.endDate()
+                request.fullName(), request.phoneE164(), request.profilePhotoKey(),
+                request.birthDate(), request.startDate(), request.endDate()
         );
         target.assignRole(newRole);
 
@@ -163,6 +167,29 @@ public class UserAccountService {
         revokeIdentitySessions(target.getIdentity().getId());
     }
 
+    private void assertTenantMayBeManaged(AuthenticatedUser actor, UUID targetTenantId) {
+        if (targetTenantId.equals(actor.tenantId())) {
+            return;
+        }
+        if (!actor.isOwner()) {
+            throw forbidden(
+                    "TENANT_USER_CREATION_DENIED",
+                    "Only Owner users may create a user for another tenant."
+            );
+        }
+
+        UserAccount current = findUser(actor.tenantId(), actor.userId());
+        userAccountRepository
+                .findByTenant_IdAndIdentity_Id(targetTenantId, current.getIdentity().getId())
+                .filter(UserAccount::isActive)
+                .filter(user -> user.getRole().isActive())
+                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
+                .orElseThrow(() -> forbidden(
+                        "TENANT_USER_CREATION_DENIED",
+                        "This tenant is not assigned to the current Owner login."
+                ));
+    }
+
     private UserAccount findUser(UUID tenantId, UUID userId) {
         return userAccountRepository.findByIdAndTenant_Id(userId, tenantId)
                 .orElseThrow(() -> notFound("USER_NOT_FOUND", "User not found."));
@@ -181,7 +208,13 @@ public class UserAccountService {
             AuthenticatedUser actor,
             UserAccount target
     ) {
-        if (actor.isHead()) {
+        if (actor.isOwner()) {
+            return;
+        }
+        if (actor.systemRole() == SystemRole.HEAD) {
+            if (target.getRole().getSystemKey() == SystemRole.OWNER) {
+                throw forbidden("PROTECTED_USER", "Head users cannot edit Owner users.");
+            }
             return;
         }
         if (!actor.isManager()) {
@@ -189,16 +222,27 @@ public class UserAccountService {
         }
 
         SystemRole targetRole = target.getRole().getSystemKey();
-        if (targetRole == SystemRole.HEAD || targetRole == SystemRole.MANAGER) {
+        if (targetRole == SystemRole.OWNER
+                || targetRole == SystemRole.HEAD
+                || targetRole == SystemRole.MANAGER) {
             throw forbidden(
                     "PROTECTED_USER",
-                    "Managers cannot edit Head or Manager users."
+                    "Managers cannot edit Owner, Head or Manager users."
             );
         }
     }
 
     private static void assertRoleMayBeAssigned(AuthenticatedUser actor, Role role) {
-        if (actor.isHead()) {
+        if (actor.isOwner()) {
+            return;
+        }
+        if (actor.systemRole() == SystemRole.HEAD) {
+            if (role.getSystemKey() == SystemRole.OWNER) {
+                throw forbidden(
+                        "ROLE_ASSIGNMENT_DENIED",
+                        "Only Owner users may assign the Owner role."
+                );
+            }
             return;
         }
         if (!actor.isManager()) {
@@ -214,27 +258,63 @@ public class UserAccountService {
         }
     }
 
-    private void assertActiveHeadRemains(
-            UserAccount target,
-            Role newRole,
-            boolean active
+    private UserResponse createOwnerAcrossActiveTenants(
+            LoginIdentity identity,
+            CreateUserRequest request,
+            UUID selectedTenantId
     ) {
-        if (target.getRole().getSystemKey() != SystemRole.HEAD) {
-            return;
-        }
-        if (newRole.getSystemKey() == SystemRole.HEAD && active) {
-            return;
+        UserAccount selectedOwner = null;
+
+        for (Tenant tenant : tenantRepository.findAllByActiveTrueOrderByBusinessNameAsc()) {
+            Role ownerRole = roleRepository
+                    .findByTenant_IdAndSystemKey(tenant.getId(), SystemRole.OWNER)
+                    .filter(Role::isActive)
+                    .orElseThrow(() -> conflict(
+                            "OWNER_ROLE_UNAVAILABLE",
+                            "The Owner role is unavailable for " + tenant.getBusinessName() + "."
+                    ));
+
+            UserAccount owner = createUserAccount(
+                    tenant,
+                    identity,
+                    employeeIdService.allocate(tenant.getId()),
+                    ownerRole,
+                    request
+            );
+            userAccountRepository.save(owner);
+            if (tenant.getId().equals(selectedTenantId)) {
+                selectedOwner = owner;
+            }
         }
 
-        long activeHeads = userAccountRepository
-                .countByTenant_IdAndRole_SystemKeyAndActiveTrue(
-                        target.getTenant().getId(),
-                        SystemRole.HEAD
-                );
-        if (activeHeads <= 1) {
+        if (selectedOwner == null) {
+            throw notFound("TENANT_NOT_FOUND", "Selected active tenant not found.");
+        }
+        return UserResponse.from(selectedOwner);
+    }
+
+    private static UserAccount createUserAccount(
+            Tenant tenant,
+            LoginIdentity identity,
+            String employeeId,
+            Role role,
+            CreateUserRequest request
+    ) {
+        UserAccount user = new UserAccount(
+                tenant, identity, employeeId, request.fullName(), request.phoneE164(), role
+        );
+        user.updateProfile(
+                request.fullName(), request.phoneE164(), request.profilePhotoKey(),
+                request.birthDate(), request.startDate(), request.endDate()
+        );
+        return user;
+    }
+
+    private static void assertOwnerAccountRemainsOwner(Role newRole, boolean active) {
+        if (newRole.getSystemKey() != SystemRole.OWNER || !active) {
             throw conflict(
-                    "LAST_ACTIVE_HEAD",
-                    "At least one active Head user must remain."
+                    "OWNER_ACCOUNT_PROTECTED",
+                    "Owner access is system-wide and cannot be demoted or deactivated here."
             );
         }
     }

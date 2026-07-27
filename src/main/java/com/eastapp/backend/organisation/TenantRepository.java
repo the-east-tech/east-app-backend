@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -14,6 +15,8 @@ public interface TenantRepository extends JpaRepository<Tenant, UUID> {
     boolean existsByCompanyCode(String companyCode);
 
     boolean existsByEmployeeIdPrefix(String employeeIdPrefix);
+
+    List<Tenant> findAllByActiveTrueOrderByBusinessNameAsc();
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select tenant from Tenant tenant where tenant.id = :tenantId")

@@ -21,6 +21,9 @@ public record CreateUserRequest(
         String phoneE164,
 
         @NotNull
+        UUID tenantId,
+
+        @NotNull
         UUID roleId,
 
         @Size(max = 255)

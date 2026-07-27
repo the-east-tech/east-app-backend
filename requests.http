@@ -40,7 +40,7 @@ Content-Type: application/json
   "businessName": "{{businessName}}",
   "companyCode": "{{companyCode}}",
   "employeeIdPrefix": "{{employeeIdPrefix}}",
-  "fullName": "Initial Head",
+  "fullName": "Initial Owner",
   "phoneE164": "{{setupPhoneE164}}",
   "password": "{{setupPassword}}"
 }
@@ -68,11 +68,11 @@ Authorization: Bearer {{eastappToken}}
 POST {{baseUrl}}/api/v1/auth/logout
 Authorization: Bearer {{eastappToken}}
 
-### Available business contexts
+### Available business contexts — Owner only
 GET {{baseUrl}}/api/v1/auth/contexts
 Authorization: Bearer {{eastappToken}}
 
-### Switch business context
+### Switch business context — Owner only
 POST {{baseUrl}}/api/v1/auth/context
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
@@ -81,11 +81,11 @@ Content-Type: application/json
   "userId": "{{userId}}"
 }
 
-### List tenants assigned to the current Head login
+### List tenants assigned to the current Owner login
 GET {{baseUrl}}/api/v1/tenants
 Authorization: Bearer {{eastappToken}}
 
-### Create tenant and assign the current Head
+### Create tenant and assign the current Owner
 POST {{baseUrl}}/api/v1/tenants
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
@@ -123,6 +123,7 @@ Content-Type: application/json
   "password": "change-me",
   "fullName": "Example Staff",
   "phoneE164": "+60123456780",
+  "tenantId": "{{tenantId}}",
   "roleId": "{{roleId}}",
   "profilePhotoKey": null,
   "birthDate": "1995-01-01",
@@ -155,8 +156,12 @@ Content-Type: application/json
   "password": "new-password"
 }
 
-### List roles
+### List roles for current tenant
 GET {{baseUrl}}/api/v1/roles
+Authorization: Bearer {{eastappToken}}
+
+### List roles for selected tenant — Owner only when tenant differs
+GET {{baseUrl}}/api/v1/roles?tenantId={{tenantId}}
 Authorization: Bearer {{eastappToken}}
 
 ### Create custom role
@@ -224,6 +229,20 @@ Authorization: Bearer {{eastappToken}}
 ### Stock snapshot
 GET {{baseUrl}}/api/v1/stock/snapshot
 Authorization: Bearer {{eastappToken}}
+
+### List source SKUs for cross-business copy — Owner only
+GET {{baseUrl}}/api/v1/stock/skus/copy-source?tenantId={{tenantId}}&search=&active=true&page=0&size=50
+Authorization: Bearer {{eastappToken}}
+
+### Copy selected SKUs, tags and suppliers into current tenant — Owner only
+POST {{baseUrl}}/api/v1/stock/skus/copy
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "sourceTenantId": "{{tenantId}}",
+  "skuIds": ["{{skuId}}"]
+}
 
 ### List stock tags — paged
 GET {{baseUrl}}/api/v1/stock/tags?search=&page=0&size=50
