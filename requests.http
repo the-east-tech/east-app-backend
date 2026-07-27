@@ -3,6 +3,7 @@
 ### Login stores eastappToken automatically.
 
 @baseUrl = http://localhost:8080
+@googlePlaceId = REPLACE_WITH_GOOGLE_PLACE_ID
 @companyCode = EAST
 @businessName = The East
 @employeeIdPrefix = E
@@ -16,6 +17,8 @@
 @fromDate = 2026-07-01
 @toDate = 2026-07-31
 @capturedAt = 2026-07-26T00:00:00Z
+@attendanceLatitude = 0.000000
+@attendanceLongitude = 0.000000
 @userId = 00000000-0000-0000-0000-000000000000
 @roleId = 00000000-0000-0000-0000-000000000000
 @tenantId = 00000000-0000-0000-0000-000000000000
@@ -42,7 +45,9 @@ Content-Type: application/json
   "employeeIdPrefix": "{{employeeIdPrefix}}",
   "fullName": "Initial Owner",
   "phoneE164": "{{setupPhoneE164}}",
-  "password": "{{setupPassword}}"
+  "password": "{{setupPassword}}",
+  "googlePlaceId": "{{googlePlaceId}}",
+  "geofenceRadiusMeters": 100
 }
 
 ### Login
@@ -81,11 +86,11 @@ Content-Type: application/json
   "userId": "{{userId}}"
 }
 
-### List tenants — Owner sees assigned businesses; Head sees current tenant
+### List tenants — Owner sees every business; Head sees current tenant
 GET {{baseUrl}}/api/v1/tenants
 Authorization: Bearer {{eastappToken}}
 
-### Create tenant and assign the current Owner — Owner only
+### Create tenant and assign every existing Owner — Owner only
 POST {{baseUrl}}/api/v1/tenants
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
@@ -93,7 +98,9 @@ Content-Type: application/json
 {
   "businessName": "June Coffee",
   "companyCode": "JUNE",
-  "employeeIdPrefix": "J"
+  "employeeIdPrefix": "J",
+  "googlePlaceId": "{{googlePlaceId}}",
+  "geofenceRadiusMeters": 100
 }
 
 ### Update tenant — Owner or Head; Head may update current tenant only
@@ -103,7 +110,9 @@ Content-Type: application/json
 
 {
   "businessName": "June Coffee",
-  "active": true
+  "active": true,
+  "googlePlaceId": "{{googlePlaceId}}",
+  "geofenceRadiusMeters": 100
 }
 
 ### Search users — paged and active only
@@ -114,7 +123,7 @@ Authorization: Bearer {{eastappToken}}
 GET {{baseUrl}}/api/v1/users/{{userId}}
 Authorization: Bearer {{eastappToken}}
 
-### Create user — Owner or Head only
+### Create user — Owner or Head only; selecting Owner shares the account across every active business
 POST {{baseUrl}}/api/v1/users
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
@@ -200,8 +209,8 @@ Content-Type: application/json
   "clientEventId": "attendance-{{$timestamp}}",
   "eventType": "CLOCK_IN",
   "deviceCapturedAt": "{{capturedAt}}",
-  "latitude": 4.3272472,
-  "longitude": 101.1329829,
+  "latitude": {{attendanceLatitude}},
+  "longitude": {{attendanceLongitude}},
   "accuracyMeters": 8.0,
   "cameraCaptureValid": true,
   "faceValid": true,
@@ -214,7 +223,7 @@ Content-Type: application/json
   "qrCheckpointValid": false,
   "devicePlatform": "android",
   "deviceOsVersion": "Android",
-  "appVersion": "east_app_v242",
+  "appVersion": "east_app_v245",
   "validationMethod": "camera-face-geofence"
 }
 
@@ -486,4 +495,28 @@ Content-Type: application/json
 
 ### Stock audit — Owner or Head only, paged
 GET {{baseUrl}}/api/v1/stock/audit?from={{fromDate}}&to={{toDate}}&page=0&size=50
+Authorization: Bearer {{eastappToken}}
+
+
+### Google Places - setup autocomplete (only before initial setup)
+GET {{baseUrl}}/api/v1/setup/google-places/autocomplete?query=June%20Coffee
+Accept: application/json
+
+### Google Places - setup details (only before initial setup)
+GET {{baseUrl}}/api/v1/setup/google-places/{{googlePlaceId}}
+Accept: application/json
+
+### Google Places - authenticated autocomplete (Owner/Head)
+GET {{baseUrl}}/api/v1/google-places/autocomplete?query=June%20Coffee
+Accept: application/json
+Authorization: Bearer {{eastappToken}}
+
+### Google Places - authenticated details (Owner/Head)
+GET {{baseUrl}}/api/v1/google-places/details/{{googlePlaceId}}
+Accept: application/json
+Authorization: Bearer {{eastappToken}}
+
+### Google rating for current business
+GET {{baseUrl}}/api/v1/google-places/current-rating
+Accept: application/json
 Authorization: Bearer {{eastappToken}}

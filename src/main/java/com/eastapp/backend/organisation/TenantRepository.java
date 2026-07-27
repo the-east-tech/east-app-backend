@@ -18,6 +18,8 @@ public interface TenantRepository extends JpaRepository<Tenant, UUID> {
 
     List<Tenant> findAllByActiveTrueOrderByBusinessNameAsc();
 
+    List<Tenant> findAllByOrderByBusinessNameAsc();
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select tenant from Tenant tenant where tenant.id = :tenantId")
     Optional<Tenant> findByIdForUpdate(@Param("tenantId") UUID tenantId);

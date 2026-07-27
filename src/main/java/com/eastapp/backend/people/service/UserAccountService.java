@@ -10,6 +10,7 @@ import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.organisation.service.EmployeeIdService;
+import com.eastapp.backend.organisation.service.TenantProvisioningService;
 import com.eastapp.backend.people.Role;
 import com.eastapp.backend.people.RoleRepository;
 import com.eastapp.backend.people.SystemRole;
@@ -40,6 +41,7 @@ public class UserAccountService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmployeeIdService employeeIdService;
+    private final TenantProvisioningService tenantProvisioningService;
 
     public UserAccountService(
             UserAccountRepository userAccountRepository,
@@ -48,7 +50,8 @@ public class UserAccountService {
             TenantRepository tenantRepository,
             RoleRepository roleRepository,
             PasswordEncoder passwordEncoder,
-            EmployeeIdService employeeIdService
+            EmployeeIdService employeeIdService,
+            TenantProvisioningService tenantProvisioningService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.loginIdentityRepository = loginIdentityRepository;
@@ -57,6 +60,7 @@ public class UserAccountService {
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.employeeIdService = employeeIdService;
+        this.tenantProvisioningService = tenantProvisioningService;
     }
 
     @Transactional(readOnly = true)
@@ -140,6 +144,13 @@ public class UserAccountService {
             return UserResponse.from(target);
         }
 
+        if (newRole.getSystemKey() == SystemRole.OWNER && !request.active()) {
+            throw conflict(
+                    "OWNER_ACCOUNT_ACTIVE_REQUIRED",
+                    "A user promoted to Owner must remain active."
+            );
+        }
+
         target.updateProfile(
                 request.fullName(), request.phoneE164(), request.profilePhotoKey(),
                 request.birthDate(), request.startDate(), request.endDate()
@@ -151,6 +162,12 @@ public class UserAccountService {
         } else {
             target.deactivate();
             revokeSessions(target.getId());
+        }
+
+        if (newRole.getSystemKey() == SystemRole.OWNER) {
+            tenantRepository.findAllByActiveTrueOrderByBusinessNameAsc().stream()
+                    .filter(tenant -> !tenant.getId().equals(target.getTenant().getId()))
+                    .forEach(tenant -> tenantProvisioningService.addOwnerContext(tenant, target));
         }
 
         return UserResponse.from(target);

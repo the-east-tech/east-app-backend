@@ -8,6 +8,7 @@ import com.eastapp.backend.people.RoleRepository;
 import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
+import com.eastapp.backend.places.GooglePlaceDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +37,8 @@ public class TenantProvisioningService {
             String companyCode,
             String businessName,
             String employeeIdPrefix,
+            GooglePlaceDetails googlePlace,
+            int geofenceRadiusMeters,
             LoginIdentity ownerIdentity,
             String ownerFullName,
             String ownerPhoneE164,
@@ -44,9 +47,17 @@ public class TenantProvisioningService {
             LocalDate startDate,
             LocalDate endDate
     ) {
-        Tenant tenant = tenantRepository.save(
-                new Tenant(companyCode, businessName, employeeIdPrefix)
+        Tenant tenant = new Tenant(companyCode, businessName, employeeIdPrefix);
+        tenant.configureGoogleLocation(
+                googlePlace.placeId(),
+                googlePlace.displayName(),
+                googlePlace.formattedAddress(),
+                googlePlace.latitude(),
+                googlePlace.longitude(),
+                geofenceRadiusMeters,
+                googlePlace.googleMapsUri()
         );
+        tenant = tenantRepository.save(tenant);
 
         List<Role> roles = List.of(
                 new Role(tenant, SystemRole.OWNER, "Owner"),
@@ -80,19 +91,53 @@ public class TenantProvisioningService {
             ProvisionedTenant provisioned,
             UserAccount sourceOwner
     ) {
+        return addOwnerContext(
+                provisioned.tenant(),
+                provisioned.ownerRole(),
+                sourceOwner
+        );
+    }
+
+    @Transactional
+    public UserAccount addOwnerContext(Tenant tenant, UserAccount sourceOwner) {
+        Role ownerRole = roleRepository
+                .findByTenant_IdAndSystemKey(tenant.getId(), SystemRole.OWNER)
+                .filter(Role::isActive)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Active Owner role is unavailable for tenant " + tenant.getId()
+                ));
+        return addOwnerContext(tenant, ownerRole, sourceOwner);
+    }
+
+    private UserAccount addOwnerContext(
+            Tenant tenant,
+            Role ownerRole,
+            UserAccount sourceOwner
+    ) {
         if (userAccountRepository.existsByIdentity_IdAndTenant_Id(
                 sourceOwner.getIdentity().getId(),
-                provisioned.tenant().getId()
+                tenant.getId()
         )) {
-            return userAccountRepository.findByTenant_IdAndIdentity_Id(
-                    provisioned.tenant().getId(),
+            UserAccount existing = userAccountRepository.findByTenant_IdAndIdentity_Id(
+                    tenant.getId(),
                     sourceOwner.getIdentity().getId()
             ).orElseThrow();
+            existing.assignRole(ownerRole);
+            existing.activate();
+            existing.updateProfile(
+                    sourceOwner.getFullName(),
+                    sourceOwner.getPhoneE164(),
+                    sourceOwner.getProfilePhotoKey(),
+                    sourceOwner.getBirthDate(),
+                    sourceOwner.getStartDate(),
+                    sourceOwner.getEndDate()
+            );
+            return existing;
         }
 
         UserAccount owner = createOwnerContext(
-                provisioned.tenant(),
-                provisioned.ownerRole(),
+                tenant,
+                ownerRole,
                 sourceOwner.getIdentity(),
                 sourceOwner.getFullName(),
                 sourceOwner.getPhoneE164(),

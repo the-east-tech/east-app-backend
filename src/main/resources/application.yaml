@@ -34,7 +34,8 @@ eastapp:
 
   attendance:
     time-zone: ${EASTAPP_ATTENDANCE_TIME_ZONE:Asia/Kuala_Lumpur}
-    location-name: ${EASTAPP_ATTENDANCE_LOCATION_NAME:Secret Coffee House}
-    latitude: ${EASTAPP_ATTENDANCE_LATITUDE:4.3272472}
-    longitude: ${EASTAPP_ATTENDANCE_LONGITUDE:101.1329829}
-    allowed-radius-meters: ${EASTAPP_ATTENDANCE_ALLOWED_RADIUS_METERS:100}
+
+  google-places:
+    region-code: MY
+    language-code: en
+    rating-cache-minutes: 15

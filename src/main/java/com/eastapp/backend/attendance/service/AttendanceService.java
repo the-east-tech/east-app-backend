@@ -122,10 +122,10 @@ public class AttendanceService {
         double distanceMeters = distanceMeters(
                 request.latitude(),
                 request.longitude(),
-                properties.getLatitude(),
-                properties.getLongitude()
+                tenant.getLatitude(),
+                tenant.getLongitude()
         );
-        boolean withinGeofence = distanceMeters <= properties.getAllowedRadiusMeters();
+        boolean withinGeofence = distanceMeters <= tenant.getGeofenceRadiusMeters();
 
         AttendanceEvent event = new AttendanceEvent(
                 tenant,
@@ -137,10 +137,10 @@ public class AttendanceService {
                 request.latitude(),
                 request.longitude(),
                 request.accuracyMeters(),
-                properties.getLocationName(),
-                properties.getLatitude(),
-                properties.getLongitude(),
-                properties.getAllowedRadiusMeters(),
+                tenant.getGooglePlaceName(),
+                tenant.getLatitude(),
+                tenant.getLongitude(),
+                tenant.getGeofenceRadiusMeters(),
                 distanceMeters,
                 withinGeofence,
                 request.cameraCaptureValid(),

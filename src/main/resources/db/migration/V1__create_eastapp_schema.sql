@@ -25,6 +25,13 @@ CREATE TABLE tenants (
     business_name VARCHAR(120) NOT NULL,
     employee_id_prefix VARCHAR(3) NOT NULL,
     next_employee_number BIGINT NOT NULL DEFAULT 1,
+    google_place_id VARCHAR(255) NOT NULL,
+    google_place_name VARCHAR(200) NOT NULL,
+    formatted_address VARCHAR(500) NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    geofence_radius_meters INTEGER NOT NULL DEFAULT 100,
+    google_maps_uri VARCHAR(500),
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -35,7 +42,14 @@ CREATE TABLE tenants (
     CONSTRAINT ck_tenants_business_name_not_blank CHECK (btrim(business_name) <> ''),
     CONSTRAINT ck_tenants_employee_id_prefix_uppercase CHECK (employee_id_prefix = upper(employee_id_prefix)),
     CONSTRAINT ck_tenants_employee_id_prefix_format CHECK (employee_id_prefix ~ '^[A-Z]{1,3}$'),
-    CONSTRAINT ck_tenants_next_employee_number CHECK (next_employee_number >= 1)
+    CONSTRAINT ck_tenants_next_employee_number CHECK (next_employee_number >= 1),
+    CONSTRAINT ck_tenants_google_place_id_not_blank CHECK (btrim(google_place_id) <> ''),
+    CONSTRAINT ck_tenants_google_place_name_not_blank CHECK (btrim(google_place_name) <> ''),
+    CONSTRAINT ck_tenants_formatted_address_not_blank CHECK (btrim(formatted_address) <> ''),
+    CONSTRAINT ck_tenants_latitude CHECK (latitude BETWEEN -90 AND 90),
+    CONSTRAINT ck_tenants_longitude CHECK (longitude BETWEEN -180 AND 180),
+    CONSTRAINT ck_tenants_geofence_radius CHECK (geofence_radius_meters BETWEEN 20 AND 1000),
+    CONSTRAINT ck_tenants_google_maps_uri_not_blank CHECK (google_maps_uri IS NULL OR btrim(google_maps_uri) <> '')
 );
 
 CREATE TABLE roles (

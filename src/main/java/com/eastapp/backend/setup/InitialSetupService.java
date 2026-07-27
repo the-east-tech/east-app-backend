@@ -6,6 +6,8 @@ import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.organisation.service.TenantProvisioningService;
+import com.eastapp.backend.places.GooglePlaceDetails;
+import com.eastapp.backend.places.service.GooglePlacesService;
 import com.eastapp.backend.setup.api.CompleteInitialSetupRequest;
 import com.eastapp.backend.setup.api.CompleteInitialSetupResponse;
 import com.eastapp.backend.setup.api.SetupStatusResponse;
@@ -30,6 +32,7 @@ public class InitialSetupService {
     private final PasswordEncoder passwordEncoder;
     private final SetupCodeService setupCodeService;
     private final TenantProvisioningService tenantProvisioningService;
+    private final GooglePlacesService googlePlacesService;
     private final JdbcTemplate jdbcTemplate;
 
     public InitialSetupService(
@@ -38,6 +41,7 @@ public class InitialSetupService {
             PasswordEncoder passwordEncoder,
             SetupCodeService setupCodeService,
             TenantProvisioningService tenantProvisioningService,
+            GooglePlacesService googlePlacesService,
             JdbcTemplate jdbcTemplate
     ) {
         this.loginIdentityRepository = loginIdentityRepository;
@@ -45,6 +49,7 @@ public class InitialSetupService {
         this.passwordEncoder = passwordEncoder;
         this.setupCodeService = setupCodeService;
         this.tenantProvisioningService = tenantProvisioningService;
+        this.googlePlacesService = googlePlacesService;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -94,6 +99,8 @@ public class InitialSetupService {
             throw new ApiException(HttpStatus.CONFLICT, "EMPLOYEE_PREFIX_EXISTS", "This employee ID prefix already exists.");
         }
 
+        GooglePlaceDetails googlePlace = googlePlacesService.placeDetails(request.googlePlaceId());
+
         LoginIdentity identity = loginIdentityRepository.save(
                 new LoginIdentity(passwordEncoder.encode(request.password()))
         );
@@ -101,6 +108,8 @@ public class InitialSetupService {
                 companyCode,
                 request.businessName(),
                 prefix,
+                googlePlace,
+                request.geofenceRadiusMeters(),
                 identity,
                 request.fullName(),
                 request.phoneE164(),

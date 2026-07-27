@@ -10,11 +10,12 @@ import com.eastapp.backend.organisation.api.UpdateTenantRequest;
 import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
+import com.eastapp.backend.places.GooglePlaceDetails;
+import com.eastapp.backend.places.service.GooglePlacesService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,15 +27,18 @@ public class TenantService {
     private final TenantRepository tenantRepository;
     private final UserAccountRepository userAccountRepository;
     private final TenantProvisioningService tenantProvisioningService;
+    private final GooglePlacesService googlePlacesService;
 
     public TenantService(
             TenantRepository tenantRepository,
             UserAccountRepository userAccountRepository,
-            TenantProvisioningService tenantProvisioningService
+            TenantProvisioningService tenantProvisioningService,
+            GooglePlacesService googlePlacesService
     ) {
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
         this.tenantProvisioningService = tenantProvisioningService;
+        this.googlePlacesService = googlePlacesService;
     }
 
     @Transactional(readOnly = true)
@@ -44,13 +48,7 @@ public class TenantService {
         if (!actor.isOwner()) {
             return List.of(TenantResponse.from(current.getTenant()));
         }
-        return userAccountRepository.findAllContexts(current.getIdentity().getId()).stream()
-                .filter(UserAccount::isActive)
-                .filter(user -> user.getRole().isActive())
-                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
-                .map(UserAccount::getTenant)
-                .distinct()
-                .sorted(Comparator.comparing(Tenant::getBusinessName, String.CASE_INSENSITIVE_ORDER))
+        return tenantRepository.findAllByOrderByBusinessNameAsc().stream()
                 .map(TenantResponse::from)
                 .toList();
     }
@@ -63,6 +61,7 @@ public class TenantService {
         assertUnique(companyCode, prefix);
 
         UserAccount creator = currentActor(actor);
+        GooglePlaceDetails googlePlace = googlePlacesService.placeDetails(request.googlePlaceId());
         Map<UUID, UserAccount> existingOwnersByIdentity = new LinkedHashMap<>();
         userAccountRepository
                 .findAllByRole_SystemKeyAndActiveTrueOrderByCreatedAtAsc(SystemRole.OWNER)
@@ -76,6 +75,7 @@ public class TenantService {
 
         TenantProvisioningService.ProvisionedTenant provisioned = tenantProvisioningService.provision(
                 companyCode, request.businessName(), prefix,
+                googlePlace, request.geofenceRadiusMeters(),
                 creator.getIdentity(), creator.getFullName(), creator.getPhoneE164(),
                 creator.getProfilePhotoKey(), creator.getBirthDate(),
                 creator.getStartDate(), creator.getEndDate()
@@ -106,17 +106,12 @@ public class TenantService {
 
         Tenant tenant;
         if (actor.isOwner()) {
-            UserAccount targetMembership = userAccountRepository
-                    .findByTenant_IdAndIdentity_Id(tenantId, current.getIdentity().getId())
-                    .filter(UserAccount::isActive)
-                    .filter(user -> user.getRole().isActive())
-                    .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
+            tenant = tenantRepository.findById(tenantId)
                     .orElseThrow(() -> new ApiException(
-                            HttpStatus.FORBIDDEN,
-                            "TENANT_ACCESS_DENIED",
-                            "This tenant is not assigned to the current Owner login."
+                            HttpStatus.NOT_FOUND,
+                            "TENANT_NOT_FOUND",
+                            "Tenant not found."
                     ));
-            tenant = targetMembership.getTenant();
         } else {
             if (!tenantId.equals(actor.tenantId())) {
                 throw new ApiException(
@@ -128,7 +123,17 @@ public class TenantService {
             tenant = current.getTenant();
         }
 
+        GooglePlaceDetails googlePlace = googlePlacesService.placeDetails(request.googlePlaceId());
         tenant.update(request.businessName(), request.active());
+        tenant.configureGoogleLocation(
+                googlePlace.placeId(),
+                googlePlace.displayName(),
+                googlePlace.formattedAddress(),
+                googlePlace.latitude(),
+                googlePlace.longitude(),
+                request.geofenceRadiusMeters(),
+                googlePlace.googleMapsUri()
+        );
         return TenantResponse.from(tenant);
     }
 

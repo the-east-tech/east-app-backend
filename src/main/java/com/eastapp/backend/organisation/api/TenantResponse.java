@@ -9,7 +9,14 @@ public record TenantResponse(
         String companyCode,
         String businessName,
         String employeeIdPrefix,
-        boolean active
+        boolean active,
+        String googlePlaceId,
+        String googlePlaceName,
+        String formattedAddress,
+        double latitude,
+        double longitude,
+        int geofenceRadiusMeters,
+        String googleMapsUri
 ) {
     public static TenantResponse from(Tenant tenant) {
         return new TenantResponse(
@@ -17,7 +24,14 @@ public record TenantResponse(
                 tenant.getCompanyCode(),
                 tenant.getBusinessName(),
                 tenant.getEmployeeIdPrefix(),
-                tenant.isActive()
+                tenant.isActive(),
+                tenant.getGooglePlaceId(),
+                tenant.getGooglePlaceName(),
+                tenant.getFormattedAddress(),
+                tenant.getLatitude(),
+                tenant.getLongitude(),
+                tenant.getGeofenceRadiusMeters(),
+                tenant.getGoogleMapsUri()
         );
     }
 }
