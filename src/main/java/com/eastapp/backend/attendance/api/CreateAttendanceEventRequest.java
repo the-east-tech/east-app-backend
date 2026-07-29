@@ -47,6 +47,14 @@ public record CreateAttendanceEventRequest(
         @Max(10)
         Integer faceCount,
 
+        @NotNull
+        @Min(1)
+        @Max(3)
+        Integer faceAttemptCount,
+
+        @NotNull
+        Boolean faceVerificationBypassed,
+
         @DecimalMin("0.0")
         Double faceBoxWidth,
 

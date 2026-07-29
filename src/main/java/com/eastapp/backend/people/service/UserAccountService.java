@@ -76,7 +76,7 @@ public class UserAccountService {
                 Math.max(page, 0),
                 Math.min(Math.max(size, 1), 100),
                 Sort.by(
-                        Sort.Order.asc("fullName").ignoreCase(),
+                        Sort.Order.asc("identity.fullName").ignoreCase(),
                         Sort.Order.asc("id")
                 )
         );
@@ -91,34 +91,44 @@ public class UserAccountService {
         return UserResponse.from(findUser(tenantId, userId));
     }
 
+    /**
+     * Creates a membership only in the actor's active tenant. The tenant is never
+     * accepted from the client. When the phone already belongs to a global identity,
+     * that identity is reused and receives a new tenant-specific employee ID.
+     */
     @Transactional
     public UserResponse create(AuthenticatedUser actor, CreateUserRequest request) {
         assertUserCreationAllowed(actor);
-        UUID targetTenantId = request.tenantId();
-        assertTenantMayBeManaged(actor, targetTenantId);
 
-        Tenant targetTenant = tenantRepository.findById(targetTenantId)
+        UUID tenantId = actor.tenantId();
+        Tenant tenant = tenantRepository.findById(tenantId)
                 .filter(Tenant::isActive)
                 .orElseThrow(() -> notFound("TENANT_NOT_FOUND", "Active tenant not found."));
-        Role role = findActiveRole(targetTenantId, request.roleId());
+        Role role = findActiveRole(tenantId, request.roleId());
         assertRoleMayBeAssigned(actor, role);
 
-        LoginIdentity identity = loginIdentityRepository.save(
-                new LoginIdentity(passwordEncoder.encode(request.password()))
-        );
+        String phoneE164 = LoginIdentity.normalisePhone(request.phoneE164());
+        LoginIdentity identity = loginIdentityRepository.findByPhoneE164(phoneE164)
+                .map(existing -> reuseIdentity(existing, request, tenantId))
+                .orElseGet(() -> createIdentity(request, phoneE164));
 
-        if (role.getSystemKey() == SystemRole.OWNER) {
-            return createOwnerAcrossActiveTenants(identity, request, targetTenantId);
-        }
-
-        UserAccount user = createUserAccount(
-                targetTenant,
+        UserAccount membership = createUserAccount(
+                tenant,
                 identity,
-                employeeIdService.allocate(targetTenantId),
+                employeeIdService.allocate(tenantId),
                 role,
                 request
         );
-        return UserResponse.from(userAccountRepository.save(user));
+        membership = userAccountRepository.save(membership);
+
+        if (role.getSystemKey() == SystemRole.OWNER) {
+            UserAccount sourceOwner = membership;
+            tenantRepository.findAllByActiveTrueOrderByBusinessNameAsc().stream()
+                    .filter(other -> !other.getId().equals(tenantId))
+                    .forEach(other -> tenantProvisioningService.addOwnerContext(other, sourceOwner));
+        }
+
+        return UserResponse.from(membership);
     }
 
     @Transactional
@@ -132,14 +142,13 @@ public class UserAccountService {
 
         Role newRole = findActiveRole(actor.tenantId(), request.roleId());
         assertRoleMayBeAssigned(actor, newRole);
+        assertPhoneAvailableForIdentity(request.phoneE164(), target.getIdentity().getId());
 
         if (target.getRole().getSystemKey() == SystemRole.OWNER) {
             assertOwnerAccountRemainsOwner(newRole, request.active());
-            userAccountRepository.findAllContexts(target.getIdentity().getId()).forEach(context ->
-                    context.updateProfile(
-                            request.fullName(), request.phoneE164(), request.profilePhotoKey(),
-                            request.birthDate(), request.startDate(), request.endDate()
-                    )
+            target.updateProfile(
+                    request.fullName(), request.phoneE164(), request.profilePhotoKey(),
+                    request.birthDate(), request.startDate(), request.endDate()
             );
             return UserResponse.from(target);
         }
@@ -185,6 +194,57 @@ public class UserAccountService {
         revokeIdentitySessions(target.getIdentity().getId());
     }
 
+    private void assertPhoneAvailableForIdentity(String phoneE164, UUID identityId) {
+        String normalised = LoginIdentity.normalisePhone(phoneE164);
+        loginIdentityRepository.findByPhoneE164(normalised)
+                .filter(existing -> !existing.getId().equals(identityId))
+                .ifPresent(existing -> {
+                    throw conflict(
+                            "PHONE_ALREADY_USED",
+                            "This phone number belongs to another EastApp login."
+                    );
+                });
+    }
+
+    private LoginIdentity reuseIdentity(
+            LoginIdentity identity,
+            CreateUserRequest request,
+            UUID tenantId
+    ) {
+        if (!identity.isActive()) {
+            throw conflict("IDENTITY_INACTIVE", "This person's global login is inactive.");
+        }
+        if (userAccountRepository.existsByIdentity_IdAndTenant_Id(identity.getId(), tenantId)) {
+            throw conflict(
+                    "USER_ALREADY_IN_BUSINESS",
+                    "This person already has an employee ID in the current business."
+            );
+        }
+        identity.updateProfile(
+                request.fullName(), request.phoneE164(),
+                request.profilePhotoKey(), request.birthDate()
+        );
+        return identity;
+    }
+
+    private LoginIdentity createIdentity(CreateUserRequest request, String phoneE164) {
+        String password = request.password() == null ? "" : request.password().trim();
+        if (password.length() < 4) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "PASSWORD_REQUIRED",
+                    "Password is required when creating a new person. Leave it blank only when adding an existing person to this business."
+            );
+        }
+        return loginIdentityRepository.save(new LoginIdentity(
+                passwordEncoder.encode(password),
+                request.fullName(),
+                phoneE164,
+                request.profilePhotoKey(),
+                request.birthDate()
+        ));
+    }
+
     private static void assertUserCreationAllowed(AuthenticatedUser actor) {
         if (!actor.isOwner() && actor.systemRole() != SystemRole.HEAD) {
             throw forbidden(
@@ -192,29 +252,6 @@ public class UserAccountService {
                     "Only Owner and Head users may create users."
             );
         }
-    }
-
-    private void assertTenantMayBeManaged(AuthenticatedUser actor, UUID targetTenantId) {
-        if (targetTenantId.equals(actor.tenantId())) {
-            return;
-        }
-        if (!actor.isOwner()) {
-            throw forbidden(
-                    "TENANT_USER_CREATION_DENIED",
-                    "Only Owner users may create a user for another tenant."
-            );
-        }
-
-        UserAccount current = findUser(actor.tenantId(), actor.userId());
-        userAccountRepository
-                .findByTenant_IdAndIdentity_Id(targetTenantId, current.getIdentity().getId())
-                .filter(UserAccount::isActive)
-                .filter(user -> user.getRole().isActive())
-                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
-                .orElseThrow(() -> forbidden(
-                        "TENANT_USER_CREATION_DENIED",
-                        "This tenant is not assigned to the current Owner login."
-                ));
     }
 
     private UserAccount findUser(UUID tenantId, UUID userId) {
@@ -285,41 +322,6 @@ public class UserAccountService {
         }
     }
 
-    private UserResponse createOwnerAcrossActiveTenants(
-            LoginIdentity identity,
-            CreateUserRequest request,
-            UUID selectedTenantId
-    ) {
-        UserAccount selectedOwner = null;
-
-        for (Tenant tenant : tenantRepository.findAllByActiveTrueOrderByBusinessNameAsc()) {
-            Role ownerRole = roleRepository
-                    .findByTenant_IdAndSystemKey(tenant.getId(), SystemRole.OWNER)
-                    .filter(Role::isActive)
-                    .orElseThrow(() -> conflict(
-                            "OWNER_ROLE_UNAVAILABLE",
-                            "The Owner role is unavailable for " + tenant.getBusinessName() + "."
-                    ));
-
-            UserAccount owner = createUserAccount(
-                    tenant,
-                    identity,
-                    employeeIdService.allocate(tenant.getId()),
-                    ownerRole,
-                    request
-            );
-            userAccountRepository.save(owner);
-            if (tenant.getId().equals(selectedTenantId)) {
-                selectedOwner = owner;
-            }
-        }
-
-        if (selectedOwner == null) {
-            throw notFound("TENANT_NOT_FOUND", "Selected active tenant not found.");
-        }
-        return UserResponse.from(selectedOwner);
-    }
-
     private static UserAccount createUserAccount(
             Tenant tenant,
             LoginIdentity identity,
@@ -327,9 +329,7 @@ public class UserAccountService {
             Role role,
             CreateUserRequest request
     ) {
-        UserAccount user = new UserAccount(
-                tenant, identity, employeeId, request.fullName(), request.phoneE164(), role
-        );
+        UserAccount user = new UserAccount(tenant, identity, employeeId, role);
         user.updateProfile(
                 request.fullName(), request.phoneE164(), request.profilePhotoKey(),
                 request.birthDate(), request.startDate(), request.endDate()

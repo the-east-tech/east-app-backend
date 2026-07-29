@@ -19,7 +19,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class InitialSetupService {
@@ -34,6 +36,7 @@ public class InitialSetupService {
     private final TenantProvisioningService tenantProvisioningService;
     private final GooglePlacesService googlePlacesService;
     private final JdbcTemplate jdbcTemplate;
+    private final TransactionTemplate transactionTemplate;
 
     public InitialSetupService(
             LoginIdentityRepository loginIdentityRepository,
@@ -42,7 +45,8 @@ public class InitialSetupService {
             SetupCodeService setupCodeService,
             TenantProvisioningService tenantProvisioningService,
             GooglePlacesService googlePlacesService,
-            JdbcTemplate jdbcTemplate
+            JdbcTemplate jdbcTemplate,
+            PlatformTransactionManager transactionManager
     ) {
         this.loginIdentityRepository = loginIdentityRepository;
         this.tenantRepository = tenantRepository;
@@ -51,6 +55,7 @@ public class InitialSetupService {
         this.tenantProvisioningService = tenantProvisioningService;
         this.googlePlacesService = googlePlacesService;
         this.jdbcTemplate = jdbcTemplate;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -71,8 +76,28 @@ public class InitialSetupService {
         return new SetupStatusResponse(required);
     }
 
-    @Transactional
+    /**
+     * Google is resolved before the database transaction starts, so a slow
+     * external request can never occupy a Hikari connection.
+     */
     public CompleteInitialSetupResponse complete(CompleteInitialSetupRequest request) {
+        if (!setupCodeService.matches(request.setupCode())) {
+            throw invalidSetupCode();
+        }
+        GooglePlaceDetails googlePlace = googlePlacesService.placeDetails(request.googlePlaceId());
+        CompleteInitialSetupResponse response = transactionTemplate.execute(
+                status -> completeInTransaction(request, googlePlace)
+        );
+        if (response == null) {
+            throw new IllegalStateException("Initial setup transaction returned no response");
+        }
+        return response;
+    }
+
+    private CompleteInitialSetupResponse completeInTransaction(
+            CompleteInitialSetupRequest request,
+            GooglePlaceDetails googlePlace
+    ) {
         jdbcTemplate.execute("select pg_advisory_xact_lock(" + SETUP_ADVISORY_LOCK + ")");
 
         if (!isSetupRequired()) {
@@ -83,11 +108,7 @@ public class InitialSetupService {
             );
         }
         if (!setupCodeService.matches(request.setupCode())) {
-            throw new ApiException(
-                    HttpStatus.UNAUTHORIZED,
-                    "INVALID_SETUP_CODE",
-                    "The setup code is invalid or has expired."
-            );
+            throw invalidSetupCode();
         }
 
         String companyCode = Tenant.normaliseCode(request.companyCode());
@@ -99,10 +120,14 @@ public class InitialSetupService {
             throw new ApiException(HttpStatus.CONFLICT, "EMPLOYEE_PREFIX_EXISTS", "This employee ID prefix already exists.");
         }
 
-        GooglePlaceDetails googlePlace = googlePlacesService.placeDetails(request.googlePlaceId());
-
         LoginIdentity identity = loginIdentityRepository.save(
-                new LoginIdentity(passwordEncoder.encode(request.password()))
+                new LoginIdentity(
+                        passwordEncoder.encode(request.password()),
+                        request.fullName(),
+                        request.phoneE164(),
+                        null,
+                        null
+                )
         );
         TenantProvisioningService.ProvisionedTenant provisioned = tenantProvisioningService.provision(
                 companyCode,
@@ -130,5 +155,13 @@ public class InitialSetupService {
 
     private boolean isSetupRequired() {
         return loginIdentityRepository.count() == 0;
+    }
+
+    private static ApiException invalidSetupCode() {
+        return new ApiException(
+                HttpStatus.UNAUTHORIZED,
+                "INVALID_SETUP_CODE",
+                "The setup code is invalid or has expired."
+        );
     }
 }

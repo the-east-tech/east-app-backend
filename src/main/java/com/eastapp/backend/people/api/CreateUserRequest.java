@@ -8,7 +8,6 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 public record CreateUserRequest(
-        @NotBlank
         @Size(min = 4, max = 128)
         String password,
 
@@ -19,9 +18,6 @@ public record CreateUserRequest(
         @NotBlank
         @Size(max = 24)
         String phoneE164,
-
-        @NotNull
-        UUID tenantId,
 
         @NotNull
         UUID roleId,

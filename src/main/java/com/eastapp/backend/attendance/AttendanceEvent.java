@@ -92,6 +92,12 @@ public class AttendanceEvent {
     @Column(name = "face_count", nullable = false, updatable = false)
     private int faceCount;
 
+    @Column(name = "face_attempt_count", nullable = false, updatable = false)
+    private int faceAttemptCount;
+
+    @Column(name = "face_verification_bypassed", nullable = false, updatable = false)
+    private boolean faceVerificationBypassed;
+
     @Column(name = "face_box_width", updatable = false)
     private Double faceBoxWidth;
 
@@ -148,6 +154,8 @@ public class AttendanceEvent {
             boolean cameraCaptureValid,
             boolean faceValid,
             int faceCount,
+            int faceAttemptCount,
+            boolean faceVerificationBypassed,
             Double faceBoxWidth,
             Double faceBoxHeight,
             Double faceYaw,
@@ -177,6 +185,8 @@ public class AttendanceEvent {
         this.cameraCaptureValid = cameraCaptureValid;
         this.faceValid = faceValid;
         this.faceCount = faceCount;
+        this.faceAttemptCount = faceAttemptCount;
+        this.faceVerificationBypassed = faceVerificationBypassed;
         this.faceBoxWidth = faceBoxWidth;
         this.faceBoxHeight = faceBoxHeight;
         this.faceYaw = faceYaw;
@@ -209,6 +219,8 @@ public class AttendanceEvent {
     public boolean isCameraCaptureValid() { return cameraCaptureValid; }
     public boolean isFaceValid() { return faceValid; }
     public int getFaceCount() { return faceCount; }
+    public int getFaceAttemptCount() { return faceAttemptCount; }
+    public boolean isFaceVerificationBypassed() { return faceVerificationBypassed; }
     public Double getFaceBoxWidth() { return faceBoxWidth; }
     public Double getFaceBoxHeight() { return faceBoxHeight; }
     public Double getFaceYaw() { return faceYaw; }

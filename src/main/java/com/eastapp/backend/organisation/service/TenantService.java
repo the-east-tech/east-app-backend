@@ -14,7 +14,9 @@ import com.eastapp.backend.places.GooglePlaceDetails;
 import com.eastapp.backend.places.service.GooglePlacesService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,40 +30,58 @@ public class TenantService {
     private final UserAccountRepository userAccountRepository;
     private final TenantProvisioningService tenantProvisioningService;
     private final GooglePlacesService googlePlacesService;
+    private final TransactionTemplate transactionTemplate;
 
     public TenantService(
             TenantRepository tenantRepository,
             UserAccountRepository userAccountRepository,
             TenantProvisioningService tenantProvisioningService,
-            GooglePlacesService googlePlacesService
+            GooglePlacesService googlePlacesService,
+            PlatformTransactionManager transactionManager
     ) {
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
         this.tenantProvisioningService = tenantProvisioningService;
         this.googlePlacesService = googlePlacesService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
+    /**
+     * Normal business details are always scoped to the active context. Owners use
+     * /api/v1/auth/contexts only for the minimal business switcher list.
+     */
     @Transactional(readOnly = true)
     public List<TenantResponse> list(AuthenticatedUser actor) {
         assertOwnerOrHead(actor);
-        UserAccount current = currentActor(actor);
-        if (!actor.isOwner()) {
-            return List.of(TenantResponse.from(current.getTenant()));
-        }
-        return tenantRepository.findAllByOrderByBusinessNameAsc().stream()
-                .map(TenantResponse::from)
-                .toList();
+        return List.of(TenantResponse.from(currentActor(actor).getTenant()));
     }
 
-    @Transactional
+    /**
+     * Business creation is the deliberate Owner-only global exception. Google is
+     * resolved before the short database transaction begins.
+     */
     public TenantResponse create(AuthenticatedUser actor, CreateTenantRequest request) {
         assertOwner(actor);
+        GooglePlaceDetails googlePlace = googlePlacesService.placeDetails(request.googlePlaceId());
+        TenantResponse response = transactionTemplate.execute(
+                status -> createInTransaction(actor, request, googlePlace)
+        );
+        if (response == null) {
+            throw new IllegalStateException("Tenant creation transaction returned no response");
+        }
+        return response;
+    }
+
+    private TenantResponse createInTransaction(
+            AuthenticatedUser actor,
+            CreateTenantRequest request,
+            GooglePlaceDetails googlePlace
+    ) {
         String companyCode = Tenant.normaliseCode(request.companyCode());
         String prefix = Tenant.normaliseEmployeeIdPrefix(request.employeeIdPrefix());
         assertUnique(companyCode, prefix);
 
         UserAccount creator = currentActor(actor);
-        GooglePlaceDetails googlePlace = googlePlacesService.placeDetails(request.googlePlaceId());
         Map<UUID, UserAccount> existingOwnersByIdentity = new LinkedHashMap<>();
         userAccountRepository
                 .findAllByRole_SystemKeyAndActiveTrueOrderByCreatedAtAsc(SystemRole.OWNER)
@@ -88,43 +108,45 @@ public class TenantService {
         return TenantResponse.from(provisioned.tenant());
     }
 
-    @Transactional
     public TenantResponse update(
             AuthenticatedUser actor,
             UUID tenantId,
             UpdateTenantRequest request
     ) {
         assertOwnerOrHead(actor);
+        if (!tenantId.equals(actor.tenantId())) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "TENANT_ACCESS_DENIED",
+                    "Switch business context before viewing or editing another business."
+            );
+        }
+        GooglePlaceDetails googlePlace = googlePlacesService.placeDetails(request.googlePlaceId());
+        TenantResponse response = transactionTemplate.execute(
+                status -> updateInTransaction(actor, request, googlePlace)
+        );
+        if (response == null) {
+            throw new IllegalStateException("Tenant update transaction returned no response");
+        }
+        return response;
+    }
+
+    private TenantResponse updateInTransaction(
+            AuthenticatedUser actor,
+            UpdateTenantRequest request,
+            GooglePlaceDetails googlePlace
+    ) {
         UserAccount current = currentActor(actor);
-        if (tenantId.equals(actor.tenantId()) && !request.active()) {
+        if (!request.active()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "CURRENT_TENANT_DEACTIVATION",
-                    "The current business cannot be deactivated while it is active in this session."
+                    "The active business cannot be deactivated. Switch away before changing its lifecycle."
             );
         }
 
-        Tenant tenant;
-        if (actor.isOwner()) {
-            tenant = tenantRepository.findById(tenantId)
-                    .orElseThrow(() -> new ApiException(
-                            HttpStatus.NOT_FOUND,
-                            "TENANT_NOT_FOUND",
-                            "Tenant not found."
-                    ));
-        } else {
-            if (!tenantId.equals(actor.tenantId())) {
-                throw new ApiException(
-                        HttpStatus.FORBIDDEN,
-                        "TENANT_ACCESS_DENIED",
-                        "Head users may manage only their current tenant."
-                );
-            }
-            tenant = current.getTenant();
-        }
-
-        GooglePlaceDetails googlePlace = googlePlacesService.placeDetails(request.googlePlaceId());
-        tenant.update(request.businessName(), request.active());
+        Tenant tenant = current.getTenant();
+        tenant.update(request.businessName(), true);
         tenant.configureGoogleLocation(
                 googlePlace.placeId(),
                 googlePlace.displayName(),
@@ -141,7 +163,7 @@ public class TenantService {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "OWNER_REQUIRED",
-                    "Only Owner users may create tenants."
+                    "Only Owner users may create businesses."
             );
         }
     }
@@ -151,7 +173,7 @@ public class TenantService {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "TENANT_MANAGEMENT_DENIED",
-                    "Only Owner and Head users may manage tenants."
+                    "Only Owner and Head users may manage the active business."
             );
         }
     }

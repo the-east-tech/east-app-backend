@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -32,11 +31,14 @@ public class RoleController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
-    List<RoleResponse> list(
-            @AuthenticationPrincipal AuthenticatedUser principal,
-            @RequestParam(required = false) UUID tenantId
-    ) {
-        return roleService.list(principal, tenantId);
+    List<RoleResponse> list(@AuthenticationPrincipal AuthenticatedUser principal) {
+        return roleService.list(principal);
+    }
+
+    @GetMapping("/assignable")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    List<RoleResponse> assignable(@AuthenticationPrincipal AuthenticatedUser principal) {
+        return roleService.assignable(principal);
     }
 
     @PostMapping

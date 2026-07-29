@@ -85,7 +85,7 @@ Content-Type: application/json
   "userId": "{{userId}}"
 }
 
-### List tenants — Owner sees every business; Head sees current tenant
+### Current business details — Owner or Head; always active context only
 GET {{baseUrl}}/api/v1/tenants
 Authorization: Bearer {{eastappToken}}
 
@@ -101,7 +101,7 @@ Content-Type: application/json
   "googlePlaceId": "{{googlePlaceId}}"
 }
 
-### Update tenant — Owner or Head; Head may update current tenant only
+### Update active business — switch context before editing another business
 PATCH {{baseUrl}}/api/v1/tenants/{{tenantId}}
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
@@ -120,7 +120,8 @@ Authorization: Bearer {{eastappToken}}
 GET {{baseUrl}}/api/v1/users/{{userId}}
 Authorization: Bearer {{eastappToken}}
 
-### Create user — Owner or Head only; selecting Owner shares the account across every active business
+### Create user in active business — Owner or Head only
+### Password may be null only when phoneE164 already belongs to a global EastApp login.
 POST {{baseUrl}}/api/v1/users
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
@@ -129,7 +130,6 @@ Content-Type: application/json
   "password": "change-me",
   "fullName": "Example Staff",
   "phoneE164": "+60123456780",
-  "tenantId": "{{tenantId}}",
   "roleId": "{{roleId}}",
   "profilePhotoKey": null,
   "birthDate": "1995-01-01",
@@ -166,8 +166,8 @@ Content-Type: application/json
 GET {{baseUrl}}/api/v1/roles
 Authorization: Bearer {{eastappToken}}
 
-### List roles for selected tenant — Owner only when tenant differs
-GET {{baseUrl}}/api/v1/roles?tenantId={{tenantId}}
+### Lightweight assignable roles for Create User — active business only, no usage counts
+GET {{baseUrl}}/api/v1/roles/assignable
 Authorization: Bearer {{eastappToken}}
 
 ### Create custom role
@@ -212,16 +212,47 @@ Content-Type: application/json
   "cameraCaptureValid": true,
   "faceValid": true,
   "faceCount": 1,
+  "faceAttemptCount": 1,
+  "faceVerificationBypassed": false,
   "faceBoxWidth": 220.0,
   "faceBoxHeight": 280.0,
   "faceYaw": 0.0,
   "faceRoll": 0.0,
   "facePitch": 0.0,
-  "qrCheckpointValid": false,
+  "qrCheckpointValid": true,
   "devicePlatform": "android",
   "deviceOsVersion": "Android",
-  "appVersion": "east_app_v245",
+  "appVersion": "east_app_v252",
   "validationMethod": "camera-face-location"
+}
+
+### Create attendance event after three failed face attempts
+POST {{baseUrl}}/api/v1/attendance/events
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "clientEventId": "attendance-bypass-{{$timestamp}}",
+  "eventType": "CLOCK_IN",
+  "deviceCapturedAt": "{{capturedAt}}",
+  "latitude": {{attendanceLatitude}},
+  "longitude": {{attendanceLongitude}},
+  "accuracyMeters": 8.0,
+  "cameraCaptureValid": true,
+  "faceValid": false,
+  "faceCount": 0,
+  "faceAttemptCount": 3,
+  "faceVerificationBypassed": true,
+  "faceBoxWidth": null,
+  "faceBoxHeight": null,
+  "faceYaw": null,
+  "faceRoll": null,
+  "facePitch": null,
+  "qrCheckpointValid": true,
+  "devicePlatform": "android",
+  "deviceOsVersion": "Android",
+  "appVersion": "east_app_v252",
+  "validationMethod": "FACE_DETECTION_BYPASSED_AFTER_3_ATTEMPTS"
 }
 
 ### Tenant-wide attendance audit

@@ -38,4 +38,4 @@ eastapp:
   google-places:
     region-code: MY
     language-code: en
-    rating-cache-minutes: 15
+    rating-cache-minutes: 360

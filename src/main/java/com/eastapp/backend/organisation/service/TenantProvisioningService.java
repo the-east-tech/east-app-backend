@@ -98,13 +98,17 @@ public class TenantProvisioningService {
 
     @Transactional
     public UserAccount addOwnerContext(Tenant tenant, UserAccount sourceOwner) {
+        Tenant lockedTenant = tenantRepository.findByIdForUpdate(tenant.getId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Tenant is unavailable while creating Owner context " + tenant.getId()
+                ));
         Role ownerRole = roleRepository
-                .findByTenant_IdAndSystemKey(tenant.getId(), SystemRole.OWNER)
+                .findByTenant_IdAndSystemKey(lockedTenant.getId(), SystemRole.OWNER)
                 .filter(Role::isActive)
                 .orElseThrow(() -> new IllegalStateException(
-                        "Active Owner role is unavailable for tenant " + tenant.getId()
+                        "Active Owner role is unavailable for tenant " + lockedTenant.getId()
                 ));
-        return addOwnerContext(tenant, ownerRole, sourceOwner);
+        return addOwnerContext(lockedTenant, ownerRole, sourceOwner);
     }
 
     private UserAccount addOwnerContext(
@@ -162,8 +166,6 @@ public class TenantProvisioningService {
                 tenant,
                 identity,
                 tenant.allocateEmployeeId(),
-                fullName,
-                phoneE164,
                 ownerRole
         );
         owner.updateProfile(

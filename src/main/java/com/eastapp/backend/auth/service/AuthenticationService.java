@@ -9,8 +9,6 @@ import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.auth.security.SessionTokenService;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.Tenant;
-import com.eastapp.backend.organisation.TenantRepository;
-import com.eastapp.backend.organisation.service.TenantProvisioningService;
 import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
@@ -33,23 +31,17 @@ public class AuthenticationService {
     private final UserSessionRepository userSessionRepository;
     private final PasswordEncoder passwordEncoder;
     private final SessionTokenService sessionTokenService;
-    private final TenantRepository tenantRepository;
-    private final TenantProvisioningService tenantProvisioningService;
 
     public AuthenticationService(
             UserAccountRepository userAccountRepository,
             UserSessionRepository userSessionRepository,
             PasswordEncoder passwordEncoder,
-            SessionTokenService sessionTokenService,
-            TenantRepository tenantRepository,
-            TenantProvisioningService tenantProvisioningService
+            SessionTokenService sessionTokenService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.userSessionRepository = userSessionRepository;
         this.passwordEncoder = passwordEncoder;
         this.sessionTokenService = sessionTokenService;
-        this.tenantRepository = tenantRepository;
-        this.tenantProvisioningService = tenantProvisioningService;
     }
 
     @Transactional
@@ -59,7 +51,7 @@ public class AuthenticationService {
         String phoneE164 = UserAccount.normalisePhone(request.phoneE164());
 
         UserAccount user = userAccountRepository
-                .findByTenant_CompanyCodeAndEmployeeIdAndPhoneE164(
+                .findByTenant_CompanyCodeAndEmployeeIdAndIdentity_PhoneE164(
                         companyCode, employeeId, phoneE164
                 )
                 .orElseThrow(AuthenticationService::invalidCredentials);
@@ -109,11 +101,6 @@ public class AuthenticationService {
     public List<CurrentUserResponse> contexts(AuthenticatedUser principal) {
         assertOwner(principal);
         UserSession session = currentSession(principal.sessionId());
-        UserAccount currentOwner = session.getUserAccount();
-
-        tenantRepository.findAllByActiveTrueOrderByBusinessNameAsc()
-                .forEach(tenant -> tenantProvisioningService.addOwnerContext(tenant, currentOwner));
-
         return userAccountRepository.findAllContexts(session.getIdentity().getId()).stream()
                 .filter(AuthenticationService::isLoginAllowed)
                 .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)

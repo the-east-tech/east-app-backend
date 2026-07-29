@@ -20,6 +20,9 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * Tenant-scoped employment membership for one global login identity.
+ */
 @Entity
 @Table(name = "users")
 public class UserAccount {
@@ -38,20 +41,8 @@ public class UserAccount {
     @JoinColumn(name = "identity_id", nullable = false, updatable = false)
     private LoginIdentity identity;
 
-    @Column(name = "employee_id", nullable = false, length = 32, updatable = false)
+    @Column(name = "employee_id", nullable = false, length = 32)
     private String employeeId;
-
-    @Column(name = "full_name", nullable = false, length = 120)
-    private String fullName;
-
-    @Column(name = "phone_e164", nullable = false, length = 16)
-    private String phoneE164;
-
-    @Column(name = "profile_photo_key", length = 255)
-    private String profilePhotoKey;
-
-    @Column(name = "birth_date")
-    private LocalDate birthDate;
 
     @Column(name = "start_date")
     private LocalDate startDate;
@@ -81,15 +72,11 @@ public class UserAccount {
             Tenant tenant,
             LoginIdentity identity,
             String employeeId,
-            String fullName,
-            String phoneE164,
             Role role
     ) {
         this.tenant = Objects.requireNonNull(tenant, "tenant must not be null");
         this.identity = Objects.requireNonNull(identity, "identity must not be null");
         this.employeeId = normaliseEmployeeId(employeeId);
-        this.fullName = requireText(fullName, "fullName");
-        this.phoneE164 = normalisePhone(phoneE164);
         this.role = Objects.requireNonNull(role, "role must not be null");
     }
 
@@ -104,10 +91,7 @@ public class UserAccount {
         if (startDate != null && endDate != null && endDate.isBefore(startDate)) {
             throw new IllegalArgumentException("endDate must not be before startDate");
         }
-        this.fullName = requireText(fullName, "fullName");
-        this.phoneE164 = normalisePhone(phoneE164);
-        this.profilePhotoKey = normaliseOptionalText(profilePhotoKey);
-        this.birthDate = birthDate;
+        identity.updateProfile(fullName, phoneE164, profilePhotoKey, birthDate);
         this.startDate = startDate;
         this.endDate = endDate;
     }
@@ -141,19 +125,19 @@ public class UserAccount {
     }
 
     public String getFullName() {
-        return fullName;
+        return identity.getFullName();
     }
 
     public String getPhoneE164() {
-        return phoneE164;
+        return identity.getPhoneE164();
     }
 
     public String getProfilePhotoKey() {
-        return profilePhotoKey;
+        return identity.getProfilePhotoKey();
     }
 
     public LocalDate getBirthDate() {
-        return birthDate;
+        return identity.getBirthDate();
     }
 
     public LocalDate getStartDate() {
@@ -185,23 +169,7 @@ public class UserAccount {
     }
 
     public static String normalisePhone(String value) {
-        String normalised = requireText(value, "phoneE164")
-                .replace(" ", "")
-                .replace("-", "")
-                .replace("(", "")
-                .replace(")", "");
-        if (!normalised.matches("^\\+[1-9][0-9]{7,14}$")) {
-            throw new IllegalArgumentException("phoneE164 must use international E.164 format");
-        }
-        return normalised;
-    }
-
-    private static String normaliseOptionalText(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalised = value.trim();
-        return normalised.isEmpty() ? null : normalised;
+        return LoginIdentity.normalisePhone(value);
     }
 
     private static String requireText(String value, String fieldName) {

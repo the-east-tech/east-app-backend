@@ -14,7 +14,7 @@ import java.util.UUID;
 public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> {
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
-    List<UserAccount> findAllByTenant_IdOrderByFullNameAsc(UUID tenantId);
+    List<UserAccount> findAllByTenant_IdOrderByIdentity_FullNameAsc(UUID tenantId);
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
     @Query("""
@@ -25,8 +25,8 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
               and (
                     :search = ''
                     or lower(user.employeeId) like lower(concat('%', :search, '%'))
-                    or lower(user.fullName) like lower(concat('%', :search, '%'))
-                    or lower(user.phoneE164) like lower(concat('%', :search, '%'))
+                    or lower(user.identity.fullName) like lower(concat('%', :search, '%'))
+                    or lower(user.identity.phoneE164) like lower(concat('%', :search, '%'))
                     or lower(user.role.name) like lower(concat('%', :search, '%'))
               )
             """)
@@ -41,19 +41,18 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     Optional<UserAccount> findByIdAndTenant_Id(UUID id, UUID tenantId);
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
-    Optional<UserAccount> findByTenant_CompanyCodeAndEmployeeIdAndPhoneE164(
+    Optional<UserAccount> findByTenant_CompanyCodeAndEmployeeIdAndIdentity_PhoneE164(
             String companyCode,
             String employeeId,
             String phoneE164
     );
-
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
     @Query("""
             select user
             from UserAccount user
             where user.identity.id = :identityId
-            order by lower(user.tenant.businessName), lower(user.fullName), user.id
+            order by lower(user.tenant.businessName), lower(user.identity.fullName), user.id
             """)
     List<UserAccount> findAllContexts(@Param("identityId") UUID identityId);
 
@@ -71,6 +70,14 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     boolean existsByTenant_IdAndEmployeeId(UUID tenantId, String employeeId);
 
     long countByRole_Id(UUID roleId);
+
+    @Query("""
+            select user.role.id, count(user.id)
+            from UserAccount user
+            where user.tenant.id = :tenantId
+            group by user.role.id
+            """)
+    List<Object[]> countUsersByRoleForTenant(@Param("tenantId") UUID tenantId);
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
     List<UserAccount> findAllByRole_SystemKeyAndActiveTrueOrderByCreatedAtAsc(

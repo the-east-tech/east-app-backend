@@ -27,7 +27,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.DayOfWeek;
 import java.time.Duration;
@@ -65,6 +67,7 @@ public class AttendanceService {
     private final UserSessionRepository userSessionRepository;
     private final AttendanceProperties properties;
     private final GooglePlacesService googlePlacesService;
+    private final TransactionTemplate transactionTemplate;
 
     public AttendanceService(
             AttendanceEventRepository attendanceEventRepository,
@@ -72,7 +75,8 @@ public class AttendanceService {
             UserAccountRepository userAccountRepository,
             UserSessionRepository userSessionRepository,
             AttendanceProperties properties,
-            GooglePlacesService googlePlacesService
+            GooglePlacesService googlePlacesService,
+            PlatformTransactionManager transactionManager
     ) {
         this.attendanceEventRepository = attendanceEventRepository;
         this.tenantRepository = tenantRepository;
@@ -80,30 +84,69 @@ public class AttendanceService {
         this.userSessionRepository = userSessionRepository;
         this.properties = properties;
         this.googlePlacesService = googlePlacesService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
-    @Transactional
+    /**
+     * Reverse geocoding happens outside the database transaction. A slow Google
+     * response therefore never occupies one of the five Railway DB connections.
+     */
     public AttendanceEventResponse create(
             AuthenticatedUser principal,
             CreateAttendanceEventRequest request
     ) {
+        assertCaptureProof(request);
         String clientEventId = request.clientEventId().trim();
-        var existing = attendanceEventRepository.findByTenant_IdAndClientEventId(
-                principal.tenantId(),
-                clientEventId
+
+        AttendanceEventResponse existing = transactionTemplate.execute(
+                status -> existingResponse(principal, clientEventId)
         );
-        if (existing.isPresent()) {
-            AttendanceEvent event = existing.get();
-            if (!event.getUserAccount().getId().equals(principal.userId())) {
-                throw conflict(
-                        "ATTENDANCE_EVENT_ID_CONFLICT",
-                        "This attendance event identifier is already in use."
-                );
-            }
-            return AttendanceEventResponse.from(event);
+        if (existing != null) {
+            return existing;
         }
 
-        assertCaptureProof(request);
+        String capturedAddress = resolveCapturedAddress(
+                request.latitude(),
+                request.longitude()
+        );
+        AttendanceEventResponse created = transactionTemplate.execute(
+                status -> createInTransaction(principal, request, clientEventId, capturedAddress)
+        );
+        if (created == null) {
+            throw new IllegalStateException("Attendance transaction returned no response");
+        }
+        return created;
+    }
+
+    private AttendanceEventResponse existingResponse(
+            AuthenticatedUser principal,
+            String clientEventId
+    ) {
+        return attendanceEventRepository.findByTenant_IdAndClientEventId(
+                        principal.tenantId(), clientEventId
+                )
+                .map(event -> {
+                    if (!event.getUserAccount().getId().equals(principal.userId())) {
+                        throw conflict(
+                                "ATTENDANCE_EVENT_ID_CONFLICT",
+                                "This attendance event identifier is already in use."
+                        );
+                    }
+                    return AttendanceEventResponse.from(event);
+                })
+                .orElse(null);
+    }
+
+    private AttendanceEventResponse createInTransaction(
+            AuthenticatedUser principal,
+            CreateAttendanceEventRequest request,
+            String clientEventId,
+            String capturedAddress
+    ) {
+        AttendanceEventResponse existing = existingResponse(principal, clientEventId);
+        if (existing != null) {
+            return existing;
+        }
 
         Tenant tenant = tenantRepository.findById(principal.tenantId())
                 .orElseThrow(() -> notFound("TENANT_NOT_FOUND", "Tenant not found."));
@@ -132,10 +175,6 @@ public class AttendanceService {
                 tenant.getLatitude(),
                 tenant.getLongitude()
         );
-        String capturedAddress = resolveCapturedAddress(
-                request.latitude(),
-                request.longitude()
-        );
 
         AttendanceEvent event = new AttendanceEvent(
                 tenant,
@@ -156,6 +195,8 @@ public class AttendanceService {
                 request.cameraCaptureValid(),
                 request.faceValid(),
                 request.faceCount(),
+                request.faceAttemptCount(),
+                request.faceVerificationBypassed(),
                 request.faceBoxWidth(),
                 request.faceBoxHeight(),
                 request.faceYaw(),
@@ -198,7 +239,7 @@ public class AttendanceService {
         TimeRange timeRange = timeRange(dateRange.startDate(), dateRange.endDate(), zoneId);
 
         List<UserAccount> users = userAccountRepository
-                .findAllByTenant_IdOrderByFullNameAsc(principal.tenantId())
+                .findAllByTenant_IdOrderByIdentity_FullNameAsc(principal.tenantId())
                 .stream()
                 .filter(user -> employmentOverlaps(user, dateRange))
                 .toList();
@@ -506,10 +547,16 @@ public class AttendanceService {
                     "Attendance requires a live camera capture."
             );
         }
-        if (!request.faceValid() || request.faceCount() != 1) {
+        boolean facePassed = request.faceValid()
+                && request.faceCount() == 1
+                && !request.faceVerificationBypassed();
+        boolean bypassAllowed = !request.faceValid()
+                && request.faceVerificationBypassed()
+                && request.faceAttemptCount() == 3;
+        if (!facePassed && !bypassAllowed) {
             throw badRequest(
-                    "SINGLE_FACE_REQUIRED",
-                    "Attendance requires exactly one detected face."
+                    "FACE_VERIFICATION_REQUIRED",
+                    "Face verification must pass, or attendance may continue only after three failed attempts."
             );
         }
         if (!request.qrCheckpointValid()) {

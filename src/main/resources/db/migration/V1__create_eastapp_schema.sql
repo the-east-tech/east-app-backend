@@ -71,10 +71,20 @@ CREATE UNIQUE INDEX uq_roles_tenant_name_ci ON roles (tenant_id, lower(name));
 CREATE TABLE login_identities (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(120) NOT NULL,
+    phone_e164 VARCHAR(16) NOT NULL,
+    profile_photo_key VARCHAR(255),
+    birth_date DATE,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT ck_login_identities_password_hash_not_blank CHECK (btrim(password_hash) <> '')
+    CONSTRAINT uq_login_identities_phone_e164 UNIQUE (phone_e164),
+    CONSTRAINT ck_login_identities_password_hash_not_blank CHECK (btrim(password_hash) <> ''),
+    CONSTRAINT ck_login_identities_full_name_not_blank CHECK (btrim(full_name) <> ''),
+    CONSTRAINT ck_login_identities_phone_e164_format CHECK (phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
+    CONSTRAINT ck_login_identities_profile_photo_key_not_blank CHECK (
+        profile_photo_key IS NULL OR btrim(profile_photo_key) <> ''
+    )
 );
 
 CREATE TABLE users (
@@ -82,10 +92,6 @@ CREATE TABLE users (
     tenant_id UUID NOT NULL,
     identity_id UUID NOT NULL,
     employee_id VARCHAR(32) NOT NULL,
-    full_name VARCHAR(120) NOT NULL,
-    phone_e164 VARCHAR(16) NOT NULL,
-    profile_photo_key VARCHAR(255),
-    birth_date DATE,
     start_date DATE,
     end_date DATE,
     role_id UUID NOT NULL,
@@ -101,9 +107,6 @@ CREATE TABLE users (
     CONSTRAINT uq_users_identity_tenant UNIQUE (identity_id, tenant_id),
     CONSTRAINT ck_users_employee_id_uppercase CHECK (employee_id = upper(employee_id)),
     CONSTRAINT ck_users_employee_id_format CHECK (employee_id ~ '^[A-Z0-9][A-Z0-9_-]{1,31}$'),
-    CONSTRAINT ck_users_full_name_not_blank CHECK (btrim(full_name) <> ''),
-    CONSTRAINT ck_users_phone_e164_format CHECK (phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
-    CONSTRAINT ck_users_profile_photo_key_not_blank CHECK (profile_photo_key IS NULL OR btrim(profile_photo_key) <> ''),
     CONSTRAINT ck_users_employment_dates CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date)
 );
 CREATE INDEX ix_users_identity_id ON users (identity_id);
@@ -147,6 +150,8 @@ CREATE TABLE attendance_events (
     camera_capture_valid BOOLEAN NOT NULL,
     face_valid BOOLEAN NOT NULL,
     face_count INTEGER NOT NULL,
+    face_attempt_count INTEGER NOT NULL,
+    face_verification_bypassed BOOLEAN NOT NULL,
     face_box_width DOUBLE PRECISION,
     face_box_height DOUBLE PRECISION,
     face_yaw DOUBLE PRECISION,
@@ -176,6 +181,12 @@ CREATE TABLE attendance_events (
     CONSTRAINT ck_attendance_events_work_location_longitude CHECK (work_location_longitude BETWEEN -180 AND 180),
     CONSTRAINT ck_attendance_events_distance CHECK (distance_meters >= 0),
     CONSTRAINT ck_attendance_events_face_count CHECK (face_count >= 0),
+    CONSTRAINT ck_attendance_events_face_attempt_count CHECK (face_attempt_count BETWEEN 1 AND 3),
+    CONSTRAINT ck_attendance_events_face_result CHECK (
+        (face_valid = TRUE AND face_count = 1 AND face_verification_bypassed = FALSE)
+        OR
+        (face_valid = FALSE AND face_attempt_count = 3 AND face_verification_bypassed = TRUE)
+    ),
     CONSTRAINT ck_attendance_events_device_platform_not_blank CHECK (btrim(device_platform) <> ''),
     CONSTRAINT ck_attendance_events_app_version_not_blank CHECK (btrim(app_version) <> ''),
     CONSTRAINT ck_attendance_events_validation_method_not_blank CHECK (btrim(validation_method) <> '')

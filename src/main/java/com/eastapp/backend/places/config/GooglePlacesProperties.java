@@ -12,7 +12,7 @@ public class GooglePlacesProperties {
 
     private String regionCode = "MY";
     private String languageCode = "en";
-    private int ratingCacheMinutes = 15;
+    private int ratingCacheMinutes = 360;
 
     public String getApiKey() {
         return HARDCODED_API_KEY;

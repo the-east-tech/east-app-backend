@@ -7,7 +7,6 @@ import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.Role;
 import com.eastapp.backend.people.RoleRepository;
 import com.eastapp.backend.people.SystemRole;
-import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.people.api.CreateRoleRequest;
 import com.eastapp.backend.people.api.RoleResponse;
@@ -16,7 +15,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -36,15 +37,28 @@ public class RoleService {
         this.userAccountRepository = userAccountRepository;
     }
 
+    /** Role management list for the active tenant, including usage counts. */
     @Transactional(readOnly = true)
-    public List<RoleResponse> list(AuthenticatedUser actor, UUID requestedTenantId) {
-        UUID tenantId = requestedTenantId == null ? actor.tenantId() : requestedTenantId;
-        assertRoleListAccess(actor, tenantId);
+    public List<RoleResponse> list(AuthenticatedUser actor) {
+        UUID tenantId = actor.tenantId();
+        Map<UUID, Long> counts = new HashMap<>();
+        for (Object[] row : userAccountRepository.countUsersByRoleForTenant(tenantId)) {
+            counts.put((UUID) row[0], (Long) row[1]);
+        }
         return roleRepository.findAllByTenant_IdOrderByNameAsc(tenantId)
                 .stream()
-                .map(role -> RoleResponse.from(
-                        role, userAccountRepository.countByRole_Id(role.getId())
-                ))
+                .map(role -> RoleResponse.from(role, counts.getOrDefault(role.getId(), 0L)))
+                .toList();
+    }
+
+    /** Lightweight role dropdown for Create User; no usage/count queries. */
+    @Transactional(readOnly = true)
+    public List<RoleResponse> assignable(AuthenticatedUser actor) {
+        return roleRepository.findAllByTenant_IdOrderByNameAsc(actor.tenantId())
+                .stream()
+                .filter(Role::isActive)
+                .filter(role -> mayAssign(actor, role))
+                .map(role -> RoleResponse.from(role, 0))
                 .toList();
     }
 
@@ -109,25 +123,16 @@ public class RoleService {
         roleRepository.delete(role);
     }
 
-    private void assertRoleListAccess(AuthenticatedUser actor, UUID tenantId) {
-        if (tenantId.equals(actor.tenantId())) {
-            return;
+    private static boolean mayAssign(AuthenticatedUser actor, Role role) {
+        if (actor.isOwner()) return true;
+        if (actor.systemRole() == SystemRole.HEAD) {
+            return role.getSystemKey() != SystemRole.OWNER;
         }
-        if (!actor.isOwner()) {
-            throw forbidden("ROLE_ACCESS_DENIED", "Only Owner may view another tenant's roles.");
+        if (actor.isManager()) {
+            return role.getSystemKey() == SystemRole.STAFF_1
+                    || role.getSystemKey() == SystemRole.STAFF_2;
         }
-        UserAccount current = userAccountRepository
-                .findByIdAndTenant_Id(actor.userId(), actor.tenantId())
-                .orElseThrow(() -> forbidden("ROLE_ACCESS_DENIED", "Current user is unavailable."));
-        userAccountRepository
-                .findByTenant_IdAndIdentity_Id(tenantId, current.getIdentity().getId())
-                .filter(UserAccount::isActive)
-                .filter(user -> user.getRole().isActive())
-                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
-                .orElseThrow(() -> forbidden(
-                        "ROLE_ACCESS_DENIED",
-                        "This tenant is not assigned to the current Owner login."
-                ));
+        return false;
     }
 
     private Role findRole(UUID tenantId, UUID roleId) {
@@ -141,9 +146,5 @@ public class RoleService {
 
     private static ApiException conflict(String code, String message) {
         return new ApiException(HttpStatus.CONFLICT, code, message);
-    }
-
-    private static ApiException forbidden(String code, String message) {
-        return new ApiException(HttpStatus.FORBIDDEN, code, message);
     }
 }
