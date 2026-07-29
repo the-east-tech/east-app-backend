@@ -1,6 +1,6 @@
 # EastApp Backend
 
-Backend API for **EastApp**, a multi-business operations application covering identity, access control, attendance, stock, tenants and Google business locations.
+Backend API for **EastApp**, a multi-business operations application covering identity, access control, attendance, stock, knowledge, tenants and Google business locations.
 
 ## Current development model
 
@@ -88,6 +88,23 @@ Attendance stores validation metadata only. Captured face photos are not stored 
 - Cross-business SKU copy for Owners
 
 Cross-business copying duplicates the selected SKUs together with their tags and suppliers. The copied records are independent from the source tenant.
+
+### Knowledge
+
+- Tenant-scoped SOP storage
+- Mandatory YouTube video URL
+- Mandatory Stock tag, title, expected outcome and description
+- Embedded-video metadata through a validated YouTube video ID
+- SOP creation restricted to Owners and Heads
+- SOP viewing available to authenticated users in the active business
+
+### Home data
+
+- Five latest Stock Audit Trail records performed by the current logged-in user
+- Hardcoded `+1` activity score until the scoring system is implemented
+- Today's combined Daily Count and Receiving review summary
+- `Pending Review` count
+- `Done` count, where both Approved and Rejected records are considered done
 
 ### Google Places
 
@@ -206,6 +223,8 @@ It contains requests for:
 - Attendance
 - Stock
 - Google Places
+- Home Stock activity and review summary
+- Knowledge SOPs
 
 The Login request stores `eastappToken` automatically for authenticated requests.
 
@@ -228,11 +247,26 @@ EastApp currently uses opaque session tokens rather than JWT.
 | Create tenant | Yes | No | No |
 | Update current tenant | Yes | Yes | No |
 | Create user | Yes | Yes | No |
-| Stock Audit Trail | Yes | Yes | No |
+| Stock Audit Trail screen | Yes | Yes | No |
+| Home own Stock activity | Yes | Yes | Yes |
+| Home today's review summary | Yes | Yes | Manager only |
+| Create Knowledge SOP | Yes | Yes | No |
+| View Knowledge SOP | Yes | Yes | Yes |
 | People → Tenant | Yes | Yes | No |
 | Cross-business SKU copy | Yes | No | No |
 
 Heads remain limited to their current tenant. Owners share access across all tenants.
+
+## Caching strategy
+
+No Redis or general backend data cache is added at this stage.
+
+- Tenant, context, role, tag and SOP datasets are currently small
+- Correct cache invalidation would add complexity without evidence of a backend bottleneck
+- Google rating remains the only backend-cached external value
+- Flutter caches tenant and authentication-context lists in memory for five minutes and invalidates them after tenant, user, login/logout or context changes
+- Consider Caffeine first when repeated backend computation becomes measurable
+- Consider Redis only when EastApp runs multiple backend instances or requires shared distributed cache/session behaviour
 
 ## Database and Flyway
 
@@ -286,6 +320,7 @@ src/main/java/com/eastapp/backend/
 ├── auth/
 ├── common/
 ├── config/
+├── knowledge/
 ├── organisation/
 ├── people/
 ├── places/

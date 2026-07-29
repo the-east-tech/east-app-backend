@@ -449,18 +449,46 @@ CREATE TABLE stock_audit_entries (
 );
 CREATE INDEX ix_stock_audit_tenant_captured_at ON stock_audit_entries (tenant_id, captured_at DESC);
 
-CREATE TABLE stock_audit_changes (
+CREATE TABLE stock_audit_entry_changes (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
-    audit_entry_id UUID NOT NULL,
+    stock_audit_entry_id UUID NOT NULL,
     position INTEGER NOT NULL,
     field_name VARCHAR(120) NOT NULL,
     old_value VARCHAR(1000) NOT NULL,
     new_value VARCHAR(1000) NOT NULL,
-    CONSTRAINT fk_stock_audit_changes_entry FOREIGN KEY (audit_entry_id)
+    CONSTRAINT fk_stock_audit_entry_changes_entry FOREIGN KEY (stock_audit_entry_id)
         REFERENCES stock_audit_entries (id) ON DELETE CASCADE,
-    CONSTRAINT uq_stock_audit_changes_position UNIQUE (audit_entry_id, position),
-    CONSTRAINT ck_stock_audit_changes_position CHECK (position >= 0)
+    CONSTRAINT uq_stock_audit_entry_changes_position UNIQUE (stock_audit_entry_id, position),
+    CONSTRAINT ck_stock_audit_entry_changes_position CHECK (position >= 0)
 );
+
+CREATE TABLE knowledge_sops (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    tag_id UUID NOT NULL,
+    youtube_url VARCHAR(500) NOT NULL,
+    title VARCHAR(160) NOT NULL,
+    expected_outcome VARCHAR(1000) NOT NULL,
+    description TEXT NOT NULL,
+    created_by_user_id UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_knowledge_sops_tenant FOREIGN KEY (tenant_id)
+        REFERENCES tenants (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_knowledge_sops_tag_same_tenant FOREIGN KEY (tenant_id, tag_id)
+        REFERENCES stock_tags (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_knowledge_sops_created_by FOREIGN KEY (tenant_id, created_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT uq_knowledge_sops_tenant_id_id UNIQUE (tenant_id, id),
+    CONSTRAINT ck_knowledge_sops_youtube_url_not_blank CHECK (btrim(youtube_url) <> ''),
+    CONSTRAINT ck_knowledge_sops_title_not_blank CHECK (btrim(title) <> ''),
+    CONSTRAINT ck_knowledge_sops_outcome_not_blank CHECK (btrim(expected_outcome) <> ''),
+    CONSTRAINT ck_knowledge_sops_description_not_blank CHECK (btrim(description) <> '')
+);
+CREATE INDEX ix_knowledge_sops_tenant_created_at
+    ON knowledge_sops (tenant_id, created_at DESC);
+CREATE INDEX ix_knowledge_sops_tenant_tag
+    ON knowledge_sops (tenant_id, tag_id);
 
 -- The first tenant, its default roles and the first Owner account are created
 -- through the one-time Initial Setup API. Later tenants are created through

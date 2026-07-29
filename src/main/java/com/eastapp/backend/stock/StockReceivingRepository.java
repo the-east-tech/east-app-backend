@@ -40,4 +40,17 @@ public interface StockReceivingRepository extends JpaRepository<StockReceiving, 
     Optional<StockReceiving> findByIdAndTenant_Id(UUID id, UUID tenantId);
 
     boolean existsByTenant_IdAndSupplier_Id(UUID tenantId, UUID supplierId);
+    long countByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+            UUID tenantId,
+            Instant fromInclusive,
+            Instant toExclusive
+    );
+
+    long countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+            UUID tenantId,
+            String reviewStatus,
+            Instant fromInclusive,
+            Instant toExclusive
+    );
+
 }

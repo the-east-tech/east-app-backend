@@ -282,15 +282,23 @@ public class StockController {
         return stockService.reviewReceiving(principal, receivingId, request);
     }
 
+    @GetMapping("/reviews/today-summary")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    StockReviewSummaryResponse todayReviewSummary(
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return stockService.todayReviewSummary(principal);
+    }
+
     @GetMapping("/audit")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     PageResponse<StockAuditEntryResponse> audit(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "false") boolean mine,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
-        return stockService.audit(principal, from, to, page, size);
+        return stockService.audit(principal, from, to, mine, page, size);
     }
 }

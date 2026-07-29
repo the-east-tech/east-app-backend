@@ -16,4 +16,13 @@ public interface StockAuditEntryRepository extends JpaRepository<StockAuditEntry
             Instant toExclusive,
             Pageable pageable
     );
+    @EntityGraph(attributePaths = {"tenant", "changes"})
+    Page<StockAuditEntry> findAllByTenant_IdAndActorEmployeeIdAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtDesc(
+            UUID tenantId,
+            String actorEmployeeId,
+            Instant fromInclusive,
+            Instant toExclusive,
+            Pageable pageable
+    );
+
 }

@@ -13,13 +13,13 @@ import org.hibernate.annotations.Generated;
 import java.util.UUID;
 
 @Entity
-@Table(name = "stock_audit_changes")
+@Table(name = "stock_audit_entry_changes")
 public class StockAuditChange {
     @Id @Generated @ColumnDefault("uuidv7()")
     @Column(nullable = false, updatable = false)
     private UUID id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "audit_entry_id", nullable = false, updatable = false)
+    @JoinColumn(name = "stock_audit_entry_id", nullable = false, updatable = false)
     private StockAuditEntry entry;
     @Column(nullable = false)
     private int position;

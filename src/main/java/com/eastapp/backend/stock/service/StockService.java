@@ -8,6 +8,7 @@ import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
+import com.eastapp.backend.knowledge.KnowledgeSopRepository;
 import com.eastapp.backend.stock.StockAuditEntry;
 import com.eastapp.backend.stock.StockAuditEntryRepository;
 import com.eastapp.backend.stock.StockCountSubmission;
@@ -34,6 +35,7 @@ import com.eastapp.backend.stock.api.ReviewStockRecordRequest;
 import com.eastapp.backend.stock.api.StockAuditEntryResponse;
 import com.eastapp.backend.stock.api.StockCountSubmissionResponse;
 import com.eastapp.backend.stock.api.StockReceivingResponse;
+import com.eastapp.backend.stock.api.StockReviewSummaryResponse;
 import com.eastapp.backend.stock.api.StockSkuResponse;
 import com.eastapp.backend.stock.api.StockSnapshotResponse;
 import com.eastapp.backend.stock.api.StockSupplierResponse;
@@ -77,6 +79,7 @@ public class StockService {
     private final StockReceivingRepository receivingRepository;
     private final StockAuditEntryRepository auditRepository;
     private final StockMediaRepository mediaRepository;
+    private final KnowledgeSopRepository knowledgeSopRepository;
 
     public StockService(
             TenantRepository tenantRepository,
@@ -87,7 +90,8 @@ public class StockService {
             StockCountSubmissionRepository countRepository,
             StockReceivingRepository receivingRepository,
             StockAuditEntryRepository auditRepository,
-            StockMediaRepository mediaRepository
+            StockMediaRepository mediaRepository,
+            KnowledgeSopRepository knowledgeSopRepository
     ) {
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
@@ -98,6 +102,7 @@ public class StockService {
         this.receivingRepository = receivingRepository;
         this.auditRepository = auditRepository;
         this.mediaRepository = mediaRepository;
+        this.knowledgeSopRepository = knowledgeSopRepository;
     }
 
     @Transactional(readOnly = true)
@@ -423,6 +428,12 @@ public class StockService {
         if (inUse) {
             throw conflict("STOCK_TAG_IN_USE", "This tag is assigned to an SKU and cannot be deleted.");
         }
+        if (knowledgeSopRepository.existsByTenant_IdAndTag_Id(principal.tenantId(), tagId)) {
+            throw conflict(
+                    "STOCK_TAG_IN_USE_BY_SOP",
+                    "This tag is assigned to a Knowledge SOP and cannot be deleted."
+            );
+        }
         auditRepository.save(new StockAuditEntry(
                 tag.getTenant(), "Tag", "Deleted tag", tag.getId(), tag.getTag(), principal, "")
                 .addChange("Tag", tag.getTag(), "Deleted"));
@@ -728,6 +739,7 @@ public class StockService {
             AuthenticatedUser principal,
             LocalDate from,
             LocalDate to,
+            boolean mine,
             int page,
             int size
     ) {
@@ -738,6 +750,19 @@ public class StockService {
         }
         Instant fromInclusive = resolvedFrom.atStartOfDay(ZONE_ID).toInstant();
         Instant toExclusive = resolvedTo.plusDays(1).atStartOfDay(ZONE_ID).toInstant();
+        boolean currentUserOnly = mine || !principal.isHead();
+        if (currentUserOnly) {
+            return PageResponse.from(
+                    auditRepository.findAllByTenant_IdAndActorEmployeeIdAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtDesc(
+                            principal.tenantId(),
+                            principal.employeeId(),
+                            fromInclusive,
+                            toExclusive,
+                            pageRequest(page, size)
+                    ),
+                    StockAuditEntryResponse::from
+            );
+        }
         return PageResponse.from(
                 auditRepository.findAllByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtDesc(
                         principal.tenantId(), fromInclusive, toExclusive,
@@ -745,6 +770,34 @@ public class StockService {
                 ),
                 StockAuditEntryResponse::from
         );
+    }
+
+    @Transactional(readOnly = true)
+    public StockReviewSummaryResponse todayReviewSummary(AuthenticatedUser principal) {
+        LocalDate today = LocalDate.now(ZONE_ID);
+        Instant fromInclusive = today.atStartOfDay(ZONE_ID).toInstant();
+        Instant toExclusive = today.plusDays(1).atStartOfDay(ZONE_ID).toInstant();
+
+        long countTotal = countRepository
+                .countByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+                        principal.tenantId(), fromInclusive, toExclusive
+                );
+        long receivingTotal = receivingRepository
+                .countByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+                        principal.tenantId(), fromInclusive, toExclusive
+                );
+        long countPending = countRepository
+                .countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+                        principal.tenantId(), "Pending Review", fromInclusive, toExclusive
+                );
+        long receivingPending = receivingRepository
+                .countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+                        principal.tenantId(), "Pending Review", fromInclusive, toExclusive
+                );
+
+        long total = countTotal + receivingTotal;
+        long pending = countPending + receivingPending;
+        return new StockReviewSummaryResponse(pending, total - pending, total);
     }
 
     private static PageRequest pageRequest(int page, int size) {

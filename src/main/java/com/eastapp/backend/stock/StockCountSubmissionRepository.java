@@ -47,4 +47,17 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
 
     @EntityGraph(attributePaths = {"tenant", "sku", "submittedBy", "reviewedBy"})
     Optional<StockCountSubmission> findByIdAndTenant_Id(UUID id, UUID tenantId);
+    long countByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+            UUID tenantId,
+            Instant fromInclusive,
+            Instant toExclusive
+    );
+
+    long countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+            UUID tenantId,
+            String reviewStatus,
+            Instant fromInclusive,
+            Instant toExclusive
+    );
+
 }
