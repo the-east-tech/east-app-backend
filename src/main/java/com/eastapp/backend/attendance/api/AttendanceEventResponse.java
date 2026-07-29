@@ -30,7 +30,9 @@ public record AttendanceEventResponse(
         String appVersion,
         String validationMethod,
         boolean photoStored
-) {
+)
+
+{
     public static AttendanceEventResponse from(AttendanceEvent event) {
         return new AttendanceEventResponse(
                 event.getId(),
