@@ -61,6 +61,29 @@ public class StockController {
                 .body(media.resource());
     }
 
+    @PostMapping(value = "/media/receiving-photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    ResponseEntity<StockMediaUploadResponse> uploadReceivingPhoto(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(stockMediaService.saveReceivingPhoto(principal, file));
+    }
+
+    @GetMapping("/media/receiving-photos/{storageKey}")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    ResponseEntity<Resource> receivingPhoto(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable String storageKey
+    ) {
+        StockMediaService.StoredStockMedia media = stockMediaService.loadReceivingPhoto(principal, storageKey);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(media.contentType()))
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
+                .body(media.resource());
+    }
+
     @GetMapping("/snapshot")
     StockSnapshotResponse snapshot(@AuthenticationPrincipal AuthenticatedUser principal) {
         return stockService.snapshot(principal);
@@ -261,6 +284,15 @@ public class StockController {
             @Valid @RequestBody ReviewStockRecordRequest request
     ) {
         return stockService.reviewCount(principal, submissionId, request);
+    }
+
+    @PatchMapping("/counts/bulk-review")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    BulkReviewStockCountsResponse bulkReviewCounts(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody BulkReviewStockCountsRequest request
+    ) {
+        return stockService.bulkReviewCounts(principal, request);
     }
 
     @PostMapping("/receivings")

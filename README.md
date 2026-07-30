@@ -1,13 +1,13 @@
 # EastApp Backend
 
-Backend API for **EastApp**, a multi-business operations application covering identity, access control, attendance, stock, knowledge, tenants and Google business locations.
+Backend API for **EastApp**, a multi-business operations application covering identity, access control, attendance, stock, knowledge, points, tenants and Google business locations.
 
 ## Current development model
 
-- One clean Flyway migration: `V1__create_eastapp_schema.sql`
+- Existing database data is retained
+- Flyway migrations are append-only from `V2` onward; do not rewrite an applied migration
 - No seeded tenants or users
 - Initial Setup creates the first tenant and first `OWNER`
-- Development data is disposable and may be recreated during schema changes
 - Each tenant represents one independent business location
 - Business codes are globally unique
 - Every tenant must have a Google business location and attendance geofence
@@ -63,6 +63,9 @@ STAFF_2
 - Password reset
 - Tenant-specific employee IDs
 - Attendance audit and reporting
+- Tenant-scoped point assignment and deduction by Owners and Heads
+- Immutable point adjustment history with compulsory reasons
+- Active-user leaderboard ranked by accumulated total points
 
 ### Attendance
 
@@ -101,10 +104,12 @@ Cross-business copying duplicates the selected SKUs together with their tags and
 ### Home data
 
 - Five latest Stock Audit Trail records performed by the current logged-in user
-- Hardcoded `+1` activity score until the scoring system is implemented
+- Current logged-in user's real accumulated point total
+- Current-business leaderboard
 - Today's combined Daily Count and Receiving review summary
 - `Pending Review` count
 - `Done` count, where both Approved and Rejected records are considered done
+- Approvals opens Stock → Review and returns to Home on Back
 
 ### Google Places
 
@@ -136,21 +141,23 @@ Enable **Places API (New)** for that key.
 
 Maven does not need to be installed separately because the repository includes `mvnw`.
 
-## Run locally with a fresh database
+## Run locally while preserving the database
 
 From the repository root:
 
 ```bash
-./scripts/run-fresh-local.sh
+./scripts/run-local.sh
 ```
 
 The script:
 
-1. Deletes the local EastApp PostgreSQL volume
+1. Preserves the existing PostgreSQL volume
 2. Starts PostgreSQL 18
-3. Applies the single Flyway V1 migration
+3. Applies pending Flyway migrations
 4. Starts Spring Boot
-5. Prints a one-time Initial Setup code in the terminal
+5. Prints a one-time Initial Setup code only when setup has not been completed
+
+A destructive reset remains available through `scripts/run-fresh-local.sh`, but it now requires the explicit environment variable `EASTAPP_CONFIRM_DATABASE_RESET=YES`.
 
 The setup code is valid for 30 minutes.
 
@@ -266,14 +273,16 @@ No Redis or general backend data cache is added at this stage.
 
 ## Database and Flyway
 
-During the current development stage:
+EastApp now retains its database:
 
-- Keep one clean `V1__create_eastapp_schema.sql`
-- Do not add V2/V3 migrations yet
-- Recreate the disposable database after schema changes
+- `V1__create_eastapp_schema.sql` is frozen
+- Add every schema change as a new append-only Flyway migration
+- Never edit or delete a migration that has already been applied
+- Never enable `EASTAPP_DATABASE_RESET_ON_START` in normal local or Railway operation
 - Do not seed tenants, owners or employees in Flyway
+- Back up the database before destructive maintenance
 
-Before retaining production data, switch to append-only Flyway migrations and stop rewriting V1.
+`V2__create_user_point_adjustments.sql` adds the immutable point ledger without deleting existing data.
 
 ## Railway deployment
 
@@ -288,7 +297,7 @@ Core Railway settings:
 ```text
 RAILPACK_JDK_VERSION=25
 SPRING_DOCKER_COMPOSE_ENABLED=false
-EASTAPP_DATABASE_RESET_ON_START=true
+EASTAPP_DATABASE_RESET_ON_START=false
 ```
 
 Datasource variables should reference the Railway PostgreSQL service:
@@ -300,7 +309,7 @@ SPRING_DATASOURCE_PASSWORD=${{Postgres.PGPASSWORD}}
 SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
 ```
 
-`EASTAPP_DATABASE_RESET_ON_START=true` is for disposable development data only. Set it to `false` before retaining real production data.
+`EASTAPP_DATABASE_RESET_ON_START=false` preserves existing data and is required for normal local and Railway operation.
 
 Detailed deployment guidance should live in:
 
@@ -320,14 +329,18 @@ src/main/java/com/eastapp/backend/
 ├── organisation/
 ├── people/
 ├── places/
+├── points/
 ├── setup/
 └── stock/
 
 src/main/resources/
 ├── application.yaml
-└── db/migration/V1__create_eastapp_schema.sql
+└── db/migration/
+    ├── V1__create_eastapp_schema.sql
+    └── V2__create_user_point_adjustments.sql
 
 scripts/
+├── run-local.sh
 └── run-fresh-local.sh
 
 requests.http
@@ -341,7 +354,7 @@ For every backend change:
 
 1. Apply the change locally
 2. Start Spring Boot locally
-3. Let Flyway recreate or validate the schema
+3. Let Flyway validate the existing schema and apply pending migrations
 4. Verify Hibernate validation
 5. Test affected endpoints in `requests.http`
 6. Keep all changed and newly added endpoints represented in `requests.http`
@@ -357,3 +370,32 @@ Keep detailed guides separate from this README:
 - [Google Places setup](docs/GOOGLE_PLACES_SETUP.md)
 
 Remove obsolete bootstrap documentation and scripts. Initial Setup is now the only supported first-user creation flow.
+
+
+## Business Report module
+
+Flyway `V3__create_business_reports.sql` adds a tenant-scoped reporting workflow without changing V1 or V2. It provides five Report cards in Flutter: Sales, Inventory Intelligence, Waste, Daily Photos and Complaints.
+
+- Sales is one report per business/day. Sales, Sub-Total, Cash Received By, Panda Sales and Team Size are entered; Reported Total, Void Total, Net Sales, Sales per Staff and Void Rate are derived.
+- Void Bills are append-only evidence entries with a compulsory photo, bill number, reason and amount. Bill numbers are unique per Sales report without case sensitivity.
+- Inventory Intelligence is calculated from active SKU balances, limits and price ranges; no duplicate inventory form is stored.
+- Waste records include photo evidence and estimated loss, then enter the approval workflow.
+- Every active Manager, Supervisor, Staff 1 and Staff 2 user is expected to submit at least five Daily Photos. Owner and Head are excluded from that requirement.
+- Complaints track customer profile, action, compensation and Open/Resolved status without a separate approval step.
+- Owner, Head, Manager and Supervisor can view business analytics. Only Owner, Head or Manager can approve reports; Manager cannot approve their own submission.
+- Report evidence media can only be attached by the user account that uploaded it.
+
+Configuration:
+
+```yaml
+eastapp:
+  reports:
+    time-zone: Asia/Kuala_Lumpur
+    daily-photo-minimum: 5
+```
+
+## V4 attendance evidence and atomic Daily Count review
+
+`V4__create_attendance_face_attempts.sql` is append-only and preserves the existing database. It stores each failed face-verification attempt with its GPS evidence, calculated distance from the active business, failure reason, device metadata and the captured image when available. Owner and Head users can review these records through the attendance audit API.
+
+Daily Count bulk review now uses one transactional endpoint, `PATCH /api/v1/stock/counts/bulk-review`. The service validates every selected record before changing any of them, so an invalid or previously reviewed record rolls back the whole batch.

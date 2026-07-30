@@ -31,6 +31,10 @@
 @sopId = 00000000-0000-0000-0000-000000000000
 @thumbnailKey = 00000000-0000-0000-0000-000000000000.jpg
 @thumbnailFile = /absolute/path/to/sku-thumbnail.jpg
+@reportDate = 2026-07-30
+@reportId = 00000000-0000-0000-0000-000000000000
+@reportMediaKey = 00000000-0000-0000-0000-000000000000.jpg
+@reportPhotoFile = /absolute/path/to/report-photo.jpg
 
 ### Initial setup status
 GET {{baseUrl}}/api/v1/setup/status
@@ -582,3 +586,276 @@ Authorization: Bearer {{eastappToken}}
 GET {{baseUrl}}/api/v1/google-places/current-rating
 Accept: application/json
 Authorization: Bearer {{eastappToken}}
+
+### Current-business leaderboard — active users only; competition ranking for ties
+GET {{baseUrl}}/api/v1/points/leaderboard
+Authorization: Bearer {{eastappToken}}
+
+### Add points — Owner or Head only; pointsDelta must be 1 to 10
+POST {{baseUrl}}/api/v1/points/adjustments
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "pointsDelta": 1,
+  "reason": "Helped the team during peak service"
+}
+
+### Deduct points — Owner or Head only; pointsDelta must be -1 to -10
+POST {{baseUrl}}/api/v1/points/adjustments
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "pointsDelta": -1,
+  "reason": "Repeatedly missed the agreed closing checklist"
+}
+
+
+### Report dashboard — current business; staff responses are privacy-reduced
+GET {{baseUrl}}/api/v1/reports/dashboard?days=7
+Authorization: Bearer {{eastappToken}}
+
+### Upload report evidence photo
+POST {{baseUrl}}/api/v1/reports/media
+Authorization: Bearer {{eastappToken}}
+Content-Type: multipart/form-data; boundary=EastAppReportBoundary
+
+--EastAppReportBoundary
+Content-Disposition: form-data; name="file"; filename="report-photo.jpg"
+Content-Type: image/jpeg
+
+< {{reportPhotoFile}}
+--EastAppReportBoundary--
+
+### Download report evidence photo for the active business
+GET {{baseUrl}}/api/v1/reports/media/{{reportMediaKey}}
+Authorization: Bearer {{eastappToken}}
+Accept: image/jpeg,image/png
+
+### Read daily Sales report — management only
+GET {{baseUrl}}/api/v1/reports/sales?date={{reportDate}}
+Authorization: Bearer {{eastappToken}}
+
+### Create or update daily Sales report — management only
+PUT {{baseUrl}}/api/v1/reports/sales
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "reportDate": "{{reportDate}}",
+  "salesRm": 1200.00,
+  "subTotalRm": 420.00,
+  "cashReceivedBy": "KK",
+  "pandaSalesRm": 450.00,
+  "staffCount": 6
+}
+
+### Add Void Bill — any active user; photo key must belong to the logged-in uploader
+POST {{baseUrl}}/api/v1/reports/sales/void-bills
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "reportDate": "{{reportDate}}",
+  "billNumber": "VOID-001",
+  "reason": "Wrong item entered",
+  "amountRm": 18.50,
+  "photoStorageKey": "{{reportMediaKey}}"
+}
+
+### Submit Sales report for approval — management only
+POST {{baseUrl}}/api/v1/reports/sales/{{reportId}}/submit
+Authorization: Bearer {{eastappToken}}
+
+### Create Waste report — any active user
+POST {{baseUrl}}/api/v1/reports/waste
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "reportDate": "{{reportDate}}",
+  "skuId": "{{skuId}}",
+  "itemName": "Fallback item name",
+  "quantity": 2.5,
+  "unit": "kg",
+  "estimatedUnitCostRm": 12.00,
+  "reason": "Expired during service",
+  "photoStorageKey": "{{reportMediaKey}}"
+}
+
+### List Waste reports
+GET {{baseUrl}}/api/v1/reports/waste?from={{fromDate}}&to={{toDate}}
+Authorization: Bearer {{eastappToken}}
+
+### Read Daily Photos — omit userId for own batch; management may specify a user
+GET {{baseUrl}}/api/v1/reports/daily-photos?date={{reportDate}}&userId={{userId}}
+Authorization: Bearer {{eastappToken}}
+
+### Add Daily Photo — photo key must belong to the logged-in uploader
+POST {{baseUrl}}/api/v1/reports/daily-photos
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "reportDate": "{{reportDate}}",
+  "photoStorageKey": "{{reportMediaKey}}"
+}
+
+### Submit Daily Photo batch after minimum evidence count
+POST {{baseUrl}}/api/v1/reports/daily-photos/{{reportId}}/submit
+Authorization: Bearer {{eastappToken}}
+
+### Create Complaint report — any active user
+POST {{baseUrl}}/api/v1/reports/complaints
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "reportDate": "{{reportDate}}",
+  "photoStorageKey": "{{reportMediaKey}}",
+  "customerGender": "UNKNOWN",
+  "estimatedAge": 35,
+  "complaintInfo": "Customer reported a delayed order.",
+  "phoneE164": null,
+  "actionTaken": "Apologised and replaced the order.",
+  "compensationAmountRm": 12.00,
+  "status": "OPEN"
+}
+
+### List Complaint reports
+GET {{baseUrl}}/api/v1/reports/complaints?from={{fromDate}}&to={{toDate}}
+Authorization: Bearer {{eastappToken}}
+
+### Update Complaint resolution — management only
+PATCH {{baseUrl}}/api/v1/reports/complaints/{{reportId}}
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "status": "RESOLVED",
+  "actionTaken": "Followed up with the customer and resolved the complaint.",
+  "compensationAmountRm": 12.00
+}
+
+### Pending Report approvals — Owner, Head or Manager only
+GET {{baseUrl}}/api/v1/reports/approvals
+Authorization: Bearer {{eastappToken}}
+
+### Approve Report — Owner, Head or Manager only; Manager cannot self-review
+POST {{baseUrl}}/api/v1/reports/{{reportId}}/review
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "status": "APPROVED",
+  "note": "Evidence verified"
+}
+
+### Reject Report — rejection reason is compulsory
+POST {{baseUrl}}/api/v1/reports/{{reportId}}/review
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "status": "REJECTED",
+  "note": "Void Bill photo is unreadable"
+}
+
+
+### Upload real Receiving photo — Owner, Head or Manager
+POST {{baseUrl}}/api/v1/stock/media/receiving-photos
+Authorization: Bearer {{eastappToken}}
+Content-Type: multipart/form-data; boundary=EastAppReceivingBoundary
+
+--EastAppReceivingBoundary
+Content-Disposition: form-data; name="file"; filename="receiving-photo.jpg"
+Content-Type: image/jpeg
+
+< {{receivingPhotoFile}}
+--EastAppReceivingBoundary--
+
+### Download Receiving photo for the active business
+GET {{baseUrl}}/api/v1/stock/media/receiving-photos/{{receivingPhotoKey}}
+Authorization: Bearer {{eastappToken}}
+Accept: image/jpeg,image/png
+
+### Atomically approve selected Daily Count records — all succeed or none change
+PATCH {{baseUrl}}/api/v1/stock/counts/bulk-review
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "submissionIds": [
+    "{{stockCountId1}}",
+    "{{stockCountId2}}"
+  ],
+  "status": "Approved",
+  "note": "Selected daily counts verified together"
+}
+
+### Record a failed face-verification attempt with GPS — photo part is optional
+POST {{baseUrl}}/api/v1/attendance/face-attempts
+Authorization: Bearer {{eastappToken}}
+Content-Type: multipart/form-data; boundary=EastAppFaceAttemptBoundary
+
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="clientAttemptId"
+
+manual-face-attempt-{{$timestamp}}
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="intendedEventType"
+
+CLOCK_IN
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="deviceAttemptedAt"
+
+{{$isoTimestamp}}
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="latitude"
+
+4.3272472
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="longitude"
+
+101.1329829
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="accuracyMeters"
+
+12
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="failureReason"
+
+No face was detected.
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="faceCount"
+
+0
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="faceAttemptNumber"
+
+1
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="devicePlatform"
+
+IOS
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="appVersion"
+
+east_app_v261
+--EastAppFaceAttemptBoundary
+Content-Disposition: form-data; name="validationMethod"
+
+ML_KIT_FACE_DETECTION_FAILED
+--EastAppFaceAttemptBoundary--
+
+### Review failed face attempts for one user — Owner or Head only
+GET {{baseUrl}}/api/v1/attendance/users/{{userId}}/face-attempts?period=DAY&anchor={{reportDate}}&page=0&size=100
+Authorization: Bearer {{eastappToken}}
+
+### Download the captured failed-attempt photo — Owner or Head only
+GET {{baseUrl}}/api/v1/attendance/face-attempts/{{faceAttemptId}}/photo
+Authorization: Bearer {{eastappToken}}
+Accept: image/jpeg,image/png

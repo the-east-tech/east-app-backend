@@ -39,3 +39,7 @@ eastapp:
     region-code: MY
     language-code: en
     rating-cache-minutes: 60
+
+  reports:
+    time-zone: ${EASTAPP_REPORT_TIME_ZONE:Asia/Kuala_Lumpur}
+    daily-photo-minimum: 5

@@ -1,9 +1,9 @@
 package com.eastapp.backend.stock.service;
 
-import com.eastapp.backend.organisation.Tenant;
-import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
+import com.eastapp.backend.organisation.Tenant;
+import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.stock.StockMedia;
 import com.eastapp.backend.stock.StockMediaRepository;
 import com.eastapp.backend.stock.api.StockMediaUploadResponse;
@@ -43,11 +43,41 @@ public class StockMediaService {
             AuthenticatedUser principal,
             MultipartFile file
     ) {
+        return saveImage(principal, file, "SKU thumbnail");
+    }
+
+    @Transactional
+    public StockMediaUploadResponse saveReceivingPhoto(
+            AuthenticatedUser principal,
+            MultipartFile file
+    ) {
+        return saveImage(principal, file, "Receiving photo");
+    }
+
+    public StoredStockMedia loadSkuThumbnail(
+            AuthenticatedUser principal,
+            String storageKey
+    ) {
+        return loadImage(principal, storageKey, "SKU thumbnail");
+    }
+
+    public StoredStockMedia loadReceivingPhoto(
+            AuthenticatedUser principal,
+            String storageKey
+    ) {
+        return loadImage(principal, storageKey, "Receiving photo");
+    }
+
+    private StockMediaUploadResponse saveImage(
+            AuthenticatedUser principal,
+            MultipartFile file,
+            String label
+    ) {
         if (file == null || file.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "IMAGE_REQUIRED", "Take a SKU thumbnail photo first.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "IMAGE_REQUIRED", "Take a " + label.toLowerCase(Locale.ROOT) + " first.");
         }
         if (file.getSize() > MAX_IMAGE_BYTES) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "IMAGE_TOO_LARGE", "SKU thumbnail must not exceed 5 MB.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "IMAGE_TOO_LARGE", label + " must not exceed 5 MB.");
         }
 
         String contentType = normaliseContentType(file.getContentType());
@@ -56,19 +86,19 @@ public class StockMediaService {
         try {
             bytes = file.getBytes();
         } catch (IOException exception) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "IMAGE_READ_FAILED", "Unable to read the SKU thumbnail.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "IMAGE_READ_FAILED", "Unable to read the " + label.toLowerCase(Locale.ROOT) + ".");
         }
         if (bytes.length == 0 || bytes.length > MAX_IMAGE_BYTES) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IMAGE_SIZE", "SKU thumbnail must be between 1 byte and 5 MB.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IMAGE_SIZE", label + " must be between 1 byte and 5 MB.");
         }
 
         String detectedType = detectImageType(bytes);
         if (!ALLOWED_CONTENT_TYPES.contains(detectedType)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IMAGE_TYPE", "SKU thumbnail must be JPEG or PNG.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IMAGE_TYPE", label + " must be JPEG or PNG.");
         }
         if (!contentType.isBlank() && !contentType.equals("application/octet-stream")
                 && !contentType.equals(detectedType)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "IMAGE_TYPE_MISMATCH", "SKU thumbnail content does not match its file type.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "IMAGE_TYPE_MISMATCH", label + " content does not match its file type.");
         }
         contentType = detectedType;
 
@@ -80,16 +110,17 @@ public class StockMediaService {
         return new StockMediaUploadResponse(saved.getStorageKey(), saved.getContentType(), saved.getSizeBytes());
     }
 
-    public StoredStockMedia loadSkuThumbnail(
+    private StoredStockMedia loadImage(
             AuthenticatedUser principal,
-            String storageKey
+            String storageKey,
+            String label
     ) {
         if (storageKey == null || !STORAGE_KEY_PATTERN.matcher(storageKey).matches()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_MEDIA_KEY", "Invalid SKU thumbnail key.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_MEDIA_KEY", "Invalid " + label.toLowerCase(Locale.ROOT) + " key.");
         }
 
         StockMedia media = mediaRepository.findByTenant_IdAndStorageKey(principal.tenantId(), storageKey)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "MEDIA_NOT_FOUND", "SKU thumbnail was not found."));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "MEDIA_NOT_FOUND", label + " was not found."));
         return new StoredStockMedia(
                 new ByteArrayResource(media.getContentBytes()),
                 media.getContentType()

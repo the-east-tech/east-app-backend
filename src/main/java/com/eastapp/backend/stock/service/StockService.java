@@ -25,6 +25,8 @@ import com.eastapp.backend.stock.StockSupplierRepository;
 import com.eastapp.backend.stock.StockTag;
 import com.eastapp.backend.stock.StockTagRepository;
 import com.eastapp.backend.stock.api.CopyStockSkusRequest;
+import com.eastapp.backend.stock.api.BulkReviewStockCountsResponse;
+import com.eastapp.backend.stock.api.BulkReviewStockCountsRequest;
 import com.eastapp.backend.stock.api.CopyStockSkusResponse;
 import com.eastapp.backend.stock.api.CreateStockCountRequest;
 import com.eastapp.backend.stock.api.CreateStockReceivingItemRequest;
@@ -568,6 +570,7 @@ public class StockService {
         StockSku sku = sku(skuId, principal.tenantId());
         String oldName = sku.getName();
         BigDecimal oldBalance = sku.getCurrentBalanceValue();
+        String oldPhotoPath = sku.getThumbnailMedia().getStorageKey();
         if (!oldName.equalsIgnoreCase(request.name().trim())
                 && skuRepository.existsByTenant_IdAndNameIgnoreCase(principal.tenantId(), request.name().trim())) {
             throw conflict("STOCK_SKU_EXISTS", "This SKU already exists.");
@@ -589,6 +592,7 @@ public class StockService {
         auditRepository.save(new StockAuditEntry(
                 sku.getTenant(), "SKU", "Edited SKU", sku.getId(), sku.getName(), principal, "")
                 .addChange("Name", oldName, sku.getName())
+                .addChange("Photo", oldPhotoPath, sku.getThumbnailMedia().getStorageKey())
                 .addChange("Current Balance", oldBalance, sku.getCurrentBalanceValue()));
         return StockSkuResponse.from(sku);
     }
@@ -670,11 +674,77 @@ public class StockService {
     }
 
     @Transactional
+    public BulkReviewStockCountsResponse bulkReviewCounts(
+            AuthenticatedUser principal,
+            BulkReviewStockCountsRequest request
+    ) {
+        List<UUID> requestedIds = request.submissionIds();
+        LinkedHashSet<UUID> uniqueIds = new LinkedHashSet<>(requestedIds);
+        if (uniqueIds.size() != requestedIds.size()) {
+            throw badRequest(
+                    "STOCK_COUNT_DUPLICATE_REVIEW_ID",
+                    "Each daily count can be selected only once."
+            );
+        }
+
+        List<StockCountSubmission> found = countRepository.findAllByTenant_IdAndIdIn(
+                principal.tenantId(),
+                List.copyOf(uniqueIds)
+        );
+        if (found.size() != uniqueIds.size()) {
+            throw notFound(
+                    "STOCK_COUNT_NOT_FOUND",
+                    "One or more selected daily counts were not found."
+            );
+        }
+
+        Map<UUID, StockCountSubmission> byId = new LinkedHashMap<>();
+        found.forEach(item -> byId.put(item.getId(), item));
+        List<StockCountSubmission> ordered = requestedIds.stream()
+                .map(byId::get)
+                .toList();
+
+        for (StockCountSubmission submission : ordered) {
+            if (!"Pending Review".equals(submission.getReviewStatus())) {
+                throw conflict(
+                        "STOCK_COUNT_ALREADY_REVIEWED",
+                        "At least one selected daily count has already been reviewed. No records were changed."
+                );
+            }
+        }
+
+        UserAccount reviewer = actor(principal);
+        String note = request.note() == null ? "" : request.note().trim();
+        List<StockCountSubmissionResponse> responses = new ArrayList<>();
+        for (StockCountSubmission submission : ordered) {
+            String previous = submission.getReviewStatus();
+            submission.review(request.status(), note, reviewer);
+            auditRepository.save(new StockAuditEntry(
+                    submission.getTenant(),
+                    "Stock Count",
+                    "Bulk reviewed daily count",
+                    submission.getSku().getId(),
+                    submission.getSku().getName(),
+                    principal,
+                    note
+            ).addChange("Review Status", previous, request.status()));
+            responses.add(StockCountSubmissionResponse.from(submission));
+        }
+
+        return new BulkReviewStockCountsResponse(
+                responses.size(),
+                List.copyOf(responses)
+        );
+    }
+
+    @Transactional
     public StockReceivingResponse createReceiving(
             AuthenticatedUser principal,
             CreateStockReceivingRequest request
     ) {
         StockSupplier supplier = supplier(request.supplierId(), principal.tenantId());
+        requireReceivingPhoto(principal.tenantId(), request.invoicePhotoName(), "Invoice");
+        requireReceivingPhoto(principal.tenantId(), request.goodsPhotoName(), "Goods received");
         UserAccount actor = actor(principal);
         StockReceiving receiving = new StockReceiving(
                 supplier.getTenant(), supplier, actor, request.capturedAt(),
@@ -903,6 +973,22 @@ public class StockService {
         return result;
     }
 
+
+    private void requireReceivingPhoto(UUID tenantId, String storageKey, String label) {
+        String value = storageKey == null ? "" : storageKey.trim();
+        if (value.isEmpty()) {
+            throw badRequest(
+                    "STOCK_RECEIVING_PHOTO_REQUIRED",
+                    label + " photo is required. Capture and upload it first."
+            );
+        }
+        if (mediaRepository.findByTenant_IdAndStorageKey(tenantId, value).isEmpty()) {
+            throw badRequest(
+                    "STOCK_RECEIVING_PHOTO_NOT_FOUND",
+                    label + " photo was not found. Capture it again."
+            );
+        }
+    }
 
     private StockMedia skuThumbnail(AuthenticatedUser principal, String storageKey) {
         String value = storageKey == null ? "" : storageKey.trim();
