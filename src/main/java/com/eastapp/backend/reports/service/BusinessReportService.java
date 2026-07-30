@@ -261,18 +261,18 @@ public class BusinessReportService {
         ).orElseGet(() -> new SalesReportDetail(
                 report.getId(),
                 principal.tenantId(),
-                request.salesRm(),
-                request.subTotalRm(),
+                request.cashTotalRm(),
                 request.cashReceivedBy(),
-                request.pandaSalesRm(),
-                request.staffCount()
+                request.foodDeliverySalesRm(),
+                request.ewalletTotalRm(),
+                request.staffOnDuty()
         ));
         detail.update(
-                request.salesRm(),
-                request.subTotalRm(),
+                request.cashTotalRm(),
                 request.cashReceivedBy(),
-                request.pandaSalesRm(),
-                request.staffCount()
+                request.foodDeliverySalesRm(),
+                request.ewalletTotalRm(),
+                request.staffOnDuty()
         );
         salesRepository.save(detail);
         return toSalesResponse(report, userNames(principal.tenantId()));
@@ -585,11 +585,11 @@ public class BusinessReportService {
             if (report.getReportType() == BusinessReportType.SALES) {
                 SalesReportDetail detail = sales.get(report.getId());
                 BigDecimal voidAmount = voidTotals.getOrDefault(report.getId(), BigDecimal.ZERO);
-                amount = detail == null ? BigDecimal.ZERO : detail.grossSalesRm().subtract(voidAmount);
+                amount = detail == null ? BigDecimal.ZERO : detail.grossSalesRm();
                 evidenceCount = voidBillRepository
                         .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(principal.tenantId(), report.getId())
                         .size();
-                summary = "Net sales RM " + money(amount) + " · " + evidenceCount + " void bill(s)";
+                summary = "Total sales RM " + money(amount) + " · " + evidenceCount + " void bill(s)";
             } else if (report.getReportType() == BusinessReportType.WASTE) {
                 WasteReportDetail detail = waste.get(report.getId());
                 amount = detail == null ? BigDecimal.ZERO : detail.estimatedLossRm();
@@ -623,7 +623,7 @@ public class BusinessReportService {
             ReviewBusinessReportRequest request
     ) {
         requireReviewer(principal);
-        BusinessReport report = reportRepository.findByIdAndTenantId(reportId, principal.tenantId())
+        BusinessReport report = reportRepository.findByIdAndTenantIdForUpdate(reportId, principal.tenantId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "REPORT_NOT_FOUND", "Report was not found."));
         if (report.getReportType() == BusinessReportType.COMPLAINT) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "REPORT_REVIEW_NOT_REQUIRED", "Complaints use Open and Resolved status instead of approval.");
@@ -648,7 +648,7 @@ public class BusinessReportService {
                     exception.getMessage()
             );
         }
-        reportRepository.save(report);
+        reportRepository.saveAndFlush(report);
         return approvalsForSingle(report, userNames(principal.tenantId()));
     }
 
@@ -670,12 +670,12 @@ public class BusinessReportService {
         BigDecimal voidAmount = todayReport == null
                 ? BigDecimal.ZERO
                 : voidTotals.getOrDefault(todayReport.getId(), BigDecimal.ZERO);
-        BigDecimal net = gross.subtract(voidAmount).max(BigDecimal.ZERO);
+        BigDecimal net = gross;
         int staffCount = todayDetail == null ? 0 : todayDetail.getStaffCount();
         BigDecimal perStaff = staffCount == 0
                 ? BigDecimal.ZERO
                 : net.divide(BigDecimal.valueOf(staffCount), 2, RoundingMode.HALF_UP);
-        BigDecimal voidRate = percentage(voidAmount, gross);
+        BigDecimal voidRate = percentage(voidAmount, gross.add(voidAmount));
 
         BigDecimal currentPeriod = netSalesTotal(reports, details, voidTotals);
         BigDecimal previousPeriod = netSalesTotal(previousReports, previousDetails, previousVoids);
@@ -897,7 +897,7 @@ public class BusinessReportService {
             SalesReportDetail detail = sales.get(report.getId());
             if (detail == null) continue;
             BigDecimal voidAmount = voids.getOrDefault(report.getId(), BigDecimal.ZERO);
-            netByDate.merge(report.getReportDate(), detail.grossSalesRm().subtract(voidAmount).max(BigDecimal.ZERO), BigDecimal::add);
+            netByDate.merge(report.getReportDate(), detail.grossSalesRm().max(BigDecimal.ZERO), BigDecimal::add);
             voidByDate.merge(report.getReportDate(), voidAmount, BigDecimal::add);
         }
         for (BusinessReport report : wasteReports) {
@@ -921,8 +921,9 @@ public class BusinessReportService {
     }
 
     private SalesReportResponse toSalesResponse(BusinessReport report, Map<UUID, String> names) {
-        SalesReportDetail detail = salesRepository.findByReportIdAndTenantId(report.getId(), report.getTenantId())
-                .orElse(null);
+        SalesReportDetail detail = salesRepository.findByReportIdAndTenantId(
+                report.getId(), report.getTenantId()
+        ).orElse(null);
         List<SalesVoidBill> voidBills = voidBillRepository
                 .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(report.getTenantId(), report.getId());
         Map<UUID, ReportMedia> media = mediaById(
@@ -932,33 +933,31 @@ public class BusinessReportService {
         List<VoidBillResponse> voidResponses = voidBills.stream()
                 .map(item -> toVoidBillResponse(item, media.get(item.getPhotoMediaId()), names))
                 .toList();
-        BigDecimal sales = detail == null ? BigDecimal.ZERO : detail.getSalesRm();
-        BigDecimal subTotal = detail == null ? BigDecimal.ZERO : detail.getSubTotalRm();
+        BigDecimal cashTotal = detail == null ? BigDecimal.ZERO : detail.getSubTotalRm();
         String cashReceivedBy = detail == null ? "" : detail.getCashReceivedBy();
-        BigDecimal pandaSales = detail == null ? BigDecimal.ZERO : detail.getPandaSalesRm();
-        BigDecimal gross = sales.add(pandaSales);
+        BigDecimal foodDelivery = detail == null ? BigDecimal.ZERO : detail.getPandaSalesRm();
+        BigDecimal ewalletTotal = detail == null ? BigDecimal.ZERO : detail.getEwalletTotalRm();
+        BigDecimal totalSales = detail == null ? BigDecimal.ZERO : detail.getSalesRm();
         BigDecimal voidTotal = voidBills.stream()
                 .map(SalesVoidBill::getAmountRm)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal net = gross.subtract(voidTotal).max(BigDecimal.ZERO);
-        int staffCount = detail == null ? 0 : detail.getStaffCount();
-        BigDecimal salesPerStaff = staffCount == 0
+        int staffOnDuty = detail == null ? 0 : detail.getStaffCount();
+        BigDecimal salesPerStaff = staffOnDuty == 0
                 ? BigDecimal.ZERO
-                : net.divide(BigDecimal.valueOf(staffCount), 2, RoundingMode.HALF_UP);
+                : totalSales.divide(BigDecimal.valueOf(staffOnDuty), 2, RoundingMode.HALF_UP);
         return new SalesReportResponse(
                 report.getId(),
                 report.getReportDate(),
                 report.getWorkflowStatus(),
-                moneyValue(sales),
-                moneyValue(subTotal),
+                moneyValue(cashTotal),
                 cashReceivedBy,
-                moneyValue(pandaSales),
-                moneyValue(gross),
+                moneyValue(foodDelivery),
+                moneyValue(ewalletTotal),
+                moneyValue(totalSales),
                 moneyValue(voidTotal),
-                moneyValue(net),
-                staffCount,
+                staffOnDuty,
                 moneyValue(salesPerStaff),
-                percentValue(percentage(voidTotal, gross)),
+                percentValue(percentage(voidTotal, totalSales.add(voidTotal))),
                 userName(report.getSubmittedByUserId(), names),
                 report.getSubmittedAt(),
                 userNameNullable(report.getReviewedByUserId(), names),
@@ -968,25 +967,11 @@ public class BusinessReportService {
     }
 
     private SalesReportResponse emptySales(LocalDate date) {
+        BigDecimal zero = BigDecimal.ZERO.setScale(2);
         return new SalesReportResponse(
-                null,
-                date,
-                ReportWorkflowStatus.DRAFT,
-                BigDecimal.ZERO.setScale(2),
-                BigDecimal.ZERO.setScale(2),
-                "",
-                BigDecimal.ZERO.setScale(2),
-                BigDecimal.ZERO.setScale(2),
-                BigDecimal.ZERO.setScale(2),
-                BigDecimal.ZERO.setScale(2),
-                0,
-                BigDecimal.ZERO.setScale(2),
-                BigDecimal.ZERO.setScale(1),
-                null,
-                null,
-                null,
-                null,
-                List.of()
+                null, date, ReportWorkflowStatus.DRAFT,
+                zero, "", zero, zero, zero, zero, 0, zero,
+                BigDecimal.ZERO.setScale(1), null, null, null, null, List.of()
         );
     }
 
@@ -1114,10 +1099,10 @@ public class BusinessReportService {
             BigDecimal voidTotal = voidBillRepository
                     .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(report.getTenantId(), report.getId())
                     .stream().map(SalesVoidBill::getAmountRm).reduce(BigDecimal.ZERO, BigDecimal::add);
-            amount = detail == null ? BigDecimal.ZERO : detail.grossSalesRm().subtract(voidTotal).max(BigDecimal.ZERO);
+            amount = detail == null ? BigDecimal.ZERO : detail.grossSalesRm();
             evidenceCount = voidBillRepository
                     .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(report.getTenantId(), report.getId()).size();
-            summary = "Net sales RM " + money(amount);
+            summary = "Total sales RM " + money(amount);
         } else if (report.getReportType() == BusinessReportType.WASTE) {
             WasteReportDetail detail = wasteRepository.findByReportIdAndTenantId(report.getId(), report.getTenantId()).orElse(null);
             if (detail != null) {
@@ -1199,9 +1184,7 @@ public class BusinessReportService {
         for (BusinessReport report : reports) {
             SalesReportDetail detail = details.get(report.getId());
             if (detail == null) continue;
-            total = total.add(detail.grossSalesRm()
-                    .subtract(voidTotals.getOrDefault(report.getId(), BigDecimal.ZERO))
-                    .max(BigDecimal.ZERO));
+            total = total.add(detail.grossSalesRm());
         }
         return total;
     }

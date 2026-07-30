@@ -1,6 +1,10 @@
 package com.eastapp.backend.reports;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -9,6 +13,13 @@ import java.util.UUID;
 
 public interface BusinessReportRepository extends JpaRepository<BusinessReport, UUID> {
     Optional<BusinessReport> findByIdAndTenantId(UUID id, UUID tenantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select report from BusinessReport report where report.id = :id and report.tenantId = :tenantId")
+    Optional<BusinessReport> findByIdAndTenantIdForUpdate(
+            @Param("id") UUID id,
+            @Param("tenantId") UUID tenantId
+    );
 
     Optional<BusinessReport> findByTenantIdAndReportTypeAndReportDate(
             UUID tenantId,

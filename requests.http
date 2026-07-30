@@ -646,11 +646,11 @@ Content-Type: application/json
 
 {
   "reportDate": "{{reportDate}}",
-  "salesRm": 1200.00,
-  "subTotalRm": 420.00,
+  "cashTotalRm": 1200.00,
   "cashReceivedBy": "KK",
-  "pandaSalesRm": 450.00,
-  "staffCount": 6
+  "foodDeliverySalesRm": 450.00,
+  "ewalletTotalRm": 380.00,
+  "staffOnDuty": 6
 }
 
 ### Add Void Bill — any active user; photo key must belong to the logged-in uploader
