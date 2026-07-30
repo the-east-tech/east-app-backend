@@ -40,6 +40,7 @@ public class GooglePlacesService {
     private final JsonMapper jsonMapper;
     private final HttpClient httpClient;
     private final Map<String, CachedDetails> detailsCache = new ConcurrentHashMap<>();
+    private final Map<String, Object> detailsCacheLocks = new ConcurrentHashMap<>();
 
     public GooglePlacesService(
             GooglePlacesProperties properties,
@@ -91,12 +92,44 @@ public class GooglePlacesService {
 
     public GooglePlaceDetails placeDetails(String placeId) {
         String normalisedPlaceId = requireText(placeId, "placeId");
-        CachedDetails cached = detailsCache.get(normalisedPlaceId);
-        Instant now = Instant.now();
-        if (cached != null && cached.expiresAt().isAfter(now)) {
-            return cached.details();
+        GooglePlaceDetails cached = cachedDetails(normalisedPlaceId, Instant.now());
+        if (cached != null) {
+            return cached;
         }
 
+        Object cacheLock = detailsCacheLocks.computeIfAbsent(
+                normalisedPlaceId,
+                ignored -> new Object()
+        );
+        synchronized (cacheLock) {
+            Instant now = Instant.now();
+            cached = cachedDetails(normalisedPlaceId, now);
+            if (cached != null) {
+                return cached;
+            }
+
+            GooglePlaceDetails details = fetchPlaceDetails(normalisedPlaceId);
+            detailsCache.put(normalisedPlaceId, new CachedDetails(
+                    details,
+                    Instant.now().plus(Duration.ofMinutes(properties.getRatingCacheMinutes()))
+            ));
+            return details;
+        }
+    }
+
+    private GooglePlaceDetails cachedDetails(String placeId, Instant now) {
+        CachedDetails cached = detailsCache.get(placeId);
+        if (cached == null) {
+            return null;
+        }
+        if (!cached.expiresAt().isAfter(now)) {
+            detailsCache.remove(placeId, cached);
+            return null;
+        }
+        return cached.details();
+    }
+
+    private GooglePlaceDetails fetchPlaceDetails(String normalisedPlaceId) {
         String encoded = URLEncoder.encode(normalisedPlaceId, StandardCharsets.UTF_8);
         URI uri = URI.create(PLACE_DETAILS_BASE + encoded
                 + "?languageCode=" + URLEncoder.encode(properties.getLanguageCode(), StandardCharsets.UTF_8)
@@ -122,7 +155,7 @@ public class GooglePlacesService {
                 ? root.path("userRatingCount").asInt()
                 : null;
 
-        GooglePlaceDetails details = new GooglePlaceDetails(
+        return new GooglePlaceDetails(
                 resolvedId,
                 displayName,
                 formattedAddress,
@@ -132,11 +165,6 @@ public class GooglePlacesService {
                 rating,
                 userRatingCount
         );
-        detailsCache.put(normalisedPlaceId, new CachedDetails(
-                details,
-                now.plus(Duration.ofMinutes(properties.getRatingCacheMinutes()))
-        ));
-        return details;
     }
 
 

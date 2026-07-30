@@ -121,12 +121,8 @@ The current development shortcut keeps the Google Places server key in one Java 
 src/main/java/com/eastapp/backend/places/config/GooglePlacesProperties.java
 ```
 
-Replace:
-
-```java
-private static final String HARDCODED_API_KEY =
-        "PASTE_GOOGLE_MAPS_API_KEY_HERE";
-```
+The development key is already configured in `GooglePlacesProperties.java`.
+Do not replace it with a placeholder when repackaging the source.
 
 Enable **Places API (New)** for that key.
 

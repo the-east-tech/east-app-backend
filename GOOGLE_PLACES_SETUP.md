@@ -8,13 +8,8 @@ Open:
 src/main/java/com/eastapp/backend/places/config/GooglePlacesProperties.java
 ```
 
-Replace:
-
-```java
-private static final String HARDCODED_API_KEY = "PASTE_GOOGLE_MAPS_API_KEY_HERE";
-```
-
-with the real key.
+The development key is already configured in this file.
+Do not replace it with a placeholder when repackaging the source.
 
 Enable these APIs for the same Google Cloud project and key:
 
