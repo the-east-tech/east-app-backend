@@ -4,8 +4,8 @@ Backend API for **EastApp**, a multi-business operations application covering id
 
 ## Current development model
 
-- Existing database data is retained
-- Flyway migrations are append-only from `V2` onward; do not rewrite an applied migration
+- `v052` is a deliberate clean database baseline; existing development data must be deleted once before first startup
+- After this reset, `V1__create_eastapp_schema.sql` is immutable and every later schema change must use `V2+`
 - No seeded tenants or users
 - Initial Setup creates the first tenant and first `OWNER`
 - Each tenant represents one independent business location
@@ -273,16 +273,14 @@ No Redis or general backend data cache is added at this stage.
 
 ## Database and Flyway
 
-EastApp now retains its database:
+EastApp `v052` consolidates the current development schema into one clean baseline:
 
-- `V1__create_eastapp_schema.sql` is frozen
-- Add every schema change as a new append-only Flyway migration
-- Never edit or delete a migration that has already been applied
+- `V1__create_eastapp_schema.sql` contains the complete current schema
+- Delete/reset the old development database once before first startup with `v052`
+- After that successful reset, freeze V1 and add every later schema change as a new append-only `V2+` migration
 - Never enable `EASTAPP_DATABASE_RESET_ON_START` in normal local or Railway operation
 - Do not seed tenants, owners or employees in Flyway
-- Back up the database before destructive maintenance
-
-`V2__create_user_point_adjustments.sql` adds the immutable point ledger without deleting existing data.
+- Back up any database before destructive maintenance
 
 ## Railway deployment
 
@@ -336,8 +334,7 @@ src/main/java/com/eastapp/backend/
 src/main/resources/
 ├── application.yaml
 └── db/migration/
-    ├── V1__create_eastapp_schema.sql
-    └── V2__create_user_point_adjustments.sql
+    └── V1__create_eastapp_schema.sql
 
 scripts/
 ├── run-local.sh
@@ -374,9 +371,9 @@ Remove obsolete bootstrap documentation and scripts. Initial Setup is now the on
 
 ## Business Report module
 
-Flyway `V3__create_business_reports.sql` adds a tenant-scoped reporting workflow without changing V1 or V2. It provides five Report cards in Flutter: Sales, Inventory Intelligence, Waste, Daily Photos and Complaints.
+The clean V1 baseline includes the tenant-scoped reporting workflow used by the five Flutter Report cards: Sales, Inventory Intelligence, Waste, Daily Photos and Complaints.
 
-- Sales is one report per business/day. Sales, Sub-Total, Cash Received By, Panda Sales and Team Size are entered; Reported Total, Void Total, Net Sales, Sales per Staff and Void Rate are derived.
+- Sales is one report per business/day. Cash Total, Food Delivery Sales, eWallet Total, Cash Received By and Staff on Duty are compulsory. Total Sales, payment mix, Void Total, Void Exposure and Sales per Staff are derived. Void Bills are optional evidence added before submission. A submitted report is read-only unless Owner or Head rejects it.
 - Void Bills are append-only evidence entries with a compulsory photo, bill number, reason and amount. Bill numbers are unique per Sales report without case sensitivity.
 - Inventory Intelligence is calculated from active SKU balances, limits and price ranges; no duplicate inventory form is stored.
 - Waste records include photo evidence and estimated loss, then enter the approval workflow.
@@ -396,6 +393,6 @@ eastapp:
 
 ## V4 attendance evidence and atomic Daily Count review
 
-`V4__create_attendance_face_attempts.sql` is append-only and preserves the existing database. It stores each failed face-verification attempt with its GPS evidence, calculated distance from the active business, failure reason, device metadata and the captured image when available. Owner and Head users can review these records through the attendance audit API.
+The clean V1 baseline includes `attendance_face_attempts`. It stores each failed face-verification attempt with its GPS evidence, calculated distance from the active business, failure reason, device metadata and the captured image when available. Owner and Head users can review these records through the attendance audit API.
 
 Daily Count bulk review now uses one transactional endpoint, `PATCH /api/v1/stock/counts/bulk-review`. The service validates every selected record before changing any of them, so an invalid or previously reviewed record rolls back the whole batch.

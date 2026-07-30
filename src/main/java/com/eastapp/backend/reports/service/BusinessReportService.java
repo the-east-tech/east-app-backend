@@ -318,6 +318,18 @@ public class BusinessReportService {
     }
 
     @Transactional
+    public SalesReportResponse submitSales(
+            AuthenticatedUser principal,
+            UpsertSalesReportRequest request
+    ) {
+        SalesReportResponse saved = upsertSales(principal, request);
+        if (saved.id() == null) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SALES_REPORT_NOT_CREATED", "The sales report could not be created.");
+        }
+        return submitSales(principal, saved.id());
+    }
+
+    @Transactional
     public SalesReportResponse submitSales(AuthenticatedUser principal, UUID reportId) {
         requireManagement(principal);
         BusinessReport report = requireReport(principal, reportId, BusinessReportType.SALES);
@@ -665,13 +677,20 @@ public class BusinessReportService {
                 .filter(report -> report.getReportDate().equals(today))
                 .findFirst()
                 .orElse(null);
-        SalesReportDetail todayDetail = todayReport == null ? null : details.get(todayReport.getId());
-        BigDecimal gross = todayDetail == null ? BigDecimal.ZERO : todayDetail.grossSalesRm();
-        BigDecimal voidAmount = todayReport == null
-                ? BigDecimal.ZERO
-                : voidTotals.getOrDefault(todayReport.getId(), BigDecimal.ZERO);
+        BigDecimal gross = reports.stream()
+                .map(report -> details.get(report.getId()))
+                .filter(Objects::nonNull)
+                .map(SalesReportDetail::grossSalesRm)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal voidAmount = reports.stream()
+                .map(report -> voidTotals.getOrDefault(report.getId(), BigDecimal.ZERO))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal net = gross;
-        int staffCount = todayDetail == null ? 0 : todayDetail.getStaffCount();
+        int staffCount = reports.stream()
+                .map(report -> details.get(report.getId()))
+                .filter(Objects::nonNull)
+                .mapToInt(SalesReportDetail::getStaffCount)
+                .sum();
         BigDecimal perStaff = staffCount == 0
                 ? BigDecimal.ZERO
                 : net.divide(BigDecimal.valueOf(staffCount), 2, RoundingMode.HALF_UP);

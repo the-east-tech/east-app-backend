@@ -20,4 +20,4 @@ No `.env.local`, shell export, Railway variable, or Google Business Profile OAut
 
 Google Business Location remains compulsory for Initial Setup and every tenant. The saved business coordinates are an attendance reference point only. Staff can Clock In/Out from any distance. EastApp stores the captured address, GPS accuracy, business-location snapshot and calculated distance from the office.
 
-EastApp now preserves the database. Keep applied Flyway migrations immutable and add each schema change as a new migration.
+EastApp v052 is a deliberate clean Flyway baseline. Reset the old development database once, then keep the new V1 immutable and add each later schema change as V2+.

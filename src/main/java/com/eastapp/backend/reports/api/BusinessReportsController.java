@@ -97,6 +97,15 @@ public class BusinessReportsController {
                 .body(reportService.addVoidBill(principal, request));
     }
 
+    @PostMapping("/sales/submit")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR')")
+    SalesReportResponse submitSalesDirect(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody UpsertSalesReportRequest request
+    ) {
+        return reportService.submitSales(principal, request);
+    }
+
     @PostMapping("/sales/{reportId}/submit")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR')")
     SalesReportResponse submitSales(

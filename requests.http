@@ -859,3 +859,18 @@ Authorization: Bearer {{eastappToken}}
 GET {{baseUrl}}/api/v1/attendance/face-attempts/{{faceAttemptId}}/photo
 Authorization: Bearer {{eastappToken}}
 Accept: image/jpeg,image/png
+
+
+### Submit Daily Sales Directly (no draft step)
+POST {{baseUrl}}/api/v1/reports/sales/submit
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "reportDate": "2026-07-31",
+  "cashTotalRm": 1000.00,
+  "cashReceivedBy": "Jenssen",
+  "foodDeliverySalesRm": 250.00,
+  "ewalletTotalRm": 400.00,
+  "staffOnDuty": 10
+}
