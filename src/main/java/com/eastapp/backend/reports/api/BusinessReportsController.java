@@ -69,6 +69,19 @@ public class BusinessReportsController {
                 .body(media.resource());
     }
 
+    @GetMapping("/sales/history")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR')")
+    List<SalesReportResponse> salesHistory(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Integer days
+    ) {
+        return reportService.salesHistory(principal, from, to, days);
+    }
+
     @GetMapping("/sales")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR')")
     SalesReportResponse sales(

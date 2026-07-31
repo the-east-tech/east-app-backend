@@ -1,6 +1,9 @@
 package com.eastapp.backend.reports.service;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.attendance.AttendanceEvent;
+import com.eastapp.backend.attendance.AttendanceEventRepository;
+import com.eastapp.backend.attendance.AttendanceEventType;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.UserAccount;
@@ -33,6 +36,7 @@ import com.eastapp.backend.reports.api.DailyPhotoItemResponse;
 import com.eastapp.backend.reports.api.DailyPhotoOverviewResponse;
 import com.eastapp.backend.reports.api.DailyPhotoReportResponse;
 import com.eastapp.backend.reports.api.InventoryIntelligenceResponse;
+import com.eastapp.backend.reports.api.PeriodInventoryHealthResponse;
 import com.eastapp.backend.reports.api.InventoryRiskResponse;
 import com.eastapp.backend.reports.api.ReportDashboardResponse;
 import com.eastapp.backend.reports.api.ReportTrendPointResponse;
@@ -44,7 +48,10 @@ import com.eastapp.backend.reports.api.UpsertSalesReportRequest;
 import com.eastapp.backend.reports.api.VoidBillResponse;
 import com.eastapp.backend.reports.api.WasteOverviewResponse;
 import com.eastapp.backend.reports.api.WasteReportResponse;
+import com.eastapp.backend.reports.api.WorkforceIntelligenceResponse;
 import com.eastapp.backend.reports.config.ReportProperties;
+import com.eastapp.backend.stock.StockCountSubmission;
+import com.eastapp.backend.stock.StockCountSubmissionRepository;
 import com.eastapp.backend.stock.StockSku;
 import com.eastapp.backend.stock.StockSkuRepository;
 import org.springframework.http.HttpStatus;
@@ -53,11 +60,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,6 +95,8 @@ public class BusinessReportService {
     private final ReportMediaRepository mediaRepository;
     private final ReportMediaService reportMediaService;
     private final UserAccountRepository userRepository;
+    private final AttendanceEventRepository attendanceRepository;
+    private final StockCountSubmissionRepository stockCountRepository;
     private final StockSkuRepository skuRepository;
     private final ReportProperties properties;
 
@@ -99,6 +110,8 @@ public class BusinessReportService {
             ReportMediaRepository mediaRepository,
             ReportMediaService reportMediaService,
             UserAccountRepository userRepository,
+            AttendanceEventRepository attendanceRepository,
+            StockCountSubmissionRepository stockCountRepository,
             StockSkuRepository skuRepository,
             ReportProperties properties
     ) {
@@ -111,6 +124,8 @@ public class BusinessReportService {
         this.mediaRepository = mediaRepository;
         this.reportMediaService = reportMediaService;
         this.userRepository = userRepository;
+        this.attendanceRepository = attendanceRepository;
+        this.stockCountRepository = stockCountRepository;
         this.skuRepository = skuRepository;
         this.properties = properties;
     }
@@ -128,6 +143,8 @@ public class BusinessReportService {
                     today,
                     days,
                     false,
+                    null,
+                    null,
                     null,
                     null,
                     null,
@@ -166,6 +183,17 @@ public class BusinessReportService {
                 previousSalesReports,
                 previousSales,
                 previousVoids
+        );
+        PeriodInventoryHealthResponse periodInventory = periodInventoryHealth(
+                principal.tenantId(), from, today
+        );
+        WorkforceIntelligenceResponse workforce = workforceIntelligence(
+                principal.tenantId(),
+                from,
+                today,
+                periodSalesReports,
+                periodSales,
+                netSalesTotal(periodSalesReports, periodSales, periodVoids)
         );
         InventoryIntelligenceResponse inventory = inventoryIntelligence(principal.tenantId());
 
@@ -210,6 +238,8 @@ public class BusinessReportService {
                 days,
                 true,
                 salesOverview,
+                periodInventory,
+                workforce,
                 inventory,
                 wasteOverview,
                 dailyOverview,
@@ -231,6 +261,34 @@ public class BusinessReportService {
             return emptySales(reportDate);
         }
         return toSalesResponse(optional.get(), userNames(principal.tenantId()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<SalesReportResponse> salesHistory(
+            AuthenticatedUser principal,
+            LocalDate from,
+            LocalDate to,
+            Integer requestedDays
+    ) {
+        requireManagement(principal);
+        DateRange range;
+        if (from == null && to == null && requestedDays != null) {
+            int days = Math.max(1, Math.min(requestedDays, 30));
+            LocalDate resolvedTo = today();
+            range = new DateRange(resolvedTo.minusDays(days - 1L), resolvedTo);
+        } else {
+            range = dateRange(from, to, 30);
+        }
+        Map<UUID, String> names = userNames(principal.tenantId());
+        return reportRepository
+                .findAllByTenantIdAndReportTypeAndReportDateBetweenOrderByReportDateAscCreatedAtAsc(
+                        principal.tenantId(), BusinessReportType.SALES, range.from(), range.to()
+                ).stream()
+                .filter(report -> report.getWorkflowStatus() != ReportWorkflowStatus.DRAFT)
+                .sorted(Comparator.comparing(BusinessReport::getReportDate).reversed()
+                        .thenComparing(BusinessReport::getCreatedAt, Comparator.reverseOrder()))
+                .map(report -> toSalesResponse(report, names))
+                .toList();
     }
 
     @Transactional
@@ -597,7 +655,7 @@ public class BusinessReportService {
             if (report.getReportType() == BusinessReportType.SALES) {
                 SalesReportDetail detail = sales.get(report.getId());
                 BigDecimal voidAmount = voidTotals.getOrDefault(report.getId(), BigDecimal.ZERO);
-                amount = detail == null ? BigDecimal.ZERO : detail.grossSalesRm();
+                amount = detail == null ? BigDecimal.ZERO : detail.recognisedSalesRm();
                 evidenceCount = voidBillRepository
                         .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(principal.tenantId(), report.getId())
                         .size();
@@ -677,24 +735,55 @@ public class BusinessReportService {
                 .filter(report -> report.getReportDate().equals(today))
                 .findFirst()
                 .orElse(null);
-        BigDecimal gross = reports.stream()
+        BigDecimal grossSales = reports.stream()
                 .map(report -> details.get(report.getId()))
                 .filter(Objects::nonNull)
                 .map(SalesReportDetail::grossSalesRm)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalSales = reports.stream()
+                .map(report -> details.get(report.getId()))
+                .filter(Objects::nonNull)
+                .map(SalesReportDetail::recognisedSalesRm)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal grossFoodDelivery = reports.stream()
+                .map(report -> details.get(report.getId()))
+                .filter(Objects::nonNull)
+                .map(SalesReportDetail::grossFoodDeliverySalesRm)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal netFoodDelivery = reports.stream()
+                .map(report -> details.get(report.getId()))
+                .filter(Objects::nonNull)
+                .map(SalesReportDetail::netFoodDeliverySalesRm)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal platformCommission = reports.stream()
+                .map(report -> details.get(report.getId()))
+                .filter(Objects::nonNull)
+                .map(SalesReportDetail::estimatedPlatformCommissionRm)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal voidAmount = reports.stream()
                 .map(report -> voidTotals.getOrDefault(report.getId(), BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal net = gross;
-        int staffCount = reports.stream()
+        int staffDays = reports.stream()
                 .map(report -> details.get(report.getId()))
                 .filter(Objects::nonNull)
                 .mapToInt(SalesReportDetail::getStaffCount)
                 .sum();
-        BigDecimal perStaff = staffCount == 0
+        int reportedDays = (int) reports.stream()
+                .filter(report -> details.containsKey(report.getId()))
+                .map(BusinessReport::getReportDate)
+                .distinct()
+                .count();
+        BigDecimal averageStaff = reportedDays == 0
                 ? BigDecimal.ZERO
-                : net.divide(BigDecimal.valueOf(staffCount), 2, RoundingMode.HALF_UP);
-        BigDecimal voidRate = percentage(voidAmount, gross.add(voidAmount));
+                : BigDecimal.valueOf(staffDays)
+                        .divide(BigDecimal.valueOf(reportedDays), 1, RoundingMode.HALF_UP);
+        BigDecimal perStaffDay = staffDays == 0
+                ? BigDecimal.ZERO
+                : totalSales.divide(BigDecimal.valueOf(staffDays), 2, RoundingMode.HALF_UP);
+        BigDecimal averageDailySales = reportedDays == 0
+                ? BigDecimal.ZERO
+                : totalSales.divide(BigDecimal.valueOf(reportedDays), 2, RoundingMode.HALF_UP);
+        BigDecimal voidRate = percentage(voidAmount, totalSales.add(voidAmount));
 
         BigDecimal currentPeriod = netSalesTotal(reports, details, voidTotals);
         BigDecimal previousPeriod = netSalesTotal(previousReports, previousDetails, previousVoids);
@@ -706,14 +795,171 @@ public class BusinessReportService {
                         .setScale(1, RoundingMode.HALF_UP);
 
         return new SalesOverviewResponse(
-                moneyValue(gross),
-                moneyValue(net),
+                moneyValue(grossSales),
+                moneyValue(totalSales),
+                moneyValue(grossFoodDelivery),
+                moneyValue(netFoodDelivery),
+                moneyValue(platformCommission),
                 moneyValue(voidAmount),
-                moneyValue(perStaff),
+                moneyValue(perStaffDay),
+                moneyValue(averageDailySales),
                 percentValue(voidRate),
                 change,
-                staffCount,
+                averageStaff,
+                reportedDays,
                 todayReport != null
+        );
+    }
+
+    private PeriodInventoryHealthResponse periodInventoryHealth(
+            UUID tenantId,
+            LocalDate from,
+            LocalDate to
+    ) {
+        Instant fromInclusive = from.atStartOfDay(properties.zoneId()).toInstant();
+        Instant toExclusive = to.plusDays(1).atStartOfDay(properties.zoneId()).toInstant();
+        List<StockSku> activeSkus = skuRepository.findAllByTenant_IdOrderByNameAsc(tenantId)
+                .stream().filter(StockSku::isActive).toList();
+        Map<UUID, StockSku> skuById = activeSkus.stream()
+                .collect(Collectors.toMap(StockSku::getId, Function.identity()));
+        List<StockCountSubmission> approved = stockCountRepository
+                .findAllByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtAsc(
+                        tenantId, "Approved", fromInclusive, toExclusive
+                );
+
+        Map<String, StockCountSubmission> latestBySkuDay = new LinkedHashMap<>();
+        for (StockCountSubmission submission : approved) {
+            UUID skuId = submission.getSku().getId();
+            if (!skuById.containsKey(skuId)) continue;
+            LocalDate date = submission.getCapturedAt().atZone(properties.zoneId()).toLocalDate();
+            latestBySkuDay.put(skuId + ":" + date, submission);
+        }
+
+        long healthy = 0;
+        long low = 0;
+        long out = 0;
+        long over = 0;
+        for (StockCountSubmission submission : latestBySkuDay.values()) {
+            StockSku sku = submission.getSku();
+            BigDecimal balance = submission.getCurrentBalanceValue();
+            if (balance.signum() <= 0) {
+                out++;
+            } else if (balance.compareTo(sku.getMinimumBalanceValue()) < 0) {
+                low++;
+            } else if (balance.compareTo(sku.getMaximumBalanceValue()) > 0) {
+                over++;
+            } else {
+                healthy++;
+            }
+        }
+        long counted = latestBySkuDay.size();
+        long expected = 0;
+        for (StockSku sku : activeSkus) {
+            LocalDate skuStart = sku.getCreatedAt() == null
+                    ? from
+                    : sku.getCreatedAt().atZone(properties.zoneId()).toLocalDate();
+            LocalDate effectiveFrom = skuStart.isAfter(from) ? skuStart : from;
+            if (!effectiveFrom.isAfter(to)) {
+                expected += java.time.temporal.ChronoUnit.DAYS.between(effectiveFrom, to) + 1;
+            }
+        }
+        long missing = Math.max(0, expected - counted);
+        BigDecimal healthPercent = counted == 0
+                ? BigDecimal.ZERO
+                : BigDecimal.valueOf(healthy)
+                        .multiply(HUNDRED)
+                        .divide(BigDecimal.valueOf(counted), 1, RoundingMode.HALF_UP);
+        BigDecimal coveragePercent = expected == 0
+                ? HUNDRED
+                : BigDecimal.valueOf(counted)
+                        .multiply(HUNDRED)
+                        .divide(BigDecimal.valueOf(expected), 1, RoundingMode.HALF_UP);
+        return new PeriodInventoryHealthResponse(
+                healthPercent, coveragePercent, healthy, counted, expected, low, out, over, missing
+        );
+    }
+
+    private WorkforceIntelligenceResponse workforceIntelligence(
+            UUID tenantId,
+            LocalDate from,
+            LocalDate to,
+            List<BusinessReport> salesReports,
+            Map<UUID, SalesReportDetail> salesDetails,
+            BigDecimal totalSales
+    ) {
+        Instant fromInclusive = from.atStartOfDay(properties.zoneId()).toInstant();
+        Instant queryToExclusive = to.plusDays(2).atStartOfDay(properties.zoneId()).toInstant();
+        List<AttendanceEvent> events = attendanceRepository
+                .findAllByTenant_IdAndOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtAsc(
+                        tenantId, fromInclusive, queryToExclusive
+                );
+        Map<UUID, List<AttendanceEvent>> byUser = events.stream()
+                .collect(Collectors.groupingBy(event -> event.getUserAccount().getId()));
+        long totalMinutes = 0;
+        int completedShifts = 0;
+        int openShifts = 0;
+        Set<String> staffDays = new HashSet<>();
+        Map<LocalDate, Set<UUID>> staffByDay = new HashMap<>();
+
+        for (Map.Entry<UUID, List<AttendanceEvent>> entry : byUser.entrySet()) {
+            UUID userId = entry.getKey();
+            List<AttendanceEvent> userEvents = entry.getValue().stream()
+                    .sorted(Comparator.comparing(AttendanceEvent::getOccurredAt))
+                    .toList();
+            AttendanceEvent open = null;
+            for (AttendanceEvent event : userEvents) {
+                if (event.getEventType() == AttendanceEventType.CLOCK_IN) {
+                    if (open != null) {
+                        LocalDate openDate = open.getOccurredAt().atZone(properties.zoneId()).toLocalDate();
+                        if (!openDate.isBefore(from) && !openDate.isAfter(to)) openShifts++;
+                    }
+                    open = event;
+                    LocalDate date = event.getOccurredAt().atZone(properties.zoneId()).toLocalDate();
+                    if (!date.isBefore(from) && !date.isAfter(to)) {
+                        staffDays.add(userId + ":" + date);
+                        staffByDay.computeIfAbsent(date, ignored -> new HashSet<>()).add(userId);
+                    }
+                } else if (open != null) {
+                    LocalDate openDate = open.getOccurredAt().atZone(properties.zoneId()).toLocalDate();
+                    if (!openDate.isBefore(from) && !openDate.isAfter(to)) {
+                        long minutes = Math.max(0, Duration.between(open.getOccurredAt(), event.getOccurredAt()).toMinutes());
+                        totalMinutes += minutes;
+                        completedShifts++;
+                    }
+                    open = null;
+                }
+            }
+            if (open != null) {
+                LocalDate openDate = open.getOccurredAt().atZone(properties.zoneId()).toLocalDate();
+                if (!openDate.isBefore(from) && !openDate.isAfter(to)) openShifts++;
+            }
+        }
+
+        int operatingDays = staffByDay.size();
+        BigDecimal totalHours = BigDecimal.valueOf(totalMinutes)
+                .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
+        BigDecimal salesPerHour = totalHours.signum() == 0
+                ? BigDecimal.ZERO
+                : totalSales.divide(totalHours, 2, RoundingMode.HALF_UP);
+        BigDecimal avgStaff = operatingDays == 0
+                ? BigDecimal.ZERO
+                : BigDecimal.valueOf(staffDays.size())
+                        .divide(BigDecimal.valueOf(operatingDays), 1, RoundingMode.HALF_UP);
+        BigDecimal avgHours = completedShifts == 0
+                ? BigDecimal.ZERO
+                : totalHours.divide(BigDecimal.valueOf(completedShifts), 1, RoundingMode.HALF_UP);
+
+        int mismatchDays = 0;
+        for (BusinessReport report : salesReports) {
+            SalesReportDetail detail = salesDetails.get(report.getId());
+            if (detail == null) continue;
+            int attendanceCount = staffByDay.getOrDefault(report.getReportDate(), Set.of()).size();
+            if (attendanceCount != detail.getStaffCount()) mismatchDays++;
+        }
+
+        return new WorkforceIntelligenceResponse(
+                totalHours, moneyValue(salesPerHour), avgStaff, avgHours,
+                completedShifts, openShifts, operatingDays, mismatchDays
         );
     }
 
@@ -916,7 +1162,7 @@ public class BusinessReportService {
             SalesReportDetail detail = sales.get(report.getId());
             if (detail == null) continue;
             BigDecimal voidAmount = voids.getOrDefault(report.getId(), BigDecimal.ZERO);
-            netByDate.merge(report.getReportDate(), detail.grossSalesRm().max(BigDecimal.ZERO), BigDecimal::add);
+            netByDate.merge(report.getReportDate(), detail.recognisedSalesRm().max(BigDecimal.ZERO), BigDecimal::add);
             voidByDate.merge(report.getReportDate(), voidAmount, BigDecimal::add);
         }
         for (BusinessReport report : wasteReports) {
@@ -971,6 +1217,8 @@ public class BusinessReportService {
                 moneyValue(cashTotal),
                 cashReceivedBy,
                 moneyValue(foodDelivery),
+                detail == null ? BigDecimal.ZERO.setScale(2) : moneyValue(detail.netFoodDeliverySalesRm()),
+                detail == null ? BigDecimal.ZERO.setScale(2) : moneyValue(detail.estimatedPlatformCommissionRm()),
                 moneyValue(ewalletTotal),
                 moneyValue(totalSales),
                 moneyValue(voidTotal),
@@ -989,7 +1237,7 @@ public class BusinessReportService {
         BigDecimal zero = BigDecimal.ZERO.setScale(2);
         return new SalesReportResponse(
                 null, date, ReportWorkflowStatus.DRAFT,
-                zero, "", zero, zero, zero, zero, 0, zero,
+                zero, "", zero, zero, zero, zero, zero, zero, 0, zero,
                 BigDecimal.ZERO.setScale(1), null, null, null, null, List.of()
         );
     }
@@ -1118,7 +1366,7 @@ public class BusinessReportService {
             BigDecimal voidTotal = voidBillRepository
                     .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(report.getTenantId(), report.getId())
                     .stream().map(SalesVoidBill::getAmountRm).reduce(BigDecimal.ZERO, BigDecimal::add);
-            amount = detail == null ? BigDecimal.ZERO : detail.grossSalesRm();
+            amount = detail == null ? BigDecimal.ZERO : detail.recognisedSalesRm();
             evidenceCount = voidBillRepository
                     .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(report.getTenantId(), report.getId()).size();
             summary = "Total sales RM " + money(amount);
@@ -1203,7 +1451,7 @@ public class BusinessReportService {
         for (BusinessReport report : reports) {
             SalesReportDetail detail = details.get(report.getId());
             if (detail == null) continue;
-            total = total.add(detail.grossSalesRm());
+            total = total.add(detail.recognisedSalesRm());
         }
         return total;
     }

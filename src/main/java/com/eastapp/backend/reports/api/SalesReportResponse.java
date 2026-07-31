@@ -15,6 +15,8 @@ public record SalesReportResponse(
         BigDecimal cashTotalRm,
         String cashReceivedBy,
         BigDecimal foodDeliverySalesRm,
+        BigDecimal netFoodDeliverySalesRm,
+        BigDecimal estimatedPlatformCommissionRm,
         BigDecimal ewalletTotalRm,
         BigDecimal totalSalesRm,
         BigDecimal voidTotalRm,

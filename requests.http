@@ -635,11 +635,16 @@ GET {{baseUrl}}/api/v1/reports/media/{{reportMediaKey}}
 Authorization: Bearer {{eastappToken}}
 Accept: image/jpeg,image/png
 
+### List submitted Sales reports for a selected date range — management only; maximum 30 days
+GET {{baseUrl}}/api/v1/reports/sales/history?from={{fromDate}}&to={{toDate}}
+Authorization: Bearer {{eastappToken}}
+
 ### Read daily Sales report — management only
 GET {{baseUrl}}/api/v1/reports/sales?date={{reportDate}}
 Authorization: Bearer {{eastappToken}}
 
 ### Create or update daily Sales report — management only
+# foodDeliverySalesRm is the gross platform amount; 60% contributes to Total Sales.
 PUT {{baseUrl}}/api/v1/reports/sales
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json

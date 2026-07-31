@@ -13,6 +13,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "sales_report_details")
 public class SalesReportDetail {
+    private static final BigDecimal FOOD_DELIVERY_NET_RATE = new BigDecimal("0.60");
     @Id
     @Column(name = "report_id", nullable = false, updatable = false)
     private UUID reportId;
@@ -66,7 +67,10 @@ public class SalesReportDetail {
         this.cashReceivedBy = requiredText(cashReceivedBy, "cashReceivedBy");
         this.pandaSalesRm = nonNegative(pandaSalesRm, "pandaSalesRm");
         this.ewalletTotalRm = nonNegative(ewalletTotalRm, "ewalletTotalRm");
-        this.salesRm = this.subTotalRm.add(this.pandaSalesRm).add(this.ewalletTotalRm);
+        this.salesRm = this.subTotalRm
+                .add(netFoodDeliverySalesRm())
+                .add(this.ewalletTotalRm)
+                .setScale(2, RoundingMode.HALF_UP);
         if (staffCount < 1 || staffCount > 500) {
             throw new IllegalArgumentException("staffCount must be between 1 and 500");
         }
@@ -86,7 +90,23 @@ public class SalesReportDetail {
     }
 
     public BigDecimal grossSalesRm() {
+        return subTotalRm.add(pandaSalesRm).add(ewalletTotalRm).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public BigDecimal recognisedSalesRm() {
         return salesRm;
+    }
+
+    public BigDecimal grossFoodDeliverySalesRm() {
+        return pandaSalesRm;
+    }
+
+    public BigDecimal netFoodDeliverySalesRm() {
+        return pandaSalesRm.multiply(FOOD_DELIVERY_NET_RATE).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public BigDecimal estimatedPlatformCommissionRm() {
+        return pandaSalesRm.subtract(netFoodDeliverySalesRm()).setScale(2, RoundingMode.HALF_UP);
     }
 
     public UUID getReportId() { return reportId; }

@@ -5,11 +5,16 @@ import java.math.BigDecimal;
 public record SalesOverviewResponse(
         BigDecimal grossSalesRm,
         BigDecimal netSalesRm,
+        BigDecimal grossFoodDeliverySalesRm,
+        BigDecimal netFoodDeliverySalesRm,
+        BigDecimal estimatedPlatformCommissionRm,
         BigDecimal voidTotalRm,
         BigDecimal salesPerStaffRm,
+        BigDecimal averageDailySalesRm,
         BigDecimal voidRatePercent,
         BigDecimal versusPreviousPeriodPercent,
-        int staffCount,
+        BigDecimal averageStaffPerReportedDay,
+        int reportedDayCount,
         boolean submittedToday
 ) {
 }
