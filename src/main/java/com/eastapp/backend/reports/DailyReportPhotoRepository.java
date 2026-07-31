@@ -7,5 +7,6 @@ import java.util.UUID;
 
 public interface DailyReportPhotoRepository extends JpaRepository<DailyReportPhoto, UUID> {
     List<DailyReportPhoto> findAllByTenantIdAndReportIdOrderByCreatedAtAsc(UUID tenantId, UUID reportId);
+    List<DailyReportPhoto> findAllByTenantIdAndReportIdIn(UUID tenantId, List<UUID> reportIds);
     long countByTenantIdAndReportId(UUID tenantId, UUID reportId);
 }

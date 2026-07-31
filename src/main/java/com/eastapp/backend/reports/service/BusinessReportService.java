@@ -640,12 +640,19 @@ public class BusinessReportService {
                         principal.tenantId(), ReportWorkflowStatus.SUBMITTED
                 );
         Map<UUID, String> names = userNames(principal.tenantId());
-        Map<UUID, SalesReportDetail> sales = salesDetails(reports.stream()
-                .filter(report -> report.getReportType() == BusinessReportType.SALES).toList());
-        Map<UUID, BigDecimal> voidTotals = voidTotals(reports.stream()
-                .filter(report -> report.getReportType() == BusinessReportType.SALES).toList());
-        Map<UUID, WasteReportDetail> waste = wasteDetails(reports.stream()
-                .filter(report -> report.getReportType() == BusinessReportType.WASTE).toList());
+        List<BusinessReport> salesReports = reports.stream()
+                .filter(report -> report.getReportType() == BusinessReportType.SALES)
+                .toList();
+        List<BusinessReport> wasteReports = reports.stream()
+                .filter(report -> report.getReportType() == BusinessReportType.WASTE)
+                .toList();
+        List<BusinessReport> dailyPhotoReports = reports.stream()
+                .filter(report -> report.getReportType() == BusinessReportType.DAILY_PHOTO)
+                .toList();
+        Map<UUID, SalesReportDetail> sales = salesDetails(salesReports);
+        Map<UUID, Integer> voidCounts = voidBillCounts(salesReports);
+        Map<UUID, WasteReportDetail> waste = wasteDetails(wasteReports);
+        Map<UUID, Integer> dailyPhotoCounts = dailyPhotoCounts(dailyPhotoReports);
 
         List<ApprovalReportResponse> result = new ArrayList<>();
         for (BusinessReport report : reports) {
@@ -654,11 +661,8 @@ public class BusinessReportService {
             int evidenceCount = 0;
             if (report.getReportType() == BusinessReportType.SALES) {
                 SalesReportDetail detail = sales.get(report.getId());
-                BigDecimal voidAmount = voidTotals.getOrDefault(report.getId(), BigDecimal.ZERO);
                 amount = detail == null ? BigDecimal.ZERO : detail.recognisedSalesRm();
-                evidenceCount = voidBillRepository
-                        .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(principal.tenantId(), report.getId())
-                        .size();
+                evidenceCount = voidCounts.getOrDefault(report.getId(), 0);
                 summary = "Total sales RM " + money(amount) + " · " + evidenceCount + " void bill(s)";
             } else if (report.getReportType() == BusinessReportType.WASTE) {
                 WasteReportDetail detail = waste.get(report.getId());
@@ -666,7 +670,7 @@ public class BusinessReportService {
                 evidenceCount = detail == null ? 0 : 1;
                 summary = detail == null ? "Waste report" : detail.getItemName() + " · RM " + money(amount);
             } else if (report.getReportType() == BusinessReportType.DAILY_PHOTO) {
-                evidenceCount = (int) dailyPhotoRepository.countByTenantIdAndReportId(principal.tenantId(), report.getId());
+                evidenceCount = dailyPhotoCounts.getOrDefault(report.getId(), 0);
                 summary = evidenceCount + " daily photos";
             } else {
                 continue;
@@ -1363,12 +1367,10 @@ public class BusinessReportService {
         String summary = report.getReportType().name();
         if (report.getReportType() == BusinessReportType.SALES) {
             SalesReportDetail detail = salesRepository.findByReportIdAndTenantId(report.getId(), report.getTenantId()).orElse(null);
-            BigDecimal voidTotal = voidBillRepository
-                    .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(report.getTenantId(), report.getId())
-                    .stream().map(SalesVoidBill::getAmountRm).reduce(BigDecimal.ZERO, BigDecimal::add);
+            List<SalesVoidBill> voidBills = voidBillRepository
+                    .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(report.getTenantId(), report.getId());
             amount = detail == null ? BigDecimal.ZERO : detail.recognisedSalesRm();
-            evidenceCount = voidBillRepository
-                    .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(report.getTenantId(), report.getId()).size();
+            evidenceCount = voidBills.size();
             summary = "Total sales RM " + money(amount);
         } else if (report.getReportType() == BusinessReportType.WASTE) {
             WasteReportDetail detail = wasteRepository.findByReportIdAndTenantId(report.getId(), report.getTenantId()).orElse(null);
@@ -1409,6 +1411,26 @@ public class BusinessReportService {
             totals.merge(item.getSalesReportId(), item.getAmountRm(), BigDecimal::add);
         }
         return totals;
+    }
+
+    private Map<UUID, Integer> voidBillCounts(List<BusinessReport> reports) {
+        List<UUID> ids = reportIds(reports);
+        if (ids.isEmpty()) return Map.of();
+        Map<UUID, Integer> counts = new HashMap<>();
+        for (SalesVoidBill item : voidBillRepository.findAllByTenantIdAndSalesReportIdIn(reports.get(0).getTenantId(), ids)) {
+            counts.merge(item.getSalesReportId(), 1, Integer::sum);
+        }
+        return counts;
+    }
+
+    private Map<UUID, Integer> dailyPhotoCounts(List<BusinessReport> reports) {
+        List<UUID> ids = reportIds(reports);
+        if (ids.isEmpty()) return Map.of();
+        Map<UUID, Integer> counts = new HashMap<>();
+        for (DailyReportPhoto photo : dailyPhotoRepository.findAllByTenantIdAndReportIdIn(reports.get(0).getTenantId(), ids)) {
+            counts.merge(photo.getReportId(), 1, Integer::sum);
+        }
+        return counts;
     }
 
     private Map<UUID, WasteReportDetail> wasteDetails(List<BusinessReport> reports) {

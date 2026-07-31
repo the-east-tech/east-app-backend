@@ -159,7 +159,7 @@ The script:
 
 A destructive reset remains available through `scripts/run-fresh-local.sh`, but it now requires the explicit environment variable `EASTAPP_CONFIRM_DATABASE_RESET=YES`.
 
-The setup code is valid for 30 minutes.
+The setup code is valid for 1 hour.
 
 Health check:
 

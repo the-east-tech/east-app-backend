@@ -18,7 +18,7 @@ import java.util.Locale;
 public class SetupCodeService {
 
     private static final Logger log = LoggerFactory.getLogger(SetupCodeService.class);
-    private static final Duration VALIDITY = Duration.ofMinutes(30);
+    private static final Duration VALIDITY = Duration.ofHours(1);
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final char[] ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
     private static final int CODE_LENGTH = 10;
@@ -49,7 +49,7 @@ public class SetupCodeService {
                 hash(code),
                 Timestamp.from(now.plus(VALIDITY))
         );
-        log.warn("EastApp initial setup code: {} (valid for 30 minutes)", code);
+        log.warn("EastApp initial setup code: {} (valid for 1 hour)", code);
     }
 
     @Transactional
