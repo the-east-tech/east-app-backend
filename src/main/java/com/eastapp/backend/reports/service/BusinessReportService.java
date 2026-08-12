@@ -1,9 +1,7 @@
 package com.eastapp.backend.reports.service;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
-import com.eastapp.backend.attendance.AttendanceEvent;
 import com.eastapp.backend.attendance.AttendanceEventRepository;
-import com.eastapp.backend.attendance.AttendanceEventType;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.UserAccount;
@@ -36,8 +34,8 @@ import com.eastapp.backend.reports.api.DailyPhotoItemResponse;
 import com.eastapp.backend.reports.api.DailyPhotoOverviewResponse;
 import com.eastapp.backend.reports.api.DailyPhotoReportResponse;
 import com.eastapp.backend.reports.api.InventoryIntelligenceResponse;
-import com.eastapp.backend.reports.api.PeriodInventoryHealthResponse;
 import com.eastapp.backend.reports.api.InventoryRiskResponse;
+import com.eastapp.backend.reports.api.PeriodCountCoverageResponse;
 import com.eastapp.backend.reports.api.ReportDashboardResponse;
 import com.eastapp.backend.reports.api.ReportTrendPointResponse;
 import com.eastapp.backend.reports.api.ReviewBusinessReportRequest;
@@ -60,7 +58,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -184,8 +181,10 @@ public class BusinessReportService {
                 previousSales,
                 previousVoids
         );
-        PeriodInventoryHealthResponse periodInventory = periodInventoryHealth(
-                principal.tenantId(), from, today
+        PeriodCountCoverageResponse countCoverage = periodCountCoverage(
+                principal.tenantId(),
+                from,
+                today
         );
         WorkforceIntelligenceResponse workforce = workforceIntelligence(
                 principal.tenantId(),
@@ -238,7 +237,7 @@ public class BusinessReportService {
                 days,
                 true,
                 salesOverview,
-                periodInventory,
+                countCoverage,
                 workforce,
                 inventory,
                 wasteOverview,
@@ -784,7 +783,7 @@ public class BusinessReportService {
         BigDecimal perStaffDay = staffDays == 0
                 ? BigDecimal.ZERO
                 : totalSales.divide(BigDecimal.valueOf(staffDays), 2, RoundingMode.HALF_UP);
-        BigDecimal averageDailySales = reportedDays == 0
+        BigDecimal averageSalesPerReportingDay = reportedDays == 0
                 ? BigDecimal.ZERO
                 : totalSales.divide(BigDecimal.valueOf(reportedDays), 2, RoundingMode.HALF_UP);
         BigDecimal voidRate = percentage(voidAmount, totalSales.add(voidAmount));
@@ -806,7 +805,7 @@ public class BusinessReportService {
                 moneyValue(platformCommission),
                 moneyValue(voidAmount),
                 moneyValue(perStaffDay),
-                moneyValue(averageDailySales),
+                moneyValue(averageSalesPerReportingDay),
                 percentValue(voidRate),
                 change,
                 averageStaff,
@@ -815,7 +814,7 @@ public class BusinessReportService {
         );
     }
 
-    private PeriodInventoryHealthResponse periodInventoryHealth(
+    private PeriodCountCoverageResponse periodCountCoverage(
             UUID tenantId,
             LocalDate from,
             LocalDate to
@@ -823,63 +822,54 @@ public class BusinessReportService {
         Instant fromInclusive = from.atStartOfDay(properties.zoneId()).toInstant();
         Instant toExclusive = to.plusDays(1).atStartOfDay(properties.zoneId()).toInstant();
         List<StockSku> activeSkus = skuRepository.findAllByTenant_IdOrderByNameAsc(tenantId)
-                .stream().filter(StockSku::isActive).toList();
-        Map<UUID, StockSku> skuById = activeSkus.stream()
-                .collect(Collectors.toMap(StockSku::getId, Function.identity()));
-        List<StockCountSubmission> approved = stockCountRepository
+                .stream()
+                .filter(StockSku::isActive)
+                .toList();
+        Set<UUID> activeSkuIds = activeSkus.stream()
+                .map(StockSku::getId)
+                .collect(Collectors.toSet());
+        List<StockCountSubmission> approvedCounts = stockCountRepository
                 .findAllByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtAsc(
-                        tenantId, "Approved", fromInclusive, toExclusive
+                        tenantId,
+                        "Approved",
+                        fromInclusive,
+                        toExclusive
                 );
 
-        Map<String, StockCountSubmission> latestBySkuDay = new LinkedHashMap<>();
-        for (StockCountSubmission submission : approved) {
+        Set<String> countedSkuDays = new HashSet<>();
+        for (StockCountSubmission submission : approvedCounts) {
             UUID skuId = submission.getSku().getId();
-            if (!skuById.containsKey(skuId)) continue;
-            LocalDate date = submission.getCapturedAt().atZone(properties.zoneId()).toLocalDate();
-            latestBySkuDay.put(skuId + ":" + date, submission);
+            if (!activeSkuIds.contains(skuId)) continue;
+            LocalDate countDate = submission.getCapturedAt()
+                    .atZone(properties.zoneId())
+                    .toLocalDate();
+            countedSkuDays.add(skuId + ":" + countDate);
         }
 
-        long healthy = 0;
-        long low = 0;
-        long out = 0;
-        long over = 0;
-        for (StockCountSubmission submission : latestBySkuDay.values()) {
-            StockSku sku = submission.getSku();
-            BigDecimal balance = submission.getCurrentBalanceValue();
-            if (balance.signum() <= 0) {
-                out++;
-            } else if (balance.compareTo(sku.getMinimumBalanceValue()) < 0) {
-                low++;
-            } else if (balance.compareTo(sku.getMaximumBalanceValue()) > 0) {
-                over++;
-            } else {
-                healthy++;
-            }
-        }
-        long counted = latestBySkuDay.size();
-        long expected = 0;
+        long expectedSkuDays = 0;
         for (StockSku sku : activeSkus) {
-            LocalDate skuStart = sku.getCreatedAt() == null
+            LocalDate createdDate = sku.getCreatedAt() == null
                     ? from
                     : sku.getCreatedAt().atZone(properties.zoneId()).toLocalDate();
-            LocalDate effectiveFrom = skuStart.isAfter(from) ? skuStart : from;
+            LocalDate effectiveFrom = createdDate.isAfter(from) ? createdDate : from;
             if (!effectiveFrom.isAfter(to)) {
-                expected += java.time.temporal.ChronoUnit.DAYS.between(effectiveFrom, to) + 1;
+                expectedSkuDays += java.time.temporal.ChronoUnit.DAYS
+                        .between(effectiveFrom, to) + 1;
             }
         }
-        long missing = Math.max(0, expected - counted);
-        BigDecimal healthPercent = counted == 0
-                ? BigDecimal.ZERO
-                : BigDecimal.valueOf(healthy)
-                        .multiply(HUNDRED)
-                        .divide(BigDecimal.valueOf(counted), 1, RoundingMode.HALF_UP);
-        BigDecimal coveragePercent = expected == 0
+
+        long counted = countedSkuDays.size();
+        long missing = Math.max(0, expectedSkuDays - counted);
+        BigDecimal coveragePercent = expectedSkuDays == 0
                 ? HUNDRED
                 : BigDecimal.valueOf(counted)
                         .multiply(HUNDRED)
-                        .divide(BigDecimal.valueOf(expected), 1, RoundingMode.HALF_UP);
-        return new PeriodInventoryHealthResponse(
-                healthPercent, coveragePercent, healthy, counted, expected, low, out, over, missing
+                        .divide(BigDecimal.valueOf(expectedSkuDays), 1, RoundingMode.HALF_UP);
+        return new PeriodCountCoverageResponse(
+                percentValue(coveragePercent),
+                counted,
+                expectedSkuDays,
+                missing
         );
     }
 
@@ -893,77 +883,64 @@ public class BusinessReportService {
     ) {
         Instant fromInclusive = from.atStartOfDay(properties.zoneId()).toInstant();
         Instant queryToExclusive = to.plusDays(2).atStartOfDay(properties.zoneId()).toInstant();
-        List<AttendanceEvent> events = attendanceRepository
+        List<WorkforceCalculationPolicy.Event> events = attendanceRepository
                 .findAllByTenant_IdAndOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtAsc(
-                        tenantId, fromInclusive, queryToExclusive
-                );
-        Map<UUID, List<AttendanceEvent>> byUser = events.stream()
-                .collect(Collectors.groupingBy(event -> event.getUserAccount().getId()));
-        long totalMinutes = 0;
-        int completedShifts = 0;
-        int openShifts = 0;
-        Set<String> staffDays = new HashSet<>();
-        Map<LocalDate, Set<UUID>> staffByDay = new HashMap<>();
+                        tenantId,
+                        fromInclusive,
+                        queryToExclusive
+                )
+                .stream()
+                .map(event -> new WorkforceCalculationPolicy.Event(
+                        event.getUserAccount().getId(),
+                        event.getEventType(),
+                        event.getOccurredAt()
+                ))
+                .toList();
+        List<WorkforceCalculationPolicy.ReportedStaff> reportedStaff = salesReports
+                .stream()
+                .map(report -> {
+                    SalesReportDetail detail = salesDetails.get(report.getId());
+                    return detail == null
+                            ? null
+                            : new WorkforceCalculationPolicy.ReportedStaff(
+                                    report.getReportDate(),
+                                    detail.getStaffCount()
+                            );
+                })
+                .filter(Objects::nonNull)
+                .toList();
 
-        for (Map.Entry<UUID, List<AttendanceEvent>> entry : byUser.entrySet()) {
-            UUID userId = entry.getKey();
-            List<AttendanceEvent> userEvents = entry.getValue().stream()
-                    .sorted(Comparator.comparing(AttendanceEvent::getOccurredAt))
-                    .toList();
-            AttendanceEvent open = null;
-            for (AttendanceEvent event : userEvents) {
-                if (event.getEventType() == AttendanceEventType.CLOCK_IN) {
-                    if (open != null) {
-                        LocalDate openDate = open.getOccurredAt().atZone(properties.zoneId()).toLocalDate();
-                        if (!openDate.isBefore(from) && !openDate.isAfter(to)) openShifts++;
-                    }
-                    open = event;
-                    LocalDate date = event.getOccurredAt().atZone(properties.zoneId()).toLocalDate();
-                    if (!date.isBefore(from) && !date.isAfter(to)) {
-                        staffDays.add(userId + ":" + date);
-                        staffByDay.computeIfAbsent(date, ignored -> new HashSet<>()).add(userId);
-                    }
-                } else if (open != null) {
-                    LocalDate openDate = open.getOccurredAt().atZone(properties.zoneId()).toLocalDate();
-                    if (!openDate.isBefore(from) && !openDate.isAfter(to)) {
-                        long minutes = Math.max(0, Duration.between(open.getOccurredAt(), event.getOccurredAt()).toMinutes());
-                        totalMinutes += minutes;
-                        completedShifts++;
-                    }
-                    open = null;
-                }
-            }
-            if (open != null) {
-                LocalDate openDate = open.getOccurredAt().atZone(properties.zoneId()).toLocalDate();
-                if (!openDate.isBefore(from) && !openDate.isAfter(to)) openShifts++;
-            }
-        }
-
-        int operatingDays = staffByDay.size();
-        BigDecimal totalHours = BigDecimal.valueOf(totalMinutes)
-                .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
-        BigDecimal salesPerHour = totalHours.signum() == 0
+        WorkforceCalculationPolicy.Result result = WorkforceCalculationPolicy.calculate(
+                events,
+                reportedStaff,
+                from,
+                to,
+                properties.zoneId()
+        );
+        BigDecimal totalHours = BigDecimal.valueOf(result.totalSeconds())
+                .divide(BigDecimal.valueOf(3600), 2, RoundingMode.HALF_UP);
+        BigDecimal salesPerHour = result.totalSeconds() == 0
                 ? BigDecimal.ZERO
-                : totalSales.divide(totalHours, 2, RoundingMode.HALF_UP);
-        BigDecimal avgStaff = operatingDays == 0
+                : totalSales
+                        .multiply(BigDecimal.valueOf(3600))
+                        .divide(BigDecimal.valueOf(result.totalSeconds()), 2, RoundingMode.HALF_UP);
+        BigDecimal averageStaff = result.operatingDayCount() == 0
                 ? BigDecimal.ZERO
-                : BigDecimal.valueOf(staffDays.size())
-                        .divide(BigDecimal.valueOf(operatingDays), 1, RoundingMode.HALF_UP);
-        BigDecimal avgHours = completedShifts == 0
-                ? BigDecimal.ZERO
-                : totalHours.divide(BigDecimal.valueOf(completedShifts), 1, RoundingMode.HALF_UP);
-
-        int mismatchDays = 0;
-        for (BusinessReport report : salesReports) {
-            SalesReportDetail detail = salesDetails.get(report.getId());
-            if (detail == null) continue;
-            int attendanceCount = staffByDay.getOrDefault(report.getReportDate(), Set.of()).size();
-            if (attendanceCount != detail.getStaffCount()) mismatchDays++;
-        }
+                : BigDecimal.valueOf(result.staffDayCount())
+                        .divide(
+                                BigDecimal.valueOf(result.operatingDayCount()),
+                                1,
+                                RoundingMode.HALF_UP
+                        );
 
         return new WorkforceIntelligenceResponse(
-                totalHours, moneyValue(salesPerHour), avgStaff, avgHours,
-                completedShifts, openShifts, operatingDays, mismatchDays
+                totalHours,
+                moneyValue(salesPerHour),
+                averageStaff,
+                result.completedShiftCount(),
+                result.openShiftCount(),
+                result.operatingDayCount(),
+                result.staffCountMismatchDays()
         );
     }
 

@@ -6,7 +6,6 @@ public record WorkforceIntelligenceResponse(
         BigDecimal totalLabourHours,
         BigDecimal salesPerLabourHourRm,
         BigDecimal averageStaffPerDay,
-        BigDecimal averageHoursPerStaffDay,
         int completedShiftCount,
         int openShiftCount,
         int operatingDayCount,

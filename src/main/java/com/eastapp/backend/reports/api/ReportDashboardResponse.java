@@ -8,7 +8,7 @@ public record ReportDashboardResponse(
         int periodDays,
         boolean managementView,
         SalesOverviewResponse sales,
-        PeriodInventoryHealthResponse periodInventory,
+        PeriodCountCoverageResponse countCoverage,
         WorkforceIntelligenceResponse workforce,
         InventoryIntelligenceResponse inventory,
         WasteOverviewResponse waste,

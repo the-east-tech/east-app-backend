@@ -95,6 +95,15 @@ public class ReportMediaService {
         return media;
     }
 
+    public ReportMedia requireTenantMedia(AuthenticatedUser principal, String storageKey) {
+        return mediaRepository.findByTenantIdAndStorageKey(principal.tenantId(), storageKey)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.BAD_REQUEST,
+                        "REPORT_MEDIA_NOT_FOUND",
+                        "Upload the image again."
+                ));
+    }
+
     private static String normaliseContentType(String contentType) {
         if (contentType == null) return "";
         String value = contentType.toLowerCase(Locale.ROOT).trim();

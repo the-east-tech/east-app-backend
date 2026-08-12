@@ -35,6 +35,7 @@
 @reportId = 00000000-0000-0000-0000-000000000000
 @reportMediaKey = 00000000-0000-0000-0000-000000000000.jpg
 @reportPhotoFile = /absolute/path/to/report-photo.jpg
+@advertisementId = 00000000-0000-0000-0000-000000000000
 
 ### Initial setup status
 GET {{baseUrl}}/api/v1/setup/status
@@ -849,7 +850,7 @@ IOS
 --EastAppFaceAttemptBoundary
 Content-Disposition: form-data; name="appVersion"
 
-east_app_v261
+east_app_v272
 --EastAppFaceAttemptBoundary
 Content-Disposition: form-data; name="validationMethod"
 
@@ -879,3 +880,43 @@ Content-Type: application/json
   "ewalletTotalRm": 400.00,
   "staffOnDuty": 10
 }
+
+
+### Active advertisements (all authenticated users)
+GET {{baseUrl}}/api/v1/advertisements/active
+Authorization: Bearer {{eastappToken}}
+
+### Advertisement management list (Owner only)
+GET {{baseUrl}}/api/v1/advertisements
+Authorization: Bearer {{eastappToken}}
+
+### Create advertisement (Owner only)
+POST {{baseUrl}}/api/v1/advertisements
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "imageStorageKey": "{{reportMediaKey}}",
+  "startsAt": "2026-08-04T12:00:00Z",
+  "endsAt": "2026-08-11T12:00:00Z",
+  "displayOrder": 0,
+  "active": true
+}
+
+
+### Update advertisement (Owner only)
+PUT {{baseUrl}}/api/v1/advertisements/{{advertisementId}}
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "imageStorageKey": "{{reportMediaKey}}",
+  "startsAt": "2026-08-04T12:00:00Z",
+  "endsAt": "2026-08-11T12:00:00Z",
+  "displayOrder": 1,
+  "active": true
+}
+
+### Delete advertisement (Owner only)
+DELETE {{baseUrl}}/api/v1/advertisements/{{advertisementId}}
+Authorization: Bearer {{eastappToken}}
