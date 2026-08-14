@@ -3,6 +3,7 @@ package com.eastapp.backend.attendance.service;
 import com.eastapp.backend.attendance.AttendanceEvent;
 import com.eastapp.backend.attendance.AttendanceEventRepository;
 import com.eastapp.backend.attendance.AttendanceEventType;
+import com.eastapp.backend.attendance.AttendanceQrCode;
 import com.eastapp.backend.attendance.AttendanceReportPeriod;
 import com.eastapp.backend.attendance.api.AttendanceAuditResponse;
 import com.eastapp.backend.attendance.api.AttendanceAuditSummaryResponse;
@@ -67,6 +68,7 @@ public class AttendanceService {
     private final UserSessionRepository userSessionRepository;
     private final AttendanceProperties properties;
     private final GooglePlacesService googlePlacesService;
+    private final AttendanceQrCodeService attendanceQrCodeService;
     private final TransactionTemplate transactionTemplate;
 
     public AttendanceService(
@@ -76,6 +78,7 @@ public class AttendanceService {
             UserSessionRepository userSessionRepository,
             AttendanceProperties properties,
             GooglePlacesService googlePlacesService,
+            AttendanceQrCodeService attendanceQrCodeService,
             PlatformTransactionManager transactionManager
     ) {
         this.attendanceEventRepository = attendanceEventRepository;
@@ -84,6 +87,7 @@ public class AttendanceService {
         this.userSessionRepository = userSessionRepository;
         this.properties = properties;
         this.googlePlacesService = googlePlacesService;
+        this.attendanceQrCodeService = attendanceQrCodeService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
@@ -95,7 +99,7 @@ public class AttendanceService {
             AuthenticatedUser principal,
             CreateAttendanceEventRequest request
     ) {
-        assertCaptureProof(request);
+        attendanceQrCodeService.validateFormat(request.qrPayload());
         String clientEventId = request.clientEventId().trim();
 
         AttendanceEventResponse existing = transactionTemplate.execute(
@@ -151,7 +155,7 @@ public class AttendanceService {
         Tenant tenant = tenantRepository.findById(principal.tenantId())
                 .orElseThrow(() -> notFound("TENANT_NOT_FOUND", "Tenant not found."));
         UserAccount user = userAccountRepository
-                .findByIdAndTenant_Id(principal.userId(), principal.tenantId())
+                .findByIdAndTenant_IdForUpdate(principal.userId(), principal.tenantId())
                 .orElseThrow(() -> notFound("USER_NOT_FOUND", "User not found."));
         UserSession userSession = userSessionRepository.findById(principal.sessionId())
                 .filter(session -> session.getUserAccount().getId().equals(principal.userId()))
@@ -167,7 +171,11 @@ public class AttendanceService {
                         todayRange.fromInclusive(),
                         todayRange.toExclusive()
                 );
-        assertValidSequence(request.eventType(), todayEvents);
+        AttendanceEventType eventType = nextEventType(todayEvents);
+        Instant now = Instant.now();
+        AttendanceQrCode qrCode = attendanceQrCodeService.requireUsable(
+                principal, request.qrPayload(), eventType, now
+        );
 
         double distanceMeters = distanceMeters(
                 request.latitude(),
@@ -180,8 +188,9 @@ public class AttendanceService {
                 tenant,
                 user,
                 userSession,
+                qrCode,
                 clientEventId,
-                request.eventType(),
+                eventType,
                 request.deviceCapturedAt(),
                 request.latitude(),
                 request.longitude(),
@@ -192,24 +201,14 @@ public class AttendanceService {
                 tenant.getLatitude(),
                 tenant.getLongitude(),
                 distanceMeters,
-                request.cameraCaptureValid(),
-                request.faceValid(),
-                request.faceCount(),
-                request.faceAttemptCount(),
-                request.faceVerificationBypassed(),
-                request.faceBoxWidth(),
-                request.faceBoxHeight(),
-                request.faceYaw(),
-                request.faceRoll(),
-                request.facePitch(),
-                request.qrCheckpointValid(),
                 request.devicePlatform(),
                 request.deviceOsVersion(),
                 request.appVersion(),
-                request.validationMethod()
+                "QR_GPS"
         );
 
-        return AttendanceEventResponse.from(attendanceEventRepository.save(event));
+        AttendanceEvent saved = attendanceEventRepository.save(event);
+        return AttendanceEventResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
@@ -497,12 +496,7 @@ public class AttendanceService {
         int validEvents = 0;
 
         for (AttendanceEvent event : events) {
-            if (event.isCameraCaptureValid()
-                    && event.isFaceValid()
-                    && event.getFaceCount() == 1
-                    && event.isQrCheckpointValid()) {
-                validEvents++;
-            }
+            validEvents++;
 
             if (event.getEventType() == AttendanceEventType.CLOCK_IN) {
                 if (firstClockInAt == null) {
@@ -540,49 +534,18 @@ public class AttendanceService {
         );
     }
 
-    private static void assertCaptureProof(CreateAttendanceEventRequest request) {
-        if (!request.cameraCaptureValid()) {
-            throw badRequest(
-                    "CAMERA_CAPTURE_REQUIRED",
-                    "Attendance requires a live camera capture."
-            );
+    private static AttendanceEventType nextEventType(List<AttendanceEvent> todayEvents) {
+        if (todayEvents.isEmpty()) {
+            return AttendanceEventType.CLOCK_IN;
         }
-        boolean facePassed = request.faceValid()
-                && request.faceCount() == 1
-                && !request.faceVerificationBypassed();
-        boolean bypassAllowed = !request.faceValid()
-                && request.faceVerificationBypassed()
-                && request.faceAttemptCount() == 3;
-        if (!facePassed && !bypassAllowed) {
-            throw badRequest(
-                    "FACE_VERIFICATION_REQUIRED",
-                    "Face verification must pass, or attendance may continue only after three failed attempts."
-            );
+        if (todayEvents.size() == 1
+                && todayEvents.get(0).getEventType() == AttendanceEventType.CLOCK_IN) {
+            return AttendanceEventType.CLOCK_OUT;
         }
-        if (!request.qrCheckpointValid()) {
-            throw badRequest(
-                    "QR_CHECKPOINT_REQUIRED",
-                    "Attendance requires the checkpoint QR validation."
-            );
-        }
-    }
-
-    private static void assertValidSequence(
-            AttendanceEventType requestedType,
-            List<AttendanceEvent> todayEvents
-    ) {
-        AttendanceEventType latestType = todayEvents.isEmpty()
-                ? null
-                : todayEvents.get(todayEvents.size() - 1).getEventType();
-
-        if (requestedType == AttendanceEventType.CLOCK_IN
-                && latestType == AttendanceEventType.CLOCK_IN) {
-            throw conflict("ALREADY_CLOCKED_IN", "A clock-in is already active today.");
-        }
-        if (requestedType == AttendanceEventType.CLOCK_OUT
-                && latestType != AttendanceEventType.CLOCK_IN) {
-            throw conflict("CLOCK_IN_REQUIRED", "Clock in before clocking out.");
-        }
+        throw conflict(
+                "ATTENDANCE_ALREADY_COMPLETED",
+                "Attendance is already completed for today."
+        );
     }
 
     private static boolean employmentOverlaps(UserAccount user, DateRange range) {

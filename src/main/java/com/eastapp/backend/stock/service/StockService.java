@@ -161,12 +161,13 @@ public class StockService {
             AuthenticatedUser principal,
             String search,
             Boolean active,
+            Boolean assigned,
             int page,
             int size
     ) {
         return PageResponse.from(
                 skuRepository.searchByTenant(
-                        principal.tenantId(), normaliseSearch(search), active, pageRequest(page, size)
+                        principal.tenantId(), normaliseSearch(search), active, assigned, pageRequest(page, size)
                 ),
                 StockSkuResponse::from
         );
@@ -190,7 +191,7 @@ public class StockService {
         assertOwnerTenantAccess(principal, sourceTenantId);
         return PageResponse.from(
                 skuRepository.searchByTenant(
-                        sourceTenantId, normaliseSearch(search), active, pageRequest(page, size)
+                        sourceTenantId, normaliseSearch(search), active, null, pageRequest(page, size)
                 ),
                 StockSkuResponse::from
         );

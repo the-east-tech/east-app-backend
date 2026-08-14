@@ -12,13 +12,13 @@ import java.util.UUID;
 
 public interface AttendanceEventRepository extends JpaRepository<AttendanceEvent, UUID> {
 
-    @EntityGraph(attributePaths = {"tenant", "userAccount", "userAccount.role", "userSession"})
+    @EntityGraph(attributePaths = {"tenant", "userAccount", "userAccount.role", "userSession", "qrCode"})
     Optional<AttendanceEvent> findByTenant_IdAndClientEventId(
             UUID tenantId,
             String clientEventId
     );
 
-    @EntityGraph(attributePaths = {"tenant", "userAccount", "userAccount.role", "userSession"})
+    @EntityGraph(attributePaths = {"tenant", "userAccount", "userAccount.role", "userSession", "qrCode"})
     List<AttendanceEvent> findAllByTenant_IdAndUserAccount_IdAndOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtAsc(
             UUID tenantId,
             UUID userId,
@@ -26,13 +26,13 @@ public interface AttendanceEventRepository extends JpaRepository<AttendanceEvent
             Instant toExclusive
     );
 
-    @EntityGraph(attributePaths = {"tenant", "userAccount", "userAccount.role", "userSession"})
+    @EntityGraph(attributePaths = {"tenant", "userAccount", "userAccount.role", "userSession", "qrCode"})
     List<AttendanceEvent> findAllByTenant_IdAndOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtAsc(
             UUID tenantId,
             Instant fromInclusive,
             Instant toExclusive
     );
-    @EntityGraph(attributePaths = {"tenant", "userAccount", "userAccount.role", "userSession"})
+    @EntityGraph(attributePaths = {"tenant", "userAccount", "userAccount.role", "userSession", "qrCode"})
     Page<AttendanceEvent> findAllByTenant_IdAndUserAccount_IdAndOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtDesc(
             UUID tenantId,
             UUID userId,

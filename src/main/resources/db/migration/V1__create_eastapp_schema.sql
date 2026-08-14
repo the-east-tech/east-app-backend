@@ -129,11 +129,36 @@ CREATE TABLE user_sessions (
 );
 CREATE INDEX ix_user_sessions_identity_id ON user_sessions (identity_id);
 
+CREATE TABLE attendance_qr_codes (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    generated_by_user_id UUID NOT NULL,
+    event_type VARCHAR(16) NOT NULL,
+    secret_hash BYTEA NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_attendance_qr_codes_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_attendance_qr_codes_generator_same_tenant FOREIGN KEY (tenant_id, generated_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT uq_attendance_qr_codes_tenant_id_id UNIQUE (tenant_id, id),
+    CONSTRAINT uq_attendance_qr_codes_secret_hash UNIQUE (secret_hash),
+    CONSTRAINT ck_attendance_qr_codes_event_type CHECK (event_type IN ('CLOCK_IN', 'CLOCK_OUT')),
+    CONSTRAINT ck_attendance_qr_codes_secret_hash_length CHECK (octet_length(secret_hash) = 32),
+    CONSTRAINT ck_attendance_qr_codes_expiry CHECK (expires_at > created_at),
+    CONSTRAINT ck_attendance_qr_codes_revoked_at CHECK (revoked_at IS NULL OR revoked_at >= created_at)
+);
+CREATE INDEX ix_attendance_qr_codes_active_fifo
+    ON attendance_qr_codes (tenant_id, event_type, created_at ASC, id ASC)
+    WHERE revoked_at IS NULL;
+CREATE INDEX ix_attendance_qr_codes_expiry ON attendance_qr_codes (expires_at);
+
 CREATE TABLE attendance_events (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     tenant_id UUID NOT NULL,
     user_id UUID NOT NULL,
     user_session_id UUID,
+    qr_code_id UUID NOT NULL,
     client_event_id VARCHAR(64) NOT NULL,
     event_type VARCHAR(16) NOT NULL,
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -147,17 +172,6 @@ CREATE TABLE attendance_events (
     work_location_latitude DOUBLE PRECISION NOT NULL,
     work_location_longitude DOUBLE PRECISION NOT NULL,
     distance_meters DOUBLE PRECISION NOT NULL,
-    camera_capture_valid BOOLEAN NOT NULL,
-    face_valid BOOLEAN NOT NULL,
-    face_count INTEGER NOT NULL,
-    face_attempt_count INTEGER NOT NULL,
-    face_verification_bypassed BOOLEAN NOT NULL,
-    face_box_width DOUBLE PRECISION,
-    face_box_height DOUBLE PRECISION,
-    face_yaw DOUBLE PRECISION,
-    face_roll DOUBLE PRECISION,
-    face_pitch DOUBLE PRECISION,
-    qr_checkpoint_valid BOOLEAN NOT NULL,
     device_platform VARCHAR(32) NOT NULL,
     device_os_version VARCHAR(160),
     app_version VARCHAR(40) NOT NULL,
@@ -168,6 +182,8 @@ CREATE TABLE attendance_events (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_attendance_events_session FOREIGN KEY (user_session_id)
         REFERENCES user_sessions (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_attendance_events_qr_code_same_tenant FOREIGN KEY (tenant_id, qr_code_id)
+        REFERENCES attendance_qr_codes (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_attendance_events_tenant_client_event UNIQUE (tenant_id, client_event_id),
     CONSTRAINT ck_attendance_events_type CHECK (event_type IN ('CLOCK_IN', 'CLOCK_OUT')),
     CONSTRAINT ck_attendance_events_client_event_not_blank CHECK (btrim(client_event_id) <> ''),
@@ -180,13 +196,6 @@ CREATE TABLE attendance_events (
     CONSTRAINT ck_attendance_events_work_location_latitude CHECK (work_location_latitude BETWEEN -90 AND 90),
     CONSTRAINT ck_attendance_events_work_location_longitude CHECK (work_location_longitude BETWEEN -180 AND 180),
     CONSTRAINT ck_attendance_events_distance CHECK (distance_meters >= 0),
-    CONSTRAINT ck_attendance_events_face_count CHECK (face_count >= 0),
-    CONSTRAINT ck_attendance_events_face_attempt_count CHECK (face_attempt_count BETWEEN 1 AND 3),
-    CONSTRAINT ck_attendance_events_face_result CHECK (
-        (face_valid = TRUE AND face_count = 1 AND face_verification_bypassed = FALSE)
-        OR
-        (face_valid = FALSE AND face_attempt_count = 3 AND face_verification_bypassed = TRUE)
-    ),
     CONSTRAINT ck_attendance_events_device_platform_not_blank CHECK (btrim(device_platform) <> ''),
     CONSTRAINT ck_attendance_events_app_version_not_blank CHECK (btrim(app_version) <> ''),
     CONSTRAINT ck_attendance_events_validation_method_not_blank CHECK (btrim(validation_method) <> '')
@@ -309,12 +318,33 @@ CREATE INDEX ix_stock_skus_tenant_tag1 ON stock_skus (tenant_id, tag1_id);
 CREATE INDEX ix_stock_skus_tenant_tag2 ON stock_skus (tenant_id, tag2_id);
 
 CREATE TABLE stock_sku_suppliers (
+    tenant_id UUID NOT NULL,
     sku_id UUID NOT NULL,
     supplier_id UUID NOT NULL,
     PRIMARY KEY (sku_id, supplier_id),
-    CONSTRAINT fk_stock_sku_suppliers_sku FOREIGN KEY (sku_id) REFERENCES stock_skus (id) ON DELETE CASCADE,
-    CONSTRAINT fk_stock_sku_suppliers_supplier FOREIGN KEY (supplier_id) REFERENCES stock_suppliers (id) ON DELETE RESTRICT
+    CONSTRAINT fk_stock_sku_suppliers_sku_same_tenant FOREIGN KEY (tenant_id, sku_id)
+        REFERENCES stock_skus (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT fk_stock_sku_suppliers_supplier_same_tenant FOREIGN KEY (tenant_id, supplier_id)
+        REFERENCES stock_suppliers (tenant_id, id) ON DELETE RESTRICT
 );
+
+CREATE OR REPLACE FUNCTION eastapp_set_stock_sku_supplier_tenant()
+RETURNS TRIGGER AS $function$
+BEGIN
+    SELECT tenant_id INTO NEW.tenant_id
+    FROM stock_skus
+    WHERE id = NEW.sku_id;
+
+    IF NEW.tenant_id IS NULL THEN
+        RAISE EXCEPTION 'Stock SKU % does not exist', NEW.sku_id;
+    END IF;
+    RETURN NEW;
+END;
+$function$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_stock_sku_suppliers_set_tenant
+BEFORE INSERT OR UPDATE OF sku_id ON stock_sku_suppliers
+FOR EACH ROW EXECUTE FUNCTION eastapp_set_stock_sku_supplier_tenant();
 
 CREATE TABLE stock_sku_assignees (
     sku_id UUID NOT NULL,
@@ -414,6 +444,7 @@ CREATE INDEX ix_stock_receivings_tenant_captured_at ON stock_receivings (tenant_
 
 CREATE TABLE stock_receiving_items (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
     receiving_id UUID NOT NULL,
     sku_id UUID NOT NULL,
     position INTEGER NOT NULL,
@@ -423,14 +454,32 @@ CREATE TABLE stock_receiving_items (
     unit VARCHAR(32) NOT NULL,
     condition VARCHAR(80) NOT NULL,
     note VARCHAR(1000) NOT NULL DEFAULT '',
-    CONSTRAINT fk_stock_receiving_items_receiving FOREIGN KEY (receiving_id)
-        REFERENCES stock_receivings (id) ON DELETE CASCADE,
-    CONSTRAINT fk_stock_receiving_items_sku FOREIGN KEY (sku_id)
-        REFERENCES stock_skus (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_receiving_items_receiving_same_tenant FOREIGN KEY (tenant_id, receiving_id)
+        REFERENCES stock_receivings (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT fk_stock_receiving_items_sku_same_tenant FOREIGN KEY (tenant_id, sku_id)
+        REFERENCES stock_skus (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_stock_receiving_items_position UNIQUE (receiving_id, position),
     CONSTRAINT ck_stock_receiving_items_position CHECK (position >= 0),
     CONSTRAINT ck_stock_receiving_items_quantities CHECK (invoice_quantity >= 0 AND received_quantity >= 0)
 );
+
+CREATE OR REPLACE FUNCTION eastapp_set_stock_receiving_item_tenant()
+RETURNS TRIGGER AS $function$
+BEGIN
+    SELECT tenant_id INTO NEW.tenant_id
+    FROM stock_receivings
+    WHERE id = NEW.receiving_id;
+
+    IF NEW.tenant_id IS NULL THEN
+        RAISE EXCEPTION 'Stock receiving % does not exist', NEW.receiving_id;
+    END IF;
+    RETURN NEW;
+END;
+$function$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_stock_receiving_items_set_tenant
+BEFORE INSERT OR UPDATE OF receiving_id ON stock_receiving_items
+FOR EACH ROW EXECUTE FUNCTION eastapp_set_stock_receiving_item_tenant();
 
 CREATE TABLE stock_audit_entries (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -748,82 +797,3 @@ CREATE TABLE complaint_report_details (
 );
 CREATE INDEX ix_complaint_report_details_tenant_status
     ON complaint_report_details (tenant_id, complaint_status);
-
-
--- ============================================================================
--- Failed attendance face-attempt evidence
--- ============================================================================
-
-CREATE TABLE attendance_face_attempts (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    tenant_id UUID NOT NULL,
-    user_id UUID NOT NULL,
-    user_session_id UUID,
-    client_attempt_id VARCHAR(64) NOT NULL,
-    intended_event_type VARCHAR(16) NOT NULL,
-    recorded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    device_attempted_at TIMESTAMPTZ NOT NULL,
-    latitude DOUBLE PRECISION NOT NULL,
-    longitude DOUBLE PRECISION NOT NULL,
-    accuracy_meters DOUBLE PRECISION NOT NULL,
-    captured_address VARCHAR(500) NOT NULL,
-    work_location_name VARCHAR(200) NOT NULL,
-    work_location_address VARCHAR(500) NOT NULL,
-    work_location_latitude DOUBLE PRECISION NOT NULL,
-    work_location_longitude DOUBLE PRECISION NOT NULL,
-    distance_meters DOUBLE PRECISION NOT NULL,
-    failure_reason VARCHAR(500) NOT NULL,
-    face_count INTEGER NOT NULL,
-    face_attempt_number INTEGER NOT NULL,
-    face_box_width DOUBLE PRECISION,
-    face_box_height DOUBLE PRECISION,
-    face_yaw DOUBLE PRECISION,
-    face_roll DOUBLE PRECISION,
-    face_pitch DOUBLE PRECISION,
-    device_platform VARCHAR(32) NOT NULL,
-    device_os_version VARCHAR(160),
-    app_version VARCHAR(40) NOT NULL,
-    validation_method VARCHAR(64) NOT NULL,
-    photo_content_type VARCHAR(40),
-    photo_size_bytes BIGINT NOT NULL DEFAULT 0,
-    photo_bytes BYTEA,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_attendance_face_attempts_tenant FOREIGN KEY (tenant_id)
-        REFERENCES tenants (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_attendance_face_attempts_user_same_tenant FOREIGN KEY (tenant_id, user_id)
-        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT fk_attendance_face_attempts_session FOREIGN KEY (user_session_id)
-        REFERENCES user_sessions (id) ON DELETE RESTRICT,
-    CONSTRAINT uq_attendance_face_attempts_tenant_client UNIQUE (tenant_id, client_attempt_id),
-    CONSTRAINT ck_attendance_face_attempts_client_not_blank CHECK (btrim(client_attempt_id) <> ''),
-    CONSTRAINT ck_attendance_face_attempts_event_type CHECK (intended_event_type IN ('CLOCK_IN', 'CLOCK_OUT')),
-    CONSTRAINT ck_attendance_face_attempts_latitude CHECK (latitude BETWEEN -90 AND 90),
-    CONSTRAINT ck_attendance_face_attempts_longitude CHECK (longitude BETWEEN -180 AND 180),
-    CONSTRAINT ck_attendance_face_attempts_accuracy CHECK (accuracy_meters >= 0),
-    CONSTRAINT ck_attendance_face_attempts_captured_address CHECK (btrim(captured_address) <> ''),
-    CONSTRAINT ck_attendance_face_attempts_work_location_name CHECK (btrim(work_location_name) <> ''),
-    CONSTRAINT ck_attendance_face_attempts_work_location_address CHECK (btrim(work_location_address) <> ''),
-    CONSTRAINT ck_attendance_face_attempts_work_latitude CHECK (work_location_latitude BETWEEN -90 AND 90),
-    CONSTRAINT ck_attendance_face_attempts_work_longitude CHECK (work_location_longitude BETWEEN -180 AND 180),
-    CONSTRAINT ck_attendance_face_attempts_distance CHECK (distance_meters >= 0),
-    CONSTRAINT ck_attendance_face_attempts_failure_reason CHECK (btrim(failure_reason) <> ''),
-    CONSTRAINT ck_attendance_face_attempts_face_count CHECK (face_count >= 0),
-    CONSTRAINT ck_attendance_face_attempts_number CHECK (face_attempt_number BETWEEN 1 AND 3),
-    CONSTRAINT ck_attendance_face_attempts_device_platform CHECK (btrim(device_platform) <> ''),
-    CONSTRAINT ck_attendance_face_attempts_app_version CHECK (btrim(app_version) <> ''),
-    CONSTRAINT ck_attendance_face_attempts_validation_method CHECK (btrim(validation_method) <> ''),
-    CONSTRAINT ck_attendance_face_attempts_photo_size CHECK (photo_size_bytes BETWEEN 0 AND 5242880),
-    CONSTRAINT ck_attendance_face_attempts_photo_consistency CHECK (
-        (photo_size_bytes = 0 AND photo_content_type IS NULL AND photo_bytes IS NULL)
-        OR
-        (photo_size_bytes > 0
-            AND photo_content_type IN ('image/jpeg', 'image/png')
-            AND photo_bytes IS NOT NULL
-            AND octet_length(photo_bytes) = photo_size_bytes)
-    )
-);
-
-CREATE INDEX ix_attendance_face_attempts_tenant_recorded
-    ON attendance_face_attempts (tenant_id, recorded_at DESC);
-CREATE INDEX ix_attendance_face_attempts_user_attempted
-    ON attendance_face_attempts (user_id, device_attempted_at DESC);

@@ -20,16 +20,10 @@ public record AttendanceEventResponse(
         double workLocationLatitude,
         double workLocationLongitude,
         double distanceMeters,
-        boolean cameraCaptureValid,
-        boolean faceValid,
-        int faceCount,
-        int faceAttemptCount,
-        boolean faceVerificationBypassed,
-        boolean qrCheckpointValid,
+        UUID qrCodeId,
         String devicePlatform,
         String appVersion,
-        String validationMethod,
-        boolean photoStored
+        String validationMethod
 ) {
     public static AttendanceEventResponse from(AttendanceEvent event) {
         return new AttendanceEventResponse(
@@ -46,16 +40,10 @@ public record AttendanceEventResponse(
                 event.getWorkLocationLatitude(),
                 event.getWorkLocationLongitude(),
                 event.getDistanceMeters(),
-                event.isCameraCaptureValid(),
-                event.isFaceValid(),
-                event.getFaceCount(),
-                event.getFaceAttemptCount(),
-                event.isFaceVerificationBypassed(),
-                event.isQrCheckpointValid(),
+                event.getQrCode().getId(),
                 event.getDevicePlatform(),
                 event.getAppVersion(),
-                event.getValidationMethod(),
-                false
+                event.getValidationMethod()
         );
     }
 }

@@ -5,6 +5,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
@@ -42,6 +44,14 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
     Optional<UserAccount> findByIdAndTenant_Id(UUID id, UUID tenantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"identity", "tenant", "role"})
+    @Query("select user from UserAccount user where user.id = :id and user.tenant.id = :tenantId")
+    Optional<UserAccount> findByIdAndTenant_IdForUpdate(
+            @Param("id") UUID id,
+            @Param("tenantId") UUID tenantId
+    );
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
     Optional<UserAccount> findByTenant_CompanyCodeAndEmployeeIdAndIdentity_PhoneE164(

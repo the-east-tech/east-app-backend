@@ -71,12 +71,13 @@ STAFF_2
 
 - Clock In and Clock Out events
 - Device-captured timestamp and location
-- Tenant-specific geofence validation
-- Camera and face-validation metadata
+- Tenant-specific business-location reference for attendance distance calculation
+- GPS coordinates, reverse-geocoded address and distance-from-business metadata
+- Action-specific Check In / Check Out attendance QR codes, reusable by multiple employees in the same tenant for 30 minutes
 - Daily, monthly and yearly audit views
 - Behaviour and employee-level reporting
 
-Attendance stores validation metadata only. Captured face photos are not stored by the backend.
+Attendance no longer stores face-detection or face-photo data. Attendance events require a backend-validated QR code plus GPS evidence.
 
 ### Stock
 
@@ -393,6 +394,5 @@ eastapp:
 
 ## V4 attendance evidence and atomic Daily Count review
 
-The clean V1 baseline includes `attendance_face_attempts`. It stores each failed face-verification attempt with its GPS evidence, calculated distance from the active business, failure reason, device metadata and the captured image when available. Owner and Head users can review these records through the attendance audit API.
 
 Daily Count bulk review now uses one transactional endpoint, `PATCH /api/v1/stock/counts/bulk-review`. The service validates every selected record before changing any of them, so an invalid or previously reviewed record rolls back the whole batch.

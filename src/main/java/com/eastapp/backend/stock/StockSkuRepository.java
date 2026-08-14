@@ -29,6 +29,11 @@ public interface StockSkuRepository extends JpaRepository<StockSku, UUID> {
             where sku.tenant.id = :tenantId
               and (:active is null or sku.active = :active)
               and (
+                    :assigned is null
+                    or (:assigned = true and sku.assignedStaffNames is not empty)
+                    or (:assigned = false and sku.assignedStaffNames is empty)
+                  )
+              and (
                     :search = ''
                     or lower(sku.name) like lower(concat('%', :search, '%'))
                     or lower(sku.tag1.tag) like lower(concat('%', :search, '%'))
@@ -48,6 +53,7 @@ public interface StockSkuRepository extends JpaRepository<StockSku, UUID> {
             @Param("tenantId") UUID tenantId,
             @Param("search") String search,
             @Param("active") Boolean active,
+            @Param("assigned") Boolean assigned,
             Pageable pageable
     );
 

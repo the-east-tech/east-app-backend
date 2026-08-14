@@ -42,6 +42,10 @@ public class AttendanceEvent {
     @JoinColumn(name = "user_session_id", updatable = false)
     private UserSession userSession;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "qr_code_id", nullable = false, updatable = false)
+    private AttendanceQrCode qrCode;
+
     @Column(name = "client_event_id", nullable = false, length = 64, updatable = false)
     private String clientEventId;
 
@@ -83,39 +87,6 @@ public class AttendanceEvent {
     @Column(name = "distance_meters", nullable = false, updatable = false)
     private double distanceMeters;
 
-    @Column(name = "camera_capture_valid", nullable = false, updatable = false)
-    private boolean cameraCaptureValid;
-
-    @Column(name = "face_valid", nullable = false, updatable = false)
-    private boolean faceValid;
-
-    @Column(name = "face_count", nullable = false, updatable = false)
-    private int faceCount;
-
-    @Column(name = "face_attempt_count", nullable = false, updatable = false)
-    private int faceAttemptCount;
-
-    @Column(name = "face_verification_bypassed", nullable = false, updatable = false)
-    private boolean faceVerificationBypassed;
-
-    @Column(name = "face_box_width", updatable = false)
-    private Double faceBoxWidth;
-
-    @Column(name = "face_box_height", updatable = false)
-    private Double faceBoxHeight;
-
-    @Column(name = "face_yaw", updatable = false)
-    private Double faceYaw;
-
-    @Column(name = "face_roll", updatable = false)
-    private Double faceRoll;
-
-    @Column(name = "face_pitch", updatable = false)
-    private Double facePitch;
-
-    @Column(name = "qr_checkpoint_valid", nullable = false, updatable = false)
-    private boolean qrCheckpointValid;
-
     @Column(name = "device_platform", nullable = false, length = 32, updatable = false)
     private String devicePlatform;
 
@@ -139,6 +110,7 @@ public class AttendanceEvent {
             Tenant tenant,
             UserAccount userAccount,
             UserSession userSession,
+            AttendanceQrCode qrCode,
             String clientEventId,
             AttendanceEventType eventType,
             Instant deviceCapturedAt,
@@ -151,17 +123,6 @@ public class AttendanceEvent {
             double workLocationLatitude,
             double workLocationLongitude,
             double distanceMeters,
-            boolean cameraCaptureValid,
-            boolean faceValid,
-            int faceCount,
-            int faceAttemptCount,
-            boolean faceVerificationBypassed,
-            Double faceBoxWidth,
-            Double faceBoxHeight,
-            Double faceYaw,
-            Double faceRoll,
-            Double facePitch,
-            boolean qrCheckpointValid,
             String devicePlatform,
             String deviceOsVersion,
             String appVersion,
@@ -170,6 +131,7 @@ public class AttendanceEvent {
         this.tenant = Objects.requireNonNull(tenant, "tenant must not be null");
         this.userAccount = Objects.requireNonNull(userAccount, "userAccount must not be null");
         this.userSession = userSession;
+        this.qrCode = Objects.requireNonNull(qrCode, "qrCode must not be null");
         this.clientEventId = requireText(clientEventId, "clientEventId");
         this.eventType = Objects.requireNonNull(eventType, "eventType must not be null");
         this.deviceCapturedAt = Objects.requireNonNull(deviceCapturedAt, "deviceCapturedAt must not be null");
@@ -182,17 +144,6 @@ public class AttendanceEvent {
         this.workLocationLatitude = workLocationLatitude;
         this.workLocationLongitude = workLocationLongitude;
         this.distanceMeters = distanceMeters;
-        this.cameraCaptureValid = cameraCaptureValid;
-        this.faceValid = faceValid;
-        this.faceCount = faceCount;
-        this.faceAttemptCount = faceAttemptCount;
-        this.faceVerificationBypassed = faceVerificationBypassed;
-        this.faceBoxWidth = faceBoxWidth;
-        this.faceBoxHeight = faceBoxHeight;
-        this.faceYaw = faceYaw;
-        this.faceRoll = faceRoll;
-        this.facePitch = facePitch;
-        this.qrCheckpointValid = qrCheckpointValid;
         this.devicePlatform = requireText(devicePlatform, "devicePlatform");
         this.deviceOsVersion = normaliseOptionalText(deviceOsVersion);
         this.appVersion = requireText(appVersion, "appVersion");
@@ -203,6 +154,7 @@ public class AttendanceEvent {
     public Tenant getTenant() { return tenant; }
     public UserAccount getUserAccount() { return userAccount; }
     public UserSession getUserSession() { return userSession; }
+    public AttendanceQrCode getQrCode() { return qrCode; }
     public String getClientEventId() { return clientEventId; }
     public AttendanceEventType getEventType() { return eventType; }
     public Instant getOccurredAt() { return occurredAt; }
@@ -216,17 +168,6 @@ public class AttendanceEvent {
     public double getWorkLocationLatitude() { return workLocationLatitude; }
     public double getWorkLocationLongitude() { return workLocationLongitude; }
     public double getDistanceMeters() { return distanceMeters; }
-    public boolean isCameraCaptureValid() { return cameraCaptureValid; }
-    public boolean isFaceValid() { return faceValid; }
-    public int getFaceCount() { return faceCount; }
-    public int getFaceAttemptCount() { return faceAttemptCount; }
-    public boolean isFaceVerificationBypassed() { return faceVerificationBypassed; }
-    public Double getFaceBoxWidth() { return faceBoxWidth; }
-    public Double getFaceBoxHeight() { return faceBoxHeight; }
-    public Double getFaceYaw() { return faceYaw; }
-    public Double getFaceRoll() { return faceRoll; }
-    public Double getFacePitch() { return facePitch; }
-    public boolean isQrCheckpointValid() { return qrCheckpointValid; }
     public String getDevicePlatform() { return devicePlatform; }
     public String getDeviceOsVersion() { return deviceOsVersion; }
     public String getAppVersion() { return appVersion; }
@@ -241,9 +182,7 @@ public class AttendanceEvent {
 
     private static String requireText(String value, String fieldName) {
         String normalised = Objects.requireNonNull(value, fieldName + " must not be null").trim();
-        if (normalised.isEmpty()) {
-            throw new IllegalArgumentException(fieldName + " must not be blank");
-        }
+        if (normalised.isEmpty()) throw new IllegalArgumentException(fieldName + " must not be blank");
         return normalised;
     }
 }

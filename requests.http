@@ -199,66 +199,49 @@ Content-Type: application/json
 DELETE {{baseUrl}}/api/v1/roles/{{roleId}}
 Authorization: Bearer {{eastappToken}}
 
-### Attendance today
+### Attendance today — loaded only when Attendance → Check In / Out is opened
 GET {{baseUrl}}/api/v1/attendance/today
 Authorization: Bearer {{eastappToken}}
 
-### Create attendance event
+### Generate 30-minute Check In QR — Owner / Head / Manager only
+POST {{baseUrl}}/api/v1/attendance/qr-codes
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "eventType": "CLOCK_IN"
+}
+
+> {% client.global.set("attendanceCheckInQrPayload", response.body.qrPayload); %}
+
+### Generate 30-minute Check Out QR — Owner / Head / Manager only
+POST {{baseUrl}}/api/v1/attendance/qr-codes
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "eventType": "CLOCK_OUT"
+}
+
+> {% client.global.set("attendanceCheckOutQrPayload", response.body.qrPayload); %}
+
+### Create attendance event using scanned QR + GPS
+# Backend determines the next legal daily event.
+# Use a Check In QR when no event exists today, or a Check Out QR after Check In.
 POST {{baseUrl}}/api/v1/attendance/events
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
 
 {
   "clientEventId": "attendance-{{$timestamp}}",
-  "eventType": "CLOCK_IN",
   "deviceCapturedAt": "{{capturedAt}}",
   "latitude": {{attendanceLatitude}},
   "longitude": {{attendanceLongitude}},
   "accuracyMeters": 8.0,
-  "cameraCaptureValid": true,
-  "faceValid": true,
-  "faceCount": 1,
-  "faceAttemptCount": 1,
-  "faceVerificationBypassed": false,
-  "faceBoxWidth": 220.0,
-  "faceBoxHeight": 280.0,
-  "faceYaw": 0.0,
-  "faceRoll": 0.0,
-  "facePitch": 0.0,
-  "qrCheckpointValid": true,
-  "devicePlatform": "android",
+  "qrPayload": "{{attendanceCheckInQrPayload}}",
+  "devicePlatform": "ANDROID",
   "deviceOsVersion": "Android",
-  "appVersion": "east_app_v252",
-  "validationMethod": "camera-face-location"
-}
-
-### Create attendance event after three failed face attempts
-POST {{baseUrl}}/api/v1/attendance/events
-Authorization: Bearer {{eastappToken}}
-Content-Type: application/json
-
-{
-  "clientEventId": "attendance-bypass-{{$timestamp}}",
-  "eventType": "CLOCK_IN",
-  "deviceCapturedAt": "{{capturedAt}}",
-  "latitude": {{attendanceLatitude}},
-  "longitude": {{attendanceLongitude}},
-  "accuracyMeters": 8.0,
-  "cameraCaptureValid": true,
-  "faceValid": false,
-  "faceCount": 0,
-  "faceAttemptCount": 3,
-  "faceVerificationBypassed": true,
-  "faceBoxWidth": null,
-  "faceBoxHeight": null,
-  "faceYaw": null,
-  "faceRoll": null,
-  "facePitch": null,
-  "qrCheckpointValid": true,
-  "devicePlatform": "android",
-  "deviceOsVersion": "Android",
-  "appVersion": "east_app_v252",
-  "validationMethod": "FACE_DETECTION_BYPASSED_AFTER_3_ATTEMPTS"
+  "appVersion": "east_app_v275"
 }
 
 ### Tenant-wide attendance audit
@@ -390,7 +373,7 @@ Authorization: Bearer {{eastappToken}}
 Accept: image/jpeg,image/png
 
 ### List SKUs — paged
-GET {{baseUrl}}/api/v1/stock/skus?search=&active=true&page=0&size=50
+GET {{baseUrl}}/api/v1/stock/skus?search=&active=true&assigned=true&page=0&size=50
 Authorization: Bearer {{eastappToken}}
 
 ### Create SKU
@@ -459,7 +442,7 @@ GET {{baseUrl}}/api/v1/stock/counts?mine=true&from={{fromDate}}&to={{toDate}}&pa
 Authorization: Bearer {{eastappToken}}
 
 ### List review stock counts — paged
-GET {{baseUrl}}/api/v1/stock/counts?mine=false&reviewStatus=Pending%20Review&page=0&size=50
+GET {{baseUrl}}/api/v1/stock/counts?mine=false&reviewStatus=Pending%20Review&from={{fromDate}}&to={{toDate}}&page=0&size=50
 Authorization: Bearer {{eastappToken}}
 
 ### Submit daily stock count
@@ -493,7 +476,7 @@ Content-Type: application/json
 }
 
 ### List receiving records — paged
-GET {{baseUrl}}/api/v1/stock/receivings?reviewStatus=Pending%20Review&page=0&size=50
+GET {{baseUrl}}/api/v1/stock/receivings?reviewStatus=Pending%20Review&from={{fromDate}}&to={{toDate}}&page=0&size=50
 Authorization: Bearer {{eastappToken}}
 
 ### Submit receiving
@@ -801,71 +784,6 @@ Content-Type: application/json
   "status": "Approved",
   "note": "Selected daily counts verified together"
 }
-
-### Record a failed face-verification attempt with GPS — photo part is optional
-POST {{baseUrl}}/api/v1/attendance/face-attempts
-Authorization: Bearer {{eastappToken}}
-Content-Type: multipart/form-data; boundary=EastAppFaceAttemptBoundary
-
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="clientAttemptId"
-
-manual-face-attempt-{{$timestamp}}
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="intendedEventType"
-
-CLOCK_IN
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="deviceAttemptedAt"
-
-{{$isoTimestamp}}
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="latitude"
-
-4.3272472
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="longitude"
-
-101.1329829
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="accuracyMeters"
-
-12
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="failureReason"
-
-No face was detected.
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="faceCount"
-
-0
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="faceAttemptNumber"
-
-1
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="devicePlatform"
-
-IOS
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="appVersion"
-
-east_app_v272
---EastAppFaceAttemptBoundary
-Content-Disposition: form-data; name="validationMethod"
-
-ML_KIT_FACE_DETECTION_FAILED
---EastAppFaceAttemptBoundary--
-
-### Review failed face attempts for one user — Owner or Head only
-GET {{baseUrl}}/api/v1/attendance/users/{{userId}}/face-attempts?period=DAY&anchor={{reportDate}}&page=0&size=100
-Authorization: Bearer {{eastappToken}}
-
-### Download the captured failed-attempt photo — Owner or Head only
-GET {{baseUrl}}/api/v1/attendance/face-attempts/{{faceAttemptId}}/photo
-Authorization: Bearer {{eastappToken}}
-Accept: image/jpeg,image/png
-
 
 ### Submit Daily Sales Directly (no draft step)
 POST {{baseUrl}}/api/v1/reports/sales/submit

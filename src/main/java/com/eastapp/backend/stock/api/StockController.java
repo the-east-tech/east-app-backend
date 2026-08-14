@@ -114,10 +114,11 @@ public class StockController {
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(defaultValue = "") String search,
             @RequestParam(required = false) Boolean active,
+            @RequestParam(required = false) Boolean assigned,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
-        return stockService.listSkus(principal, search, active, page, size);
+        return stockService.listSkus(principal, search, active, assigned, page, size);
     }
 
     @GetMapping("/skus/copy-source")
