@@ -29,7 +29,7 @@ public class DevelopmentDatabaseResetConfiguration {
      *
      * If either side is false, Flyway clean is never executed.
      */
-    private static final boolean DATABASE_RESET_ALLOWED_BY_CODE = true;
+    private static final boolean DATABASE_RESET_ALLOWED_BY_CODE = false;
 
     private static final Set<String> LEGACY_MIGRATION_VERSIONS = Set.of("1", "2", "3", "4");
 

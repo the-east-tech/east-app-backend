@@ -4,7 +4,7 @@ Backend API for **EastApp**, a multi-business operations application covering id
 
 ## Current development model
 
-- `v069` uses the consolidated Flyway V1 baseline; phone-login removal does not require a schema change
+- `v070` uses the consolidated Flyway V1 baseline; phone-login removal does not require a schema change
 - After this reset, `V1__create_eastapp_schema.sql` is immutable and every later schema change must use `V2+`
 - No seeded tenants or users
 - Initial Setup creates the first tenant and first `OWNER`
@@ -277,7 +277,7 @@ No Redis or general backend data cache is added at this stage.
 
 ## Database and Flyway
 
-EastApp `v069` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
+EastApp `v070` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
 
 1. Code gate: `DATABASE_RESET_ALLOWED_BY_CODE`
 2. Environment gate: `EASTAPP_DATABASE_RESET_ON_START`
@@ -285,7 +285,7 @@ EastApp `v069` protects destructive database reset with two independent gates. `
 Current code gate in this package:
 
 ```text
-DATABASE_RESET_ALLOWED_BY_CODE=true
+DATABASE_RESET_ALLOWED_BY_CODE=false
 ```
 
 Truth table:
