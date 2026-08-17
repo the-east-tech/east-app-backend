@@ -277,14 +277,30 @@ No Redis or general backend data cache is added at this stage.
 
 ## Database and Flyway
 
-EastApp `v052` consolidates the current development schema into one clean baseline:
+EastApp `v065` uses a two-sided destructive-reset lock. **Both sides must be true before `flyway.clean()` can run.**
 
-- `V1__create_eastapp_schema.sql` contains the complete current schema
-- Delete/reset the old development database once before first startup with `v052`
-- After that successful reset, freeze V1 and add every later schema change as a new append-only `V2+` migration
-- Never enable `EASTAPP_DATABASE_RESET_ON_START` in normal local or Railway operation
-- Do not seed tenants, owners or employees in Flyway
-- Back up any database before destructive maintenance
+1. Code side: `DATABASE_RESET_ALLOWED_BY_CODE` in `DevelopmentDatabaseResetConfiguration.java`
+2. Railway/local environment side: `EASTAPP_DATABASE_RESET_ON_START`
+
+Current code gate for this package:
+
+```text
+DATABASE_RESET_ALLOWED_BY_CODE=true   # TRUE — one-time reset release
+```
+
+Truth table:
+
+| Code gate | EASTAPP_DATABASE_RESET_ON_START | Database reset |
+|---|---|---|
+| false | false | No |
+| false | true | No |
+| true | false | No |
+| true | true | Yes, subject to the Railway legacy-history safety check |
+
+The consolidated `V1__create_eastapp_schema.sql` is the clean baseline containing the former V1-V4 schema. The old V2, V3 and V4 files are removed. Once the consolidated V1 is established, it must remain immutable and all future schema changes use new append-only V2+ migrations.
+
+On Railway there is an additional one-time safety check: even when both reset gates are true, reset is permitted only when the existing successful Flyway history is exactly legacy versions `1,2,3,4`. A database already running the consolidated V1 will not be cleaned by this transition logic.
+
 
 ## Railway deployment
 
@@ -311,7 +327,6 @@ SPRING_DATASOURCE_PASSWORD=${{Postgres.PGPASSWORD}}
 SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
 ```
 
-`EASTAPP_DATABASE_RESET_ON_START=false` preserves existing data and is required for normal local and Railway operation.
 
 Detailed deployment guidance should live in:
 

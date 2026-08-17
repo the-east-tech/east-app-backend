@@ -29,8 +29,9 @@ management:
 
 eastapp:
   database:
+    # Environment-side reset gate. Flyway clean runs only when this is true AND
+    # DATABASE_RESET_ALLOWED_BY_CODE is also true in DevelopmentDatabaseResetConfiguration.
     reset-on-start: ${EASTAPP_DATABASE_RESET_ON_START:false}
-
 
   attendance:
     time-zone: ${EASTAPP_ATTENDANCE_TIME_ZONE:Asia/Kuala_Lumpur}

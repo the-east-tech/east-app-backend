@@ -1,6 +1,7 @@
--- EastApp clean development baseline (v052).
--- This single V1 file defines the complete current schema after the deliberate
--- database reset. From this baseline onward, keep V1 immutable and add V2+ migrations.
+-- EastApp clean baseline (v063).
+-- This V1 consolidates the complete schema previously represented by V1 through V4
+-- after one final deliberate development reset. From this baseline onward, keep V1
+-- immutable and add every future schema change as a new append-only V2+ migration.
 
 CREATE TABLE application_setup (
     id SMALLINT PRIMARY KEY,
@@ -53,7 +54,7 @@ CREATE TABLE tenants (
 CREATE TABLE roles (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     tenant_id UUID NOT NULL,
-    system_key VARCHAR(32),
+    system_key VARCHAR(32) NOT NULL,
     name VARCHAR(80) NOT NULL,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -62,7 +63,7 @@ CREATE TABLE roles (
     CONSTRAINT uq_roles_tenant_id_id UNIQUE (tenant_id, id),
     CONSTRAINT uq_roles_tenant_system_key UNIQUE (tenant_id, system_key),
     CONSTRAINT ck_roles_system_key CHECK (
-        system_key IS NULL OR system_key IN ('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR', 'STAFF_1', 'STAFF_2')
+        system_key IN ('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR', 'STAFF_1', 'STAFF_2')
     ),
     CONSTRAINT ck_roles_name_not_blank CHECK (btrim(name) <> '')
 );
@@ -609,6 +610,33 @@ CREATE TABLE report_media (
 CREATE INDEX ix_report_media_tenant_created_at
     ON report_media (tenant_id, created_at DESC);
 
+-- Tenant-scoped Home advertisements. Images reuse report_media storage.
+CREATE TABLE advertisements (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    image_storage_key VARCHAR(80) NOT NULL,
+    starts_at TIMESTAMPTZ NOT NULL,
+    ends_at TIMESTAMPTZ NOT NULL,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by_user_id UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_advertisements_tenant
+        FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE,
+    CONSTRAINT fk_advertisements_media_same_tenant
+        FOREIGN KEY (tenant_id, image_storage_key)
+        REFERENCES report_media (tenant_id, storage_key) ON DELETE RESTRICT,
+    CONSTRAINT fk_advertisements_creator_same_tenant
+        FOREIGN KEY (tenant_id, created_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT ck_advertisement_period CHECK (ends_at > starts_at),
+    CONSTRAINT ck_advertisement_order CHECK (display_order BETWEEN 0 AND 3)
+);
+
+CREATE INDEX ix_advertisements_tenant_schedule
+    ON advertisements (tenant_id, active, starts_at, ends_at);
+
 CREATE TABLE business_reports (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     tenant_id UUID NOT NULL,
@@ -676,7 +704,7 @@ CREATE TABLE sales_report_details (
             AND ewallet_total_rm >= 0
         ),
     CONSTRAINT ck_sales_report_details_total_reconciles
-        CHECK (sales_rm = sub_total_rm + panda_sales_rm + ewallet_total_rm),
+        CHECK (sales_rm = round(sub_total_rm + (panda_sales_rm * 0.60) + ewallet_total_rm, 2)),
     CONSTRAINT ck_sales_report_details_cash_receiver_not_blank
         CHECK (btrim(cash_received_by) <> ''),
     CONSTRAINT ck_sales_report_details_staff_count_positive
