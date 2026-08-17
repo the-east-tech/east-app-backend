@@ -71,8 +71,8 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
 
             log.info(
                     "HTTP requestId={} method={} path={} query={} status={} durationMs={} "
-                            + "caller={} employeeId={} userId={} fullName={} businessCode={} "
-                            + "businessName={} tenantId={} contentType={} body={}",
+                            + "caller={} employeeId={} fullName={} businessCode={} "
+                            + "businessName={} contentType={} body={}",
                     requestId,
                     cachedRequest.getMethod(),
                     cachedRequest.getRequestURI(),
@@ -81,11 +81,9 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
                     durationMs,
                     caller,
                     user == null ? "-" : user.employeeId(),
-                    user == null ? "-" : user.userId(),
                     user == null ? "-" : RequestLogSanitizer.safeValue(user.fullName()),
                     user == null ? "-" : RequestLogSanitizer.safeValue(user.tenantCode()),
                     user == null ? "-" : RequestLogSanitizer.safeValue(user.tenantName()),
-                    user == null ? "-" : user.tenantId(),
                     cachedRequest.getContentType() == null ? "-" : cachedRequest.getContentType(),
                     RequestLogSanitizer.body(bodyBytes, cachedRequest)
             );
