@@ -4,7 +4,7 @@ Backend API for **EastApp**, a multi-business operations application covering id
 
 ## Current development model
 
-- `v052` is a deliberate clean database baseline; existing development data must be deleted once before first startup
+- `v069` uses the consolidated Flyway V1 baseline; phone-login removal does not require a schema change
 - After this reset, `V1__create_eastapp_schema.sql` is immutable and every later schema change must use `V2+`
 - No seeded tenants or users
 - Initial Setup creates the first tenant and first `OWNER`
@@ -30,7 +30,7 @@ Backend API for **EastApp**, a multi-business operations application covering id
 
 ### Identity and access
 
-- Login using company code, employee ID, phone number and password
+- Login using company code, employee ID and password; phone number remains part of the employee profile but is not a login credential
 - Opaque bearer-session authentication
 - Password hashing through Spring Security
 - Tenant-aware access control
@@ -277,29 +277,61 @@ No Redis or general backend data cache is added at this stage.
 
 ## Database and Flyway
 
-EastApp `v065` uses a two-sided destructive-reset lock. **Both sides must be true before `flyway.clean()` can run.**
+EastApp `v069` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
 
-1. Code side: `DATABASE_RESET_ALLOWED_BY_CODE` in `DevelopmentDatabaseResetConfiguration.java`
-2. Railway/local environment side: `EASTAPP_DATABASE_RESET_ON_START`
+1. Code gate: `DATABASE_RESET_ALLOWED_BY_CODE`
+2. Environment gate: `EASTAPP_DATABASE_RESET_ON_START`
 
-Current code gate for this package:
+Current code gate in this package:
 
 ```text
-DATABASE_RESET_ALLOWED_BY_CODE=true   # TRUE — one-time reset release
+DATABASE_RESET_ALLOWED_BY_CODE=true
 ```
 
 Truth table:
 
-| Code gate | EASTAPP_DATABASE_RESET_ON_START | Database reset |
+| Code gate | EASTAPP_DATABASE_RESET_ON_START | Reset |
 |---|---|---|
 | false | false | No |
 | false | true | No |
 | true | false | No |
-| true | true | Yes, subject to the Railway legacy-history safety check |
+| true | true | Yes |
 
-The consolidated `V1__create_eastapp_schema.sql` is the clean baseline containing the former V1-V4 schema. The old V2, V3 and V4 files are removed. Once the consolidated V1 is established, it must remain immutable and all future schema changes use new append-only V2+ migrations.
+### Local commands
 
-On Railway there is an additional one-time safety check: even when both reset gates are true, reset is permitted only when the existing successful Flyway history is exactly legacy versions `1,2,3,4`. A database already running the consolidated V1 will not be cleaned by this transition logic.
+Normal local start, preserving all database data:
+
+```bash
+./scripts/run-local.sh
+```
+
+`run-local.sh` explicitly sets:
+
+```text
+EASTAPP_DATABASE_RESET_ON_START=false
+```
+
+Fresh local reset request:
+
+```bash
+EASTAPP_CONFIRM_DATABASE_RESET=YES ./scripts/run-fresh-local.sh
+```
+
+`run-fresh-local.sh` no longer runs `docker compose down -v` and no longer deletes the PostgreSQL Docker volume directly. It sets `EASTAPP_DATABASE_RESET_ON_START=true`, starts PostgreSQL, and lets the backend's two-gate protection decide whether `flyway.clean()` is allowed.
+
+Therefore a local reset occurs only when the code gate is also `true`.
+
+### Railway
+
+Keep the existing Railway variable:
+
+```text
+EASTAPP_DATABASE_RESET_ON_START=false
+```
+
+For a deliberate reset, both the source-code gate and Railway variable must be deliberately changed to `true`. On Railway, the current consolidated-baseline transition also retains the additional legacy-history safety check.
+
+The consolidated `V1__create_eastapp_schema.sql` is the clean baseline containing the former V1-V4 schema. Once established, V1 must remain immutable and all future schema changes must use new append-only V2+ migrations.
 
 
 ## Railway deployment

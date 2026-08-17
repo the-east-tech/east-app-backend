@@ -13,10 +13,6 @@ public record LoginRequest(
         String employeeId,
 
         @NotBlank
-        @Size(max = 24)
-        String phoneE164,
-
-        @NotBlank
         @Size(max = 128)
         String password
 ) {

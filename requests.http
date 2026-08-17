@@ -11,7 +11,6 @@
 @setupPhoneE164 = +60123456789
 @setupPassword = change-me
 @employeeId = E0001
-@phoneE164 = {{$processEnv EASTAPP_HTTP_PHONE_E164}}
 @password = {{$processEnv EASTAPP_HTTP_PASSWORD}}
 @anchorDate = 2026-07-26
 @fromDate = 2026-07-01
@@ -62,7 +61,6 @@ Content-Type: application/json
 {
   "companyCode": "{{companyCode}}",
   "employeeId": "{{employeeId}}",
-  "phoneE164": "{{phoneE164}}",
   "password": "{{password}}"
 }
 
@@ -127,7 +125,7 @@ GET {{baseUrl}}/api/v1/users/{{userId}}
 Authorization: Bearer {{eastappToken}}
 
 ### Create user in active business — Owner / Head / Manager, limited by role hierarchy
-### Password may be null only when phoneE164 already belongs to a global EastApp login.
+### Password may be null only when phoneE164 already belongs to an existing EastApp identity.
 POST {{baseUrl}}/api/v1/users
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json

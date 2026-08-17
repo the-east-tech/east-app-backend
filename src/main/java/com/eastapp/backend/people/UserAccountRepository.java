@@ -59,10 +59,9 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     );
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
-    Optional<UserAccount> findByTenant_CompanyCodeAndEmployeeIdAndIdentity_PhoneE164(
+    Optional<UserAccount> findByTenant_CompanyCodeAndEmployeeId(
             String companyCode,
-            String employeeId,
-            String phoneE164
+            String employeeId
     );
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})

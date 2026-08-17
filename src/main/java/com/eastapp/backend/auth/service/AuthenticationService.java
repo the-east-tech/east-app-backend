@@ -48,12 +48,9 @@ public class AuthenticationService {
     public LoginResponse login(LoginRequest request) {
         String companyCode = Tenant.normaliseCode(request.companyCode());
         String employeeId = UserAccount.normaliseEmployeeId(request.employeeId());
-        String phoneE164 = UserAccount.normalisePhone(request.phoneE164());
 
         UserAccount user = userAccountRepository
-                .findByTenant_CompanyCodeAndEmployeeIdAndIdentity_PhoneE164(
-                        companyCode, employeeId, phoneE164
-                )
+                .findByTenant_CompanyCodeAndEmployeeId(companyCode, employeeId)
                 .orElseThrow(AuthenticationService::invalidCredentials);
 
         if (!passwordEncoder.matches(request.password(), user.getIdentity().getPasswordHash())) {
@@ -185,7 +182,7 @@ public class AuthenticationService {
         return new ApiException(
                 HttpStatus.UNAUTHORIZED,
                 "INVALID_CREDENTIALS",
-                "Company ID, Employee ID, phone number or password is incorrect."
+                "Company ID, Employee ID or password is incorrect."
         );
     }
 
