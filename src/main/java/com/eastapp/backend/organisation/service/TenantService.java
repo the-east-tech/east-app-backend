@@ -52,7 +52,7 @@ public class TenantService {
      */
     @Transactional(readOnly = true)
     public List<TenantResponse> list(AuthenticatedUser actor) {
-        assertOwnerOrHead(actor);
+        assertOwner(actor);
         return List.of(TenantResponse.from(currentActor(actor).getTenant()));
     }
 
@@ -113,7 +113,7 @@ public class TenantService {
             UUID tenantId,
             UpdateTenantRequest request
     ) {
-        assertOwnerOrHead(actor);
+        assertOwner(actor);
         if (!tenantId.equals(actor.tenantId())) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
@@ -164,16 +164,6 @@ public class TenantService {
                     HttpStatus.FORBIDDEN,
                     "OWNER_REQUIRED",
                     "Only Owner users may create businesses."
-            );
-        }
-    }
-
-    private static void assertOwnerOrHead(AuthenticatedUser actor) {
-        if (!actor.isOwner() && actor.systemRole() != SystemRole.HEAD) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    "TENANT_MANAGEMENT_DENIED",
-                    "Only Owner and Head users may manage the active business."
             );
         }
     }

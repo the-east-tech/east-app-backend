@@ -20,7 +20,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/tenants")
-@PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
+@PreAuthorize("hasRole('OWNER')")
 public class TenantController {
 
     private final TenantService tenantService;

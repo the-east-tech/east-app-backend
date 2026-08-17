@@ -1,14 +1,15 @@
 package com.eastapp.backend.people;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.Lock;
-import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,6 +27,8 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
             select user
             from UserAccount user
             where user.tenant.id = :tenantId
+              and user.role.systemKey in :visibleRoles
+              and (:role is null or user.role.systemKey = :role)
               and (:active is null or user.active = :active)
               and (
                     :search = ''
@@ -39,6 +42,8 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
             @Param("tenantId") UUID tenantId,
             @Param("search") String search,
             @Param("active") Boolean active,
+            @Param("role") SystemRole role,
+            @Param("visibleRoles") Collection<SystemRole> visibleRoles,
             Pageable pageable
     );
 
@@ -79,9 +84,7 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     Optional<UserAccount> findByTenant_IdAndEmployeeId(UUID tenantId, String employeeId);
 
     boolean existsByIdentity_IdAndTenant_Id(UUID identityId, UUID tenantId);
-
     boolean existsByTenant_IdAndEmployeeId(UUID tenantId, String employeeId);
-
     long countByRole_Id(UUID roleId);
 
     @Query("""
@@ -93,9 +96,7 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     List<Object[]> countUsersByRoleForTenant(@Param("tenantId") UUID tenantId);
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
-    List<UserAccount> findAllByRole_SystemKeyAndActiveTrueOrderByCreatedAtAsc(
-            SystemRole systemKey
-    );
+    List<UserAccount> findAllByRole_SystemKeyAndActiveTrueOrderByCreatedAtAsc(SystemRole systemKey);
 
     long countByTenant_IdAndRole_SystemKeyAndActiveTrue(UUID tenantId, SystemRole systemKey);
 }

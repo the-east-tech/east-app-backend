@@ -107,7 +107,7 @@ Content-Type: application/json
   "googlePlaceId": "{{googlePlaceId}}"
 }
 
-### Update active business — switch context before editing another business
+### Update active business — Owner only; switch context before editing another business
 PATCH {{baseUrl}}/api/v1/tenants/{{tenantId}}
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
@@ -118,15 +118,15 @@ Content-Type: application/json
   "googlePlaceId": "{{googlePlaceId}}"
 }
 
-### Search users — paged and active only
-GET {{baseUrl}}/api/v1/users?search=&active=true&page=0&size=20
+### Search users — paged, active only, optional visible role filter
+GET {{baseUrl}}/api/v1/users?search=&active=true&role=MANAGER&page=0&size=20
 Authorization: Bearer {{eastappToken}}
 
 ### Get user
 GET {{baseUrl}}/api/v1/users/{{userId}}
 Authorization: Bearer {{eastappToken}}
 
-### Create user in active business — Owner or Head only
+### Create user in active business — Owner / Head / Manager, limited by role hierarchy
 ### Password may be null only when phoneE164 already belongs to a global EastApp login.
 POST {{baseUrl}}/api/v1/users
 Authorization: Bearer {{eastappToken}}
@@ -168,35 +168,12 @@ Content-Type: application/json
   "password": "new-password"
 }
 
-### List roles for current tenant
+### List fixed visible roles for current tenant
 GET {{baseUrl}}/api/v1/roles
 Authorization: Bearer {{eastappToken}}
 
-### Lightweight assignable roles for Create User — active business only, no usage counts
+### Lightweight assignable fixed roles for Create User — active business only, no usage counts
 GET {{baseUrl}}/api/v1/roles/assignable
-Authorization: Bearer {{eastappToken}}
-
-### Create custom role
-POST {{baseUrl}}/api/v1/roles
-Authorization: Bearer {{eastappToken}}
-Content-Type: application/json
-
-{
-  "name": "Barista"
-}
-
-### Update role
-PATCH {{baseUrl}}/api/v1/roles/{{roleId}}
-Authorization: Bearer {{eastappToken}}
-Content-Type: application/json
-
-{
-  "name": "Senior Barista",
-  "active": true
-}
-
-### Delete custom role
-DELETE {{baseUrl}}/api/v1/roles/{{roleId}}
 Authorization: Bearer {{eastappToken}}
 
 ### Attendance today — loaded only when Attendance → Check In / Out is opened

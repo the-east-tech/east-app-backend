@@ -6,6 +6,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 public record AuthenticatedUser(
@@ -19,10 +20,11 @@ public record AuthenticatedUser(
         String tenantName,
         SystemRole systemRole
 ) {
+    public AuthenticatedUser {
+        Objects.requireNonNull(systemRole, "systemRole must not be null");
+    }
+
     public Collection<? extends GrantedAuthority> authorities() {
-        if (systemRole == null) {
-            return List.of(new SimpleGrantedAuthority("ROLE_CUSTOM"));
-        }
         return List.of(new SimpleGrantedAuthority("ROLE_" + systemRole.name()));
     }
 
@@ -30,6 +32,7 @@ public record AuthenticatedUser(
         return systemRole == SystemRole.OWNER;
     }
 
+    /** Retains the existing management meaning: Owner or Head. */
     public boolean isHead() {
         return systemRole == SystemRole.OWNER || systemRole == SystemRole.HEAD;
     }

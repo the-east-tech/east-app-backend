@@ -59,11 +59,11 @@ STAFF_2
 ### People
 
 - Users
-- Roles
+- Fixed roles only: Owner, Head, Manager, Supervisor, Staff1 and Staff2
 - Password reset
 - Tenant-specific employee IDs
 - Attendance audit and reporting
-- Tenant-scoped point assignment and deduction by Owners and Heads
+- Tenant-scoped point assignment and deduction by Owners and Heads; Owner accounts are excluded from employee points and leaderboard ranking
 - Immutable point adjustment history with compulsory reasons
 - Active-user leaderboard ranked by accumulated total points
 
@@ -244,22 +244,25 @@ EastApp currently uses opaque session tokens rather than JWT.
 
 ## Access summary
 
-| Capability | Owner | Head | Other roles |
-|---|---:|---:|---:|
-| Switch business context | Yes | No | No |
-| View all businesses | Yes | No | No |
-| Create tenant | Yes | No | No |
-| Update current tenant | Yes | Yes | No |
-| Create user | Yes | Yes | No |
-| Stock Audit Trail screen | Yes | Yes | No |
-| Home own Stock activity | Yes | Yes | Yes |
-| Home today's review summary | Yes | Yes | Manager only |
-| Create Knowledge SOP | Yes | Yes | No |
-| View Knowledge SOP | Yes | Yes | Yes |
-| People → Tenant | Yes | Yes | No |
-| Cross-business SKU copy | Yes | No | No |
+| Capability | Owner | Head | Manager | Supervisor / Staff |
+|---|---:|---:|---:|---:|
+| Switch business context | Yes | No | No | No |
+| View/manage tenants | Yes | No | No | No |
+| Create tenant | Yes | No | No | No |
+| Access People → User | Yes | Yes | Yes | No |
+| Create/assign Owner | Yes | No | No | No |
+| Create/assign Head | Yes | Yes | No | No |
+| Create/assign Manager | Yes | Yes | No | No |
+| Create/assign Supervisor | Yes | Yes | Yes | No |
+| Create/assign Staff1 / Staff2 | Yes | Yes | Yes | No |
+| Stock Audit Trail screen | Yes | Yes | No | No |
+| Home own Stock activity | Yes | Yes | Yes | Yes |
+| Home today's review summary | Yes | Yes | Yes | No |
+| Create Knowledge SOP | Yes | Yes | No | No |
+| View Knowledge SOP | Yes | Yes | Yes | Yes |
+| Cross-business SKU copy | Yes | No | No | No |
 
-Heads remain limited to their current tenant. Owners share access across all tenants.
+User visibility follows the fixed hierarchy: Owner sees all users, Head cannot see Owner users, and Manager cannot see Owner or Head users. Supervisor and Staff roles cannot access user management. Owners share access across all tenants; all other roles remain in their active tenant and cannot access tenant management.
 
 ## Caching strategy
 

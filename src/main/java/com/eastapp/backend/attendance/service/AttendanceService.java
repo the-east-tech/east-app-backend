@@ -7,7 +7,9 @@ import com.eastapp.backend.attendance.AttendanceQrCode;
 import com.eastapp.backend.attendance.AttendanceReportPeriod;
 import com.eastapp.backend.attendance.api.AttendanceAuditResponse;
 import com.eastapp.backend.attendance.api.AttendanceAuditSummaryResponse;
+import com.eastapp.backend.attendance.api.AttendanceDayResponse;
 import com.eastapp.backend.attendance.api.AttendanceEventResponse;
+import com.eastapp.backend.attendance.api.AttendanceMonthSummaryResponse;
 import com.eastapp.backend.attendance.api.AttendanceTodayResponse;
 import com.eastapp.backend.attendance.api.AttendanceUserAuditResponse;
 import com.eastapp.backend.attendance.api.AttendanceUserDetailResponse;
@@ -39,6 +41,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
@@ -240,6 +243,7 @@ public class AttendanceService {
         List<UserAccount> users = userAccountRepository
                 .findAllByTenant_IdOrderByIdentity_FullNameAsc(principal.tenantId())
                 .stream()
+                .filter(user -> principal.systemRole().canView(user.getRole().getSystemKey()))
                 .filter(user -> employmentOverlaps(user, dateRange))
                 .toList();
 
@@ -318,6 +322,7 @@ public class AttendanceService {
 
         UserAccount user = userAccountRepository
                 .findByIdAndTenant_Id(userId, principal.tenantId())
+                .filter(candidate -> principal.systemRole().canView(candidate.getRole().getSystemKey()))
                 .orElseThrow(() -> notFound("USER_NOT_FOUND", "User not found."));
 
         List<AttendanceEvent> periodEvents = attendanceEventRepository
@@ -335,6 +340,12 @@ public class AttendanceService {
                 period,
                 zoneId
         );
+        List<AttendanceDayResponse> days = period == AttendanceReportPeriod.YEAR
+                ? List.of()
+                : buildDayResponses(periodEvents, zoneId);
+        List<AttendanceMonthSummaryResponse> months = period == AttendanceReportPeriod.YEAR
+                ? buildMonthSummaries(periodEvents, dateRange, zoneId)
+                : List.of();
 
         PageRequest pageable = PageRequest.of(
                 Math.max(page, 0),
@@ -358,6 +369,8 @@ public class AttendanceService {
                 dateRange.endDate(),
                 periodLabel(period, dateRange),
                 summary,
+                days,
+                months,
                 events
         );
     }
@@ -431,7 +444,7 @@ public class AttendanceService {
                 totalFirstClockInMinutes += day.firstClockInMinuteOfDay();
                 firstClockInAt = earlier(firstClockInAt, day.firstClockInAt());
             }
-            if (day.completed()) {
+            if (day.completed() && !day.missingClockOut()) {
                 completedDays++;
                 totalCompletedMinutes += day.workingMinutes();
                 lastClockOutAt = later(lastClockOutAt, day.lastClockOutAt());
@@ -482,9 +495,96 @@ public class AttendanceService {
                 firstClockInAt,
                 lastClockOutAt,
                 averageClockInTime,
+                totalCompletedMinutes,
                 averageWorkingMinutes,
                 percentage(completedDays, presentDays)
         );
+    }
+
+    private List<AttendanceDayResponse> buildDayResponses(
+            List<AttendanceEvent> events,
+            ZoneId zoneId
+    ) {
+        Map<LocalDate, List<AttendanceEvent>> eventsByDay = new LinkedHashMap<>();
+        for (AttendanceEvent event : events) {
+            LocalDate date = event.getOccurredAt().atZone(zoneId).toLocalDate();
+            eventsByDay.computeIfAbsent(date, ignored -> new ArrayList<>()).add(event);
+        }
+
+        return eventsByDay.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    List<AttendanceEvent> dayEvents = entry.getValue();
+                    DaySummary day = summariseDay(dayEvents, zoneId);
+                    String status = day.missingClockOut()
+                            ? "MISSING_OUT"
+                            : day.completed() ? "COMPLETED" : "NO_RECORD";
+                    long workingMinutes = day.completed() && !day.missingClockOut()
+                            ? day.workingMinutes()
+                            : 0L;
+                    return new AttendanceDayResponse(
+                            entry.getKey(),
+                            status,
+                            day.firstClockInAt(),
+                            day.lastClockOutAt(),
+                            workingMinutes,
+                            dayEvents.stream().map(AttendanceEventResponse::from).toList()
+                    );
+                })
+                .toList();
+    }
+
+    private List<AttendanceMonthSummaryResponse> buildMonthSummaries(
+            List<AttendanceEvent> events,
+            DateRange dateRange,
+            ZoneId zoneId
+    ) {
+        Map<YearMonth, List<AttendanceEvent>> eventsByMonth = new HashMap<>();
+        for (AttendanceEvent event : events) {
+            YearMonth month = YearMonth.from(event.getOccurredAt().atZone(zoneId));
+            eventsByMonth.computeIfAbsent(month, ignored -> new ArrayList<>()).add(event);
+        }
+
+        int year = dateRange.startDate().getYear();
+        List<AttendanceMonthSummaryResponse> months = new ArrayList<>(12);
+        for (int monthNumber = 1; monthNumber <= 12; monthNumber++) {
+            YearMonth month = YearMonth.of(year, monthNumber);
+            List<AttendanceEvent> monthEvents = eventsByMonth.getOrDefault(month, List.of());
+            Map<LocalDate, List<AttendanceEvent>> byDay = new LinkedHashMap<>();
+            for (AttendanceEvent event : monthEvents) {
+                LocalDate date = event.getOccurredAt().atZone(zoneId).toLocalDate();
+                byDay.computeIfAbsent(date, ignored -> new ArrayList<>()).add(event);
+            }
+
+            int presentDays = 0;
+            int completedDays = 0;
+            int missingCheckOutDays = 0;
+            long totalWorkingMinutes = 0;
+            for (List<AttendanceEvent> dayEvents : byDay.values()) {
+                DaySummary day = summariseDay(dayEvents, zoneId);
+                if (day.present()) presentDays++;
+                if (day.completed() && !day.missingClockOut()) {
+                    completedDays++;
+                    totalWorkingMinutes += day.workingMinutes();
+                }
+                if (day.missingClockOut()) missingCheckOutDays++;
+            }
+
+            Long averageWorkingMinutes = completedDays == 0
+                    ? null
+                    : Math.round((double) totalWorkingMinutes / completedDays);
+            months.add(new AttendanceMonthSummaryResponse(
+                    monthNumber,
+                    month.getMonth().getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH),
+                    presentDays,
+                    completedDays,
+                    missingCheckOutDays,
+                    totalWorkingMinutes,
+                    averageWorkingMinutes,
+                    percentage(completedDays, presentDays)
+            ));
+        }
+        return List.copyOf(months);
     }
 
     private DaySummary summariseDay(List<AttendanceEvent> events, ZoneId zoneId) {

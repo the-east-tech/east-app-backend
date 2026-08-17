@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -65,12 +66,18 @@ public class UserAccountService {
 
     @Transactional(readOnly = true)
     public PageResponse<UserResponse> list(
-            UUID tenantId,
+            AuthenticatedUser actor,
             String search,
             Boolean active,
+            SystemRole role,
             int page,
             int size
     ) {
+        assertUserManagementAccess(actor);
+        List<SystemRole> visibleRoles = visibleRoles(actor);
+        if (role != null && !visibleRoles.contains(role)) {
+            throw forbidden("ROLE_FILTER_DENIED", "This role is above the current user's visibility level.");
+        }
         String resolvedSearch = search == null ? "" : search.trim();
         PageRequest pageable = PageRequest.of(
                 Math.max(page, 0),
@@ -81,24 +88,22 @@ public class UserAccountService {
                 )
         );
         return PageResponse.from(
-                userAccountRepository.searchByTenant(tenantId, resolvedSearch, active, pageable),
+                userAccountRepository.searchByTenant(
+                        actor.tenantId(), resolvedSearch, active, role, visibleRoles, pageable
+                ),
                 UserResponse::from
         );
     }
 
     @Transactional(readOnly = true)
-    public UserResponse get(UUID tenantId, UUID userId) {
-        return UserResponse.from(findUser(tenantId, userId));
+    public UserResponse get(AuthenticatedUser actor, UUID userId) {
+        assertUserManagementAccess(actor);
+        return UserResponse.from(findVisibleUser(actor, userId));
     }
 
-    /**
-     * Creates a membership only in the actor's active tenant. The tenant is never
-     * accepted from the client. When the phone already belongs to a global identity,
-     * that identity is reused and receives a new tenant-specific employee ID.
-     */
     @Transactional
     public UserResponse create(AuthenticatedUser actor, CreateUserRequest request) {
-        assertUserCreationAllowed(actor);
+        assertUserManagementAccess(actor);
 
         UUID tenantId = actor.tenantId();
         Tenant tenant = tenantRepository.findById(tenantId)
@@ -113,11 +118,7 @@ public class UserAccountService {
                 .orElseGet(() -> createIdentity(request, phoneE164));
 
         UserAccount membership = createUserAccount(
-                tenant,
-                identity,
-                employeeIdService.allocate(tenantId),
-                role,
-                request
+                tenant, identity, employeeIdService.allocate(tenantId), role, request
         );
         membership = userAccountRepository.save(membership);
 
@@ -127,17 +128,12 @@ public class UserAccountService {
                     .filter(other -> !other.getId().equals(tenantId))
                     .forEach(other -> tenantProvisioningService.addOwnerContext(other, sourceOwner));
         }
-
         return UserResponse.from(membership);
     }
 
     @Transactional
-    public UserResponse update(
-            AuthenticatedUser actor,
-            UUID userId,
-            UpdateUserRequest request
-    ) {
-        UserAccount target = findUser(actor.tenantId(), userId);
+    public UserResponse update(AuthenticatedUser actor, UUID userId, UpdateUserRequest request) {
+        UserAccount target = findVisibleUser(actor, userId);
         assertActorMayManageUser(actor, target);
 
         Role newRole = findActiveRole(actor.tenantId(), request.roleId());
@@ -154,10 +150,7 @@ public class UserAccountService {
         }
 
         if (newRole.getSystemKey() == SystemRole.OWNER && !request.active()) {
-            throw conflict(
-                    "OWNER_ACCOUNT_ACTIVE_REQUIRED",
-                    "A user promoted to Owner must remain active."
-            );
+            throw conflict("OWNER_ACCOUNT_ACTIVE_REQUIRED", "A user promoted to Owner must remain active.");
         }
 
         target.updateProfile(
@@ -165,7 +158,6 @@ public class UserAccountService {
                 request.birthDate(), request.startDate(), request.endDate()
         );
         target.assignRole(newRole);
-
         if (request.active()) {
             target.activate();
         } else {
@@ -178,20 +170,36 @@ public class UserAccountService {
                     .filter(tenant -> !tenant.getId().equals(target.getTenant().getId()))
                     .forEach(tenant -> tenantProvisioningService.addOwnerContext(tenant, target));
         }
-
         return UserResponse.from(target);
     }
 
     @Transactional
-    public void resetPassword(
-            AuthenticatedUser actor,
-            UUID userId,
-            ResetPasswordRequest request
-    ) {
-        UserAccount target = findUser(actor.tenantId(), userId);
+    public void resetPassword(AuthenticatedUser actor, UUID userId, ResetPasswordRequest request) {
+        UserAccount target = findVisibleUser(actor, userId);
         assertActorMayManageUser(actor, target);
         target.getIdentity().changePasswordHash(passwordEncoder.encode(request.password()));
         revokeIdentitySessions(target.getIdentity().getId());
+    }
+
+    private static List<SystemRole> visibleRoles(AuthenticatedUser actor) {
+        return Arrays.stream(SystemRole.values())
+                .filter(actor.systemRole()::canView)
+                .toList();
+    }
+
+    private static void assertUserManagementAccess(AuthenticatedUser actor) {
+        if (!actor.systemRole().canAccessUserManagement()) {
+            throw forbidden("USER_MANAGEMENT_DENIED", "User management is not permitted.");
+        }
+    }
+
+    private UserAccount findVisibleUser(AuthenticatedUser actor, UUID userId) {
+        UserAccount target = userAccountRepository.findByIdAndTenant_Id(userId, actor.tenantId())
+                .orElseThrow(() -> notFound("USER_NOT_FOUND", "User not found."));
+        if (!actor.systemRole().canView(target.getRole().getSystemKey())) {
+            throw notFound("USER_NOT_FOUND", "User not found.");
+        }
+        return target;
     }
 
     private void assertPhoneAvailableForIdentity(String phoneE164, UUID identityId) {
@@ -199,30 +207,19 @@ public class UserAccountService {
         loginIdentityRepository.findByPhoneE164(normalised)
                 .filter(existing -> !existing.getId().equals(identityId))
                 .ifPresent(existing -> {
-                    throw conflict(
-                            "PHONE_ALREADY_USED",
-                            "This phone number belongs to another EastApp login."
-                    );
+                    throw conflict("PHONE_ALREADY_USED", "This phone number belongs to another EastApp login.");
                 });
     }
 
-    private LoginIdentity reuseIdentity(
-            LoginIdentity identity,
-            CreateUserRequest request,
-            UUID tenantId
-    ) {
+    private LoginIdentity reuseIdentity(LoginIdentity identity, CreateUserRequest request, UUID tenantId) {
         if (!identity.isActive()) {
             throw conflict("IDENTITY_INACTIVE", "This person's global login is inactive.");
         }
         if (userAccountRepository.existsByIdentity_IdAndTenant_Id(identity.getId(), tenantId)) {
-            throw conflict(
-                    "USER_ALREADY_IN_BUSINESS",
-                    "This person already has an employee ID in the current business."
-            );
+            throw conflict("USER_ALREADY_IN_BUSINESS", "This person already has an employee ID in the current business.");
         }
         identity.updateProfile(
-                request.fullName(), request.phoneE164(),
-                request.profilePhotoKey(), request.birthDate()
+                request.fullName(), request.phoneE164(), request.profilePhotoKey(), request.birthDate()
         );
         return identity;
     }
@@ -238,25 +235,8 @@ public class UserAccountService {
         }
         return loginIdentityRepository.save(new LoginIdentity(
                 passwordEncoder.encode(password),
-                request.fullName(),
-                phoneE164,
-                request.profilePhotoKey(),
-                request.birthDate()
+                request.fullName(), phoneE164, request.profilePhotoKey(), request.birthDate()
         ));
-    }
-
-    private static void assertUserCreationAllowed(AuthenticatedUser actor) {
-        if (!actor.isOwner() && actor.systemRole() != SystemRole.HEAD) {
-            throw forbidden(
-                    "USER_CREATION_DENIED",
-                    "Only Owner and Head users may create users."
-            );
-        }
-    }
-
-    private UserAccount findUser(UUID tenantId, UUID userId) {
-        return userAccountRepository.findByIdAndTenant_Id(userId, tenantId)
-                .orElseThrow(() -> notFound("USER_NOT_FOUND", "User not found."));
     }
 
     private Role findActiveRole(UUID tenantId, UUID roleId) {
@@ -268,66 +248,20 @@ public class UserAccountService {
         return role;
     }
 
-    private static void assertActorMayManageUser(
-            AuthenticatedUser actor,
-            UserAccount target
-    ) {
-        if (actor.isOwner()) {
-            return;
-        }
-        if (actor.systemRole() == SystemRole.HEAD) {
-            if (target.getRole().getSystemKey() == SystemRole.OWNER) {
-                throw forbidden("PROTECTED_USER", "Head users cannot edit Owner users.");
-            }
-            return;
-        }
-        if (!actor.isManager()) {
-            throw forbidden("USER_MANAGEMENT_DENIED", "User management is not permitted.");
-        }
-
-        SystemRole targetRole = target.getRole().getSystemKey();
-        if (targetRole == SystemRole.OWNER
-                || targetRole == SystemRole.HEAD
-                || targetRole == SystemRole.MANAGER) {
-            throw forbidden(
-                    "PROTECTED_USER",
-                    "Managers cannot edit Owner, Head or Manager users."
-            );
+    private static void assertActorMayManageUser(AuthenticatedUser actor, UserAccount target) {
+        if (!actor.systemRole().canManage(target.getRole().getSystemKey())) {
+            throw forbidden("PROTECTED_USER", "The selected user is not below the current user's management level.");
         }
     }
 
     private static void assertRoleMayBeAssigned(AuthenticatedUser actor, Role role) {
-        if (actor.isOwner()) {
-            return;
-        }
-        if (actor.systemRole() == SystemRole.HEAD) {
-            if (role.getSystemKey() == SystemRole.OWNER) {
-                throw forbidden(
-                        "ROLE_ASSIGNMENT_DENIED",
-                        "Only Owner users may assign the Owner role."
-                );
-            }
-            return;
-        }
-        if (!actor.isManager()) {
-            throw forbidden("ROLE_ASSIGNMENT_DENIED", "Role assignment is not permitted.");
-        }
-
-        if (role.getSystemKey() != SystemRole.STAFF_1
-                && role.getSystemKey() != SystemRole.STAFF_2) {
-            throw forbidden(
-                    "ROLE_ASSIGNMENT_DENIED",
-                    "Managers may assign only Staff1 or Staff2 roles."
-            );
+        if (!actor.systemRole().canAssign(role.getSystemKey())) {
+            throw forbidden("ROLE_ASSIGNMENT_DENIED", "The selected role is not assignable by the current user.");
         }
     }
 
     private static UserAccount createUserAccount(
-            Tenant tenant,
-            LoginIdentity identity,
-            String employeeId,
-            Role role,
-            CreateUserRequest request
+            Tenant tenant, LoginIdentity identity, String employeeId, Role role, CreateUserRequest request
     ) {
         UserAccount user = new UserAccount(tenant, identity, employeeId, role);
         user.updateProfile(
@@ -339,24 +273,19 @@ public class UserAccountService {
 
     private static void assertOwnerAccountRemainsOwner(Role newRole, boolean active) {
         if (newRole.getSystemKey() != SystemRole.OWNER || !active) {
-            throw conflict(
-                    "OWNER_ACCOUNT_PROTECTED",
-                    "Owner access is system-wide and cannot be demoted or deactivated here."
-            );
+            throw conflict("OWNER_ACCOUNT_PROTECTED", "Owner access is system-wide and cannot be demoted or deactivated here.");
         }
     }
 
     private void revokeIdentitySessions(UUID identityId) {
         Instant now = Instant.now();
-        List<UserSession> sessions = userSessionRepository
-                .findAllByIdentity_IdAndRevokedAtIsNull(identityId);
+        List<UserSession> sessions = userSessionRepository.findAllByIdentity_IdAndRevokedAtIsNull(identityId);
         sessions.forEach(session -> session.revoke(now));
     }
 
     private void revokeSessions(UUID userId) {
         Instant now = Instant.now();
-        List<UserSession> sessions = userSessionRepository
-                .findAllByUserAccount_IdAndRevokedAtIsNull(userId);
+        List<UserSession> sessions = userSessionRepository.findAllByUserAccount_IdAndRevokedAtIsNull(userId);
         sessions.forEach(session -> session.revoke(now));
     }
 

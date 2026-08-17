@@ -2,6 +2,7 @@ package com.eastapp.backend.points.service;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
+import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.points.UserPointAdjustment;
@@ -36,8 +37,11 @@ public class UserPointsService {
 
     @Transactional(readOnly = true)
     public LeaderboardResponse leaderboard(AuthenticatedUser principal) {
-        List<UserAccount> activeUsers =
-                userRepository.findAllByTenant_IdAndActiveTrueOrderByIdentity_FullNameAsc(principal.tenantId());
+        List<UserAccount> activeUsers = userRepository
+                .findAllByTenant_IdAndActiveTrueOrderByIdentity_FullNameAsc(principal.tenantId())
+                .stream()
+                .filter(user -> user.getRole().getSystemKey() != SystemRole.OWNER)
+                .toList();
         Map<UUID, Long> totals = totalsByUser(principal.tenantId());
 
         List<RankedUser> rankedUsers = new ArrayList<>(activeUsers.size());
@@ -77,10 +81,12 @@ public class UserPointsService {
             ));
         }
 
-        long currentUserTotal = totals.getOrDefault(
-                principal.userId(),
-                adjustmentRepository.totalForUser(principal.tenantId(), principal.userId())
-        );
+        long currentUserTotal = principal.isOwner()
+                ? 0L
+                : totals.getOrDefault(
+                        principal.userId(),
+                        adjustmentRepository.totalForUser(principal.tenantId(), principal.userId())
+                );
         return new LeaderboardResponse(currentUserTotal, currentUserRank, List.copyOf(members));
     }
 
@@ -100,6 +106,13 @@ public class UserPointsService {
 
         UserAccount recipient = userRepository.findByIdAndTenant_Id(request.userId(), principal.tenantId())
                 .orElseThrow(() -> notFound("USER_NOT_FOUND", "The selected user was not found."));
+        if (recipient.getRole().getSystemKey() == SystemRole.OWNER) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "OWNER_POINTS_NOT_APPLICABLE",
+                    "Owner users are outside the employee leaderboard and cannot receive points."
+            );
+        }
         if (!recipient.isActive()) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,

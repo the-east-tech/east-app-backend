@@ -17,6 +17,7 @@ public record AttendanceUserAuditResponse(
         Instant firstClockInAt,
         Instant lastClockOutAt,
         String averageClockInTime,
+        long totalWorkingMinutes,
         Long averageWorkingMinutes,
         double completionPercent
 ) {

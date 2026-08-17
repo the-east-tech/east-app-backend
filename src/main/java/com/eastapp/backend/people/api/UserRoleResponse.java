@@ -13,7 +13,7 @@ public record UserRoleResponse(
     public static UserRoleResponse from(Role role) {
         return new UserRoleResponse(
                 role.getId(),
-                role.getSystemKey() == null ? null : role.getSystemKey().name(),
+                role.getSystemKey().name(),
                 role.getName(),
                 role.isActive()
         );

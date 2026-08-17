@@ -14,7 +14,7 @@ public record RoleResponse(
     public static RoleResponse from(Role role, long assignedUsers) {
         return new RoleResponse(
                 role.getId(),
-                role.getSystemKey() == null ? null : role.getSystemKey().name(),
+                role.getSystemKey().name(),
                 role.getName(),
                 role.isActive(),
                 assignedUsers

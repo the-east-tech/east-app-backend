@@ -65,7 +65,7 @@ public class StockAuditEntry {
         this.itemName = text(itemName);
         this.actorName = actor.fullName();
         this.actorEmployeeId = actor.employeeId();
-        this.actorRole = actor.systemRole() == null ? "Custom" : actor.systemRole().name();
+        this.actorRole = actor.systemRole().name();
         this.capturedAt = Instant.now();
         this.note = text(note);
     }

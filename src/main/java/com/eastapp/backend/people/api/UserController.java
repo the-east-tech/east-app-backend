@@ -2,6 +2,7 @@ package com.eastapp.backend.people.api;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.api.PageResponse;
+import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.service.UserAccountService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -36,10 +37,11 @@ public class UserController {
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(defaultValue = "") String search,
             @RequestParam(required = false) Boolean active,
+            @RequestParam(required = false) SystemRole role,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return userAccountService.list(principal.tenantId(), search, active, page, size);
+        return userAccountService.list(principal, search, active, role, page, size);
     }
 
     @GetMapping("/{userId}")
@@ -47,11 +49,10 @@ public class UserController {
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID userId
     ) {
-        return userAccountService.get(principal.tenantId(), userId);
+        return userAccountService.get(principal, userId);
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<UserResponse> create(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody CreateUserRequest request

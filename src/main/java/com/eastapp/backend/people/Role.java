@@ -34,7 +34,7 @@ public class Role {
     private Tenant tenant;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "system_key", length = 32, updatable = false)
+    @Column(name = "system_key", nullable = false, length = 32, updatable = false)
     private SystemRole systemKey;
 
     @Column(nullable = false, length = 80)
@@ -56,57 +56,17 @@ public class Role {
 
     public Role(Tenant tenant, SystemRole systemKey, String name) {
         this.tenant = Objects.requireNonNull(tenant, "tenant must not be null");
-        this.systemKey = systemKey;
+        this.systemKey = Objects.requireNonNull(systemKey, "systemKey must not be null");
         this.name = requireText(name, "name");
     }
 
-    public static Role custom(Tenant tenant, String name) {
-        return new Role(tenant, null, name);
-    }
-
-    public void rename(String name) {
-        this.name = requireText(name, "name");
-    }
-
-    public void activate() {
-        this.active = true;
-    }
-
-    public void deactivate() {
-        this.active = false;
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public Tenant getTenant() {
-        return tenant;
-    }
-
-    public SystemRole getSystemKey() {
-        return systemKey;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public boolean isActive() {
-        return active;
-    }
-
-    public boolean isBuiltIn() {
-        return systemKey != null;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
+    public UUID getId() { return id; }
+    public Tenant getTenant() { return tenant; }
+    public SystemRole getSystemKey() { return systemKey; }
+    public String getName() { return name; }
+    public boolean isActive() { return active; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 
     private static String requireText(String value, String fieldName) {
         String normalised = Objects.requireNonNull(value, fieldName + " must not be null").trim();
