@@ -1,6 +1,7 @@
 package com.eastapp.backend.knowledge.api;
 
 import com.eastapp.backend.knowledge.KnowledgeSop;
+import com.eastapp.backend.knowledge.KnowledgeSopLanguage;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -14,6 +15,8 @@ public record KnowledgeSopResponse(
         String title,
         String expectedOutcome,
         String description,
+        KnowledgeSopLanguage language,
+        UUID linkGroupId,
         String createdBy,
         Instant createdAt,
         Instant updatedAt
@@ -28,6 +31,8 @@ public record KnowledgeSopResponse(
                 sop.getTitle(),
                 sop.getExpectedOutcome(),
                 sop.getDescription(),
+                sop.getLanguage(),
+                sop.getLinkGroupId(),
                 sop.getCreatedBy().getFullName(),
                 sop.getCreatedAt(),
                 sop.getUpdatedAt()

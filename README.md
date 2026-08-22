@@ -4,7 +4,7 @@ Backend API for **EastApp**, a multi-business operations application covering id
 
 ## Current development model
 
-- `v070` uses the consolidated Flyway V1 baseline; phone-login removal does not require a schema change
+- `v075` keeps the consolidated Flyway V1 baseline and linked-video migrations, preserves separate English/Myanmar videos, and shares the remaining SOP content across both languages
 - After this reset, `V1__create_eastapp_schema.sql` is immutable and every later schema change must use `V2+`
 - No seeded tenants or users
 - Initial Setup creates the first tenant and first `OWNER`
@@ -99,7 +99,15 @@ Cross-business copying duplicates the selected SKUs together with their tags and
 - Mandatory YouTube video URL
 - Mandatory Stock tag, title, expected outcome and description
 - Embedded-video metadata through a validated YouTube video ID
-- SOP creation restricted to Owners and Heads
+- Explicit English or Myanmar video language
+- Optional linking to a previously created SOP video in the same tenant
+- Maximum two linked video versions, enforced by the database and service layer
+- English and Myanmar must use different validated YouTube video IDs
+- Linked versions share the Stock tag, title, expected outcome and description; only the video and language differ
+- Linked versions are returned with one shared group ID and displayed as one SOP choice
+- Editing shared SOP information through either video updates both linked versions
+- Deleting any selected SOP deletes every video version in its linked group transactionally
+- SOP creation, editing and deletion restricted to Owners, Heads and Managers
 - SOP viewing available to authenticated users in the active business
 
 ### Home data
@@ -258,7 +266,7 @@ EastApp currently uses opaque session tokens rather than JWT.
 | Stock Audit Trail screen | Yes | Yes | No | No |
 | Home own Stock activity | Yes | Yes | Yes | Yes |
 | Home today's review summary | Yes | Yes | Yes | No |
-| Create Knowledge SOP | Yes | Yes | No | No |
+| Create/edit/delete Knowledge SOP | Yes | Yes | Yes | No |
 | View Knowledge SOP | Yes | Yes | Yes | Yes |
 | Cross-business SKU copy | Yes | No | No | No |
 
@@ -277,7 +285,7 @@ No Redis or general backend data cache is added at this stage.
 
 ## Database and Flyway
 
-EastApp `v070` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
+EastApp `v075` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
 
 1. Code gate: `DATABASE_RESET_ALLOWED_BY_CODE`
 2. Environment gate: `EASTAPP_DATABASE_RESET_ON_START`
@@ -385,7 +393,9 @@ src/main/java/com/eastapp/backend/
 src/main/resources/
 ├── application.yaml
 └── db/migration/
-    └── V1__create_eastapp_schema.sql
+    ├── V1__create_eastapp_schema.sql
+    ├── V2__link_knowledge_sop_videos.sql
+    └── V3__normalise_linked_knowledge_sop_content.sql
 
 scripts/
 ├── run-local.sh

@@ -11,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -47,12 +48,32 @@ public class KnowledgeSopController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     ResponseEntity<KnowledgeSopResponse> create(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody CreateKnowledgeSopRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(sopService.create(principal, request));
+    }
+
+    @PutMapping("/{sopId}")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    KnowledgeSopResponse update(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable UUID sopId,
+            @Valid @RequestBody UpdateKnowledgeSopRequest request
+    ) {
+        return sopService.update(principal, sopId, request);
+    }
+
+    @PostMapping("/bulk-delete")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    ResponseEntity<Void> bulkDelete(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody BulkDeleteKnowledgeSopsRequest request
+    ) {
+        sopService.bulkDelete(principal, request);
+        return ResponseEntity.noContent().build();
     }
 }

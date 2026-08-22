@@ -5,6 +5,8 @@ import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.stock.StockTag;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -33,7 +35,7 @@ public class KnowledgeSop {
     private Tenant tenant;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tag_id", nullable = false, updatable = false)
+    @JoinColumn(name = "tag_id", nullable = false)
     private StockTag tag;
 
     @Column(name = "youtube_url", nullable = false, length = 500)
@@ -47,6 +49,13 @@ public class KnowledgeSop {
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private KnowledgeSopLanguage language;
+
+    @Column(name = "link_group_id", nullable = false, updatable = false)
+    private UUID linkGroupId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "created_by_user_id", nullable = false, updatable = false)
@@ -70,6 +79,8 @@ public class KnowledgeSop {
             String title,
             String expectedOutcome,
             String description,
+            KnowledgeSopLanguage language,
+            UUID linkGroupId,
             UserAccount createdBy
     ) {
         this.tenant = Objects.requireNonNull(tenant, "tenant must not be null");
@@ -78,6 +89,8 @@ public class KnowledgeSop {
         this.title = requireText(title, "title");
         this.expectedOutcome = requireText(expectedOutcome, "expectedOutcome");
         this.description = requireText(description, "description");
+        this.language = Objects.requireNonNull(language, "language must not be null");
+        this.linkGroupId = Objects.requireNonNull(linkGroupId, "linkGroupId must not be null");
         this.createdBy = Objects.requireNonNull(createdBy, "createdBy must not be null");
     }
 
@@ -88,9 +101,39 @@ public class KnowledgeSop {
     public String getTitle() { return title; }
     public String getExpectedOutcome() { return expectedOutcome; }
     public String getDescription() { return description; }
+    public KnowledgeSopLanguage getLanguage() { return language; }
+    public UUID getLinkGroupId() { return linkGroupId; }
     public UserAccount getCreatedBy() { return createdBy; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+
+    public void update(
+            StockTag tag,
+            String youtubeUrl,
+            String title,
+            String expectedOutcome,
+            String description,
+            KnowledgeSopLanguage language
+    ) {
+        this.tag = Objects.requireNonNull(tag, "tag must not be null");
+        this.youtubeUrl = requireText(youtubeUrl, "youtubeUrl");
+        this.title = requireText(title, "title");
+        this.expectedOutcome = requireText(expectedOutcome, "expectedOutcome");
+        this.description = requireText(description, "description");
+        this.language = Objects.requireNonNull(language, "language must not be null");
+    }
+
+    public void updateSharedContent(
+            StockTag tag,
+            String title,
+            String expectedOutcome,
+            String description
+    ) {
+        this.tag = Objects.requireNonNull(tag, "tag must not be null");
+        this.title = requireText(title, "title");
+        this.expectedOutcome = requireText(expectedOutcome, "expectedOutcome");
+        this.description = requireText(description, "description");
+    }
 
     private static String requireText(String value, String field) {
         String result = Objects.requireNonNull(value, field + " must not be null").trim();

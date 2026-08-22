@@ -10,7 +10,7 @@
     </parent>
     <groupId>com.eastapp</groupId>
     <artifactId>east-app</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.0.75-SNAPSHOT</version>
     <name>east-app</name>
     <description>east-app</description>
     <url/>

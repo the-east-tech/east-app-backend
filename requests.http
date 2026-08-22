@@ -28,6 +28,7 @@
 @countId = 00000000-0000-0000-0000-000000000000
 @receivingId = 00000000-0000-0000-0000-000000000000
 @sopId = 00000000-0000-0000-0000-000000000000
+@sop2Id = 00000000-0000-0000-0000-000000000000
 @thumbnailKey = 00000000-0000-0000-0000-000000000000.jpg
 @thumbnailFile = /absolute/path/to/sku-thumbnail.jpg
 @reportDate = 2026-07-30
@@ -509,7 +510,7 @@ Authorization: Bearer {{eastappToken}}
 GET {{baseUrl}}/api/v1/knowledge/sops/{{sopId}}
 Authorization: Bearer {{eastappToken}}
 
-### Create Knowledge SOP — Owner or Head only
+### Create Knowledge SOP — Owner, Head or Manager only
 POST {{baseUrl}}/api/v1/knowledge/sops
 Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
@@ -519,7 +520,46 @@ Content-Type: application/json
   "tagId": "{{tagId}}",
   "title": "Belly Pork Preparation",
   "expectedOutcome": "Staff prepare belly pork consistently and safely.",
-  "description": "Follow the video and complete each preparation step before service."
+  "description": "Follow the video and complete each preparation step before service.",
+  "language": "ENGLISH"
+}
+
+### Create and link the Myanmar video to an existing English SOP — Owner, Head or Manager only
+POST {{baseUrl}}/api/v1/knowledge/sops
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "youtubeUrl": "https://youtu.be/9bZkp7q19f0",
+  "tagId": "{{tagId}}",
+  "title": "Belly Pork Preparation",
+  "expectedOutcome": "Staff prepare belly pork consistently and safely.",
+  "description": "Follow the video and complete each preparation step before service.",
+  "language": "MYANMAR",
+  "linkedSopId": "{{sopId}}"
+}
+
+### Update Knowledge SOP — shared fields update every linked version; video/language update this version only
+PUT {{baseUrl}}/api/v1/knowledge/sops/{{sopId}}
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "youtubeUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "tagId": "{{tagId}}",
+  "title": "Updated Belly Pork Preparation",
+  "expectedOutcome": "Staff prepare belly pork consistently and safely.",
+  "description": "Follow the updated video and complete every preparation step before service.",
+  "language": "ENGLISH"
+}
+
+### Delete multiple Knowledge SOP groups — linked language versions are deleted together
+POST {{baseUrl}}/api/v1/knowledge/sops/bulk-delete
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "sopIds": ["{{sopId}}", "{{sop2Id}}"]
 }
 
 
