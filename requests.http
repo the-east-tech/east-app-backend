@@ -562,6 +562,38 @@ Content-Type: application/json
   "sopIds": ["{{sopId}}", "{{sop2Id}}"]
 }
 
+### Translation provider status
+GET {{baseUrl}}/api/v1/translations/status
+Authorization: Bearer {{eastappToken}}
+
+### Translation cost preview — database cache check only; never calls Cloudflare
+POST {{baseUrl}}/api/v1/translations/preview
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "sourceLanguage": "ENGLISH",
+  "targetLanguage": "MYANMAR",
+  "texts": [
+    "Keep the chiller clean",
+    "Discard damaged packaging"
+  ]
+}
+
+### Translate user content — the companion language is cached in the same request
+POST {{baseUrl}}/api/v1/translations
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "sourceLanguage": "ENGLISH",
+  "targetLanguage": "MYANMAR",
+  "texts": [
+    "Keep the chiller clean",
+    "Discard damaged packaging"
+  ]
+}
+
 
 ### Google Places - setup autocomplete (only before initial setup)
 GET {{baseUrl}}/api/v1/setup/google-places/autocomplete?query=June%20Coffee

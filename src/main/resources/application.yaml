@@ -44,3 +44,10 @@ eastapp:
   reports:
     time-zone: ${EASTAPP_REPORT_TIME_ZONE:Asia/Kuala_Lumpur}
     daily-photo-minimum: 5
+
+  translation:
+    provider-enabled: ${EASTAPP_TRANSLATION_PROVIDER_ENABLED:false}
+    cloudflare-account-id: ${EASTAPP_CLOUDFLARE_ACCOUNT_ID:}
+    cloudflare-api-token: ${EASTAPP_CLOUDFLARE_API_TOKEN:}
+    model: "@cf/meta/m2m100-1.2b"
+    maximum-parallel-requests: 6

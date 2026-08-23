@@ -4,7 +4,7 @@ Backend API for **EastApp**, a multi-business operations application covering id
 
 ## Current development model
 
-- `v075` keeps the consolidated Flyway V1 baseline and linked-video migrations, preserves separate English/Myanmar videos, and shares the remaining SOP content across both languages
+- `v080` adds a cache-only translation cost preview, so Flutter can warn before any Cloudflare request, and keeps stored translations available when the provider is disabled
 - After this reset, `V1__create_eastapp_schema.sql` is immutable and every later schema change must use `V2+`
 - No seeded tenants or users
 - Initial Setup creates the first tenant and first `OWNER`
@@ -109,6 +109,32 @@ Cross-business copying duplicates the selected SKUs together with their tags and
 - Deleting any selected SOP deletes every video version in its linked group transactionally
 - SOP creation, editing and deletion restricted to Owners, Heads and Managers
 - SOP viewing available to authenticated users in the active business
+
+### Content translation
+
+- Fixed Flutter interface labels use Localisation and remain independent from content translation
+- User-entered English, Chinese or Myanmar text remains unchanged as the original
+- The business record keeps the original value; any selected direction stores both other languages as tenant-scoped `translation_cache` rows, leaving all three language values available in PostgreSQL
+- Translation cache keys include tenant, source language, target language and a SHA-256 hash of the normalised original text
+- Existing translations are reused; only new or changed text calls Cloudflare Workers AI
+- `POST /api/v1/translations/preview` queries PostgreSQL only and reports selected-language and companion-language cache hits, cache misses and the provider requests required if confirmed
+- The preview never invokes Cloudflare and never writes translation rows
+- Flutter calls the provider-backed translation endpoint only after the user taps Save and confirms the cost warning
+- Navigating, reopening a page, loading cached feature data and saving normal business data never trigger Cloudflare translation calls; they only collect text for the next explicit Translate Save
+- The next Translate Save considers matching content discovered across pages visited in the current signed-in session, and the preview reports that full scope before confirmation
+- A missing source may require two provider requests because the selected and companion languages are both stored
+- Double taps join the same in-flight preview or translation operation and do not submit a second provider-backed request
+- Cloudflare credentials remain backend environment secrets and are never shipped in Flutter
+
+Enable translation with:
+
+```text
+EASTAPP_TRANSLATION_PROVIDER_ENABLED=true
+EASTAPP_CLOUDFLARE_ACCOUNT_ID=<Cloudflare account ID>
+EASTAPP_CLOUDFLARE_API_TOKEN=<Workers AI token>
+```
+
+When the provider is disabled or its credentials are absent, EastApp can still reuse stored translations. A cache miss returns a provider-disabled response without calling Cloudflare.
 
 ### Home data
 
@@ -278,14 +304,15 @@ No Redis or general backend data cache is added at this stage.
 
 - Tenant, context, role, tag and SOP datasets are currently small
 - Correct cache invalidation would add complexity without evidence of a backend bottleneck
-- Google rating remains the only backend-cached external value
+- Google rating and translated user content are the only backend-cached external values
+- Translation uses PostgreSQL rather than Redis so identical tenant content survives restarts and does not consume AI again
 - Flutter caches tenant and authentication-context lists in memory for five minutes and invalidates them after tenant, user, login/logout or context changes
 - Consider Caffeine first when repeated backend computation becomes measurable
 - Consider Redis only when EastApp runs multiple backend instances or requires shared distributed cache/session behaviour
 
 ## Database and Flyway
 
-EastApp `v075` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
+EastApp `v080` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
 
 1. Code gate: `DATABASE_RESET_ALLOWED_BY_CODE`
 2. Environment gate: `EASTAPP_DATABASE_RESET_ON_START`
@@ -356,6 +383,9 @@ Core Railway settings:
 RAILPACK_JDK_VERSION=25
 SPRING_DOCKER_COMPOSE_ENABLED=false
 EASTAPP_DATABASE_RESET_ON_START=false
+EASTAPP_TRANSLATION_PROVIDER_ENABLED=true
+EASTAPP_CLOUDFLARE_ACCOUNT_ID=<Cloudflare account ID>
+EASTAPP_CLOUDFLARE_API_TOKEN=<Workers AI token>
 ```
 
 Datasource variables should reference the Railway PostgreSQL service:
@@ -388,14 +418,16 @@ src/main/java/com/eastapp/backend/
 ├── places/
 ├── points/
 ├── setup/
-└── stock/
+├── stock/
+└── translation/
 
 src/main/resources/
 ├── application.yaml
 └── db/migration/
     ├── V1__create_eastapp_schema.sql
     ├── V2__link_knowledge_sop_videos.sql
-    └── V3__normalise_linked_knowledge_sop_content.sql
+    ├── V3__normalise_linked_knowledge_sop_content.sql
+    └── V4__create_translation_cache.sql
 
 scripts/
 ├── run-local.sh
