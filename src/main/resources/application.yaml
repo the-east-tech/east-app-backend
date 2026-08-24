@@ -29,8 +29,7 @@ management:
 
 eastapp:
   database:
-    # Environment-side reset gate. Flyway clean runs only when this is true AND
-    # DATABASE_RESET_ALLOWED_BY_CODE is also true in DevelopmentDatabaseResetConfiguration.
+    # Environment gate. A wipe also requires DATABASE_RESET_ALLOWED_BY_CODE=true.
     reset-on-start: ${EASTAPP_DATABASE_RESET_ON_START:false}
 
   attendance:

@@ -1,7 +1,7 @@
--- EastApp clean baseline (v063).
--- This V1 consolidates the complete schema previously represented by V1 through V4
--- after one final deliberate development reset. From this baseline onward, keep V1
--- immutable and add every future schema change as a new append-only V2+ migration.
+-- EastApp clean baseline (v081).
+-- This V1 contains the complete schema for a brand-new EastApp database.
+-- It requires one deliberate development database reset. After that reset, keep
+-- this file immutable and add every future schema change as an append-only V2+ migration.
 
 CREATE TABLE application_setup (
     id SMALLINT PRIMARY KEY,
@@ -515,6 +515,8 @@ CREATE TABLE stock_audit_entry_changes (
 CREATE TABLE knowledge_sops (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     tenant_id UUID NOT NULL,
+    language VARCHAR(20) NOT NULL,
+    link_group_id UUID NOT NULL,
     tag_id UUID NOT NULL,
     youtube_url VARCHAR(500) NOT NULL,
     title VARCHAR(160) NOT NULL,
@@ -530,6 +532,10 @@ CREATE TABLE knowledge_sops (
     CONSTRAINT fk_knowledge_sops_created_by FOREIGN KEY (tenant_id, created_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_knowledge_sops_tenant_id_id UNIQUE (tenant_id, id),
+    CONSTRAINT uq_knowledge_sops_group_language
+        UNIQUE (tenant_id, link_group_id, language),
+    CONSTRAINT ck_knowledge_sops_language
+        CHECK (language IN ('ENGLISH', 'MYANMAR')),
     CONSTRAINT ck_knowledge_sops_youtube_url_not_blank CHECK (btrim(youtube_url) <> ''),
     CONSTRAINT ck_knowledge_sops_title_not_blank CHECK (btrim(title) <> ''),
     CONSTRAINT ck_knowledge_sops_outcome_not_blank CHECK (btrim(expected_outcome) <> ''),
@@ -539,6 +545,42 @@ CREATE INDEX ix_knowledge_sops_tenant_created_at
     ON knowledge_sops (tenant_id, created_at DESC);
 CREATE INDEX ix_knowledge_sops_tenant_tag
     ON knowledge_sops (tenant_id, tag_id);
+CREATE INDEX ix_knowledge_sops_tenant_link_group
+    ON knowledge_sops (tenant_id, link_group_id);
+
+CREATE TABLE translation_cache (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    source_language VARCHAR(16) NOT NULL,
+    target_language VARCHAR(16) NOT NULL,
+    source_hash VARCHAR(64) NOT NULL,
+    source_text TEXT NOT NULL,
+    translated_text TEXT NOT NULL,
+    provider VARCHAR(40) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_translation_cache_tenant
+        FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE,
+    CONSTRAINT uq_translation_cache_lookup
+        UNIQUE (tenant_id, source_language, target_language, source_hash),
+    CONSTRAINT ck_translation_cache_source_language
+        CHECK (source_language IN ('ENGLISH', 'CHINESE', 'MYANMAR')),
+    CONSTRAINT ck_translation_cache_target_language
+        CHECK (target_language IN ('ENGLISH', 'CHINESE', 'MYANMAR')),
+    CONSTRAINT ck_translation_cache_direction
+        CHECK (source_language <> target_language),
+    CONSTRAINT ck_translation_cache_source_hash
+        CHECK (source_hash ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT ck_translation_cache_source_text
+        CHECK (btrim(source_text) <> ''),
+    CONSTRAINT ck_translation_cache_translated_text
+        CHECK (btrim(translated_text) <> ''),
+    CONSTRAINT ck_translation_cache_provider
+        CHECK (btrim(provider) <> '')
+);
+
+CREATE INDEX ix_translation_cache_tenant_pair
+    ON translation_cache (tenant_id, source_language, target_language);
 
 -- The first tenant, its default roles and the first Owner account are created
 -- through the one-time Initial Setup API. Later tenants are created through
