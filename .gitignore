@@ -41,3 +41,4 @@ application-local.yaml
 
 ## My Ignore ##
 .DS_Store
+deploy/railway-variables.development.json
