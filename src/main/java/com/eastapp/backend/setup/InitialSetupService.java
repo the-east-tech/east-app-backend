@@ -70,10 +70,14 @@ public class InitialSetupService {
     @Transactional
     public SetupStatusResponse status() {
         boolean required = isSetupRequired();
-        if (required) {
-            setupCodeService.ensureActiveCode();
-        }
-        return new SetupStatusResponse(required);
+        SetupCodeService.ActiveSetupCode setupCode = required
+                ? setupCodeService.ensureActiveCode()
+                : null;
+        return new SetupStatusResponse(
+                required,
+                setupCode == null ? null : setupCode.code(),
+                setupCode == null ? null : setupCode.expiresAt()
+        );
     }
 
     /**

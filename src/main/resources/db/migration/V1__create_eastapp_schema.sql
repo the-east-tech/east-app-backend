@@ -1,10 +1,11 @@
--- EastApp clean reset-per-release schema (v090).
+-- EastApp clean reset-per-release schema (v091).
 -- This V1 contains the complete schema for a brand-new EastApp database.
 -- While the reset-per-release policy is active, merge every schema change into
 -- this file, keep V1 as the only migration, and reset the database each release.
 
 CREATE TABLE application_setup (
     id SMALLINT PRIMARY KEY,
+    setup_code VARCHAR(10),
     setup_code_hash BYTEA,
     setup_code_expires_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
@@ -13,8 +14,13 @@ CREATE TABLE application_setup (
     CONSTRAINT ck_application_setup_code_hash_length CHECK (
         setup_code_hash IS NULL OR octet_length(setup_code_hash) = 32
     ),
+    CONSTRAINT ck_application_setup_code_format CHECK (
+        setup_code IS NULL OR setup_code ~ '^[A-HJ-NP-Z2-9]{10}$'
+    ),
     CONSTRAINT ck_application_setup_code_pair CHECK (
-        (setup_code_hash IS NULL) = (setup_code_expires_at IS NULL)
+        (setup_code IS NULL AND setup_code_hash IS NULL AND setup_code_expires_at IS NULL)
+        OR
+        (setup_code IS NOT NULL AND setup_code_hash IS NOT NULL AND setup_code_expires_at IS NOT NULL)
     )
 );
 

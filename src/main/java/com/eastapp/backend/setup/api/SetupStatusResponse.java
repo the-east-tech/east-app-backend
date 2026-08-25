@@ -1,4 +1,10 @@
 package com.eastapp.backend.setup.api;
 
-public record SetupStatusResponse(boolean setupRequired) {
+import java.time.Instant;
+
+public record SetupStatusResponse(
+        boolean setupRequired,
+        String setupCode,
+        Instant setupCodeExpiresAt
+) {
 }

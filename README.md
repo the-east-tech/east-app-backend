@@ -4,8 +4,8 @@ Backend API for **EastApp**, a multi-business operations application covering id
 
 ## Current development model
 
-- `v080` adds a cache-only translation cost preview, so Flutter can warn before any Cloudflare request, and keeps stored translations available when the provider is disabled
-- After this reset, `V1__create_eastapp_schema.sql` is immutable and every later schema change must use `V2+`
+- `v091` returns the one-time Initial Setup Code to the uninitialised Flutter app so it can be copied without reading backend logs
+- While reset-per-release remains active, every schema change is merged into the single clean `V1__create_eastapp_schema.sql` and each release starts with a database reset
 - No seeded tenants or users
 - Initial Setup creates the first tenant and first `OWNER`
 - Each tenant represents one independent business location
@@ -190,7 +190,7 @@ The script:
 2. Starts PostgreSQL 18
 3. Applies pending Flyway migrations
 4. Starts Spring Boot
-5. Prints a one-time Initial Setup code only when setup has not been completed
+5. Generates a one-time Initial Setup code only when setup has not been completed
 
 A destructive reset is available by running `./scripts/run-fresh-local.sh`; no additional environment variable is required because the script sets the reset request itself. The source-code reset gate must still be enabled.
 
@@ -213,11 +213,16 @@ Expected response:
 On an empty database:
 
 1. Start the backend
-2. Read the setup code from the backend terminal
-3. Open EastApp Flutter
-4. Complete Initial Setup
+2. Open EastApp Flutter
+3. Copy the Setup Code from the one-time popup
+4. Complete Initial Setup using the copied code
 5. Select the tenant's Google business location
 6. Create the first Owner account
+
+`GET /api/v1/setup/status` returns the active Setup Code and expiry only while
+Initial Setup remains incomplete. Its response is marked `no-store`. This is a
+convenience for the current deployment model and means the code is visible to
+anyone who can reach an uninitialised backend.
 
 Initial Setup creates:
 

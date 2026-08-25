@@ -2,6 +2,8 @@ package com.eastapp.backend.setup.api;
 
 import com.eastapp.backend.setup.InitialSetupService;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,8 +21,10 @@ public class SetupController {
     }
 
     @GetMapping("/status")
-    SetupStatusResponse status() {
-        return initialSetupService.status();
+    ResponseEntity<SetupStatusResponse> status() {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(initialSetupService.status());
     }
 
     @PostMapping("/owner")

@@ -40,7 +40,7 @@
 @dailyTaskRecordId = 00000000-0000-0000-0000-000000000000
 @dailyTaskChecklistItemId = 00000000-0000-0000-0000-000000000000
 
-### Initial setup status
+### Initial setup status — copy setupCode from this response into @setupCode
 GET {{baseUrl}}/api/v1/setup/status
 
 ### Complete initial setup — empty database only
@@ -220,7 +220,7 @@ Content-Type: application/json
   "qrPayload": "{{attendanceCheckInQrPayload}}",
   "devicePlatform": "ANDROID",
   "deviceOsVersion": "Android",
-  "appVersion": "east_app_v298"
+  "appVersion": "east_app_v300"
 }
 
 ### Tenant-wide attendance audit

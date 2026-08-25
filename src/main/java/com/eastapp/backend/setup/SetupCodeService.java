@@ -30,26 +30,31 @@ public class SetupCodeService {
     }
 
     @Transactional
-    public void ensureActiveCode() {
+    public ActiveSetupCode ensureActiveCode() {
         SetupCodeRow row = lockSetupRow();
         Instant now = Instant.now();
-        if (row.codeHash() != null
+        if (row.code() != null
+                && row.codeHash() != null
                 && row.expiresAt() != null
                 && now.isBefore(row.expiresAt())) {
-            return;
+            return new ActiveSetupCode(row.code(), row.expiresAt());
         }
 
         String code = generateCode();
+        Instant expiresAt = now.plus(VALIDITY);
         jdbcTemplate.update(
                 """
                 update application_setup
-                set setup_code_hash = ?, setup_code_expires_at = ?, updated_at = current_timestamp
+                set setup_code = ?, setup_code_hash = ?, setup_code_expires_at = ?,
+                    updated_at = current_timestamp
                 where id = 1
                 """,
+                code,
                 hash(code),
-                Timestamp.from(now.plus(VALIDITY))
+                Timestamp.from(expiresAt)
         );
         log.warn("EastApp initial setup code: {} (valid for 1 hour)", code);
+        return new ActiveSetupCode(code, expiresAt);
     }
 
     @Transactional
@@ -71,7 +76,8 @@ public class SetupCodeService {
         jdbcTemplate.update(
                 """
                 update application_setup
-                set setup_code_hash = null,
+                set setup_code = null,
+                    setup_code_hash = null,
                     setup_code_expires_at = null,
                     completed_at = current_timestamp,
                     updated_at = current_timestamp
@@ -83,7 +89,7 @@ public class SetupCodeService {
     private SetupCodeRow lockSetupRow() {
         return jdbcTemplate.queryForObject(
                 """
-                select setup_code_hash, setup_code_expires_at
+                select setup_code, setup_code_hash, setup_code_expires_at
                 from application_setup
                 where id = 1
                 for update
@@ -91,6 +97,7 @@ public class SetupCodeService {
                 (resultSet, rowNumber) -> {
                     Timestamp expiresAt = resultSet.getTimestamp("setup_code_expires_at");
                     return new SetupCodeRow(
+                            resultSet.getString("setup_code"),
                             resultSet.getBytes("setup_code_hash"),
                             expiresAt == null ? null : expiresAt.toInstant()
                     );
@@ -115,6 +122,9 @@ public class SetupCodeService {
         }
     }
 
-    private record SetupCodeRow(byte[] codeHash, Instant expiresAt) {
+    public record ActiveSetupCode(String code, Instant expiresAt) {
+    }
+
+    private record SetupCodeRow(String code, byte[] codeHash, Instant expiresAt) {
     }
 }
