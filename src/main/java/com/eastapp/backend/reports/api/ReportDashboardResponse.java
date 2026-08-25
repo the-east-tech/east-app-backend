@@ -1,5 +1,7 @@
 package com.eastapp.backend.reports.api;
 
+import com.eastapp.backend.tasks.api.DailyTaskOverviewResponse;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -13,6 +15,7 @@ public record ReportDashboardResponse(
         InventoryIntelligenceResponse inventory,
         WasteOverviewResponse waste,
         DailyPhotoOverviewResponse dailyPhotos,
+        DailyTaskOverviewResponse dailyTasks,
         ComplaintOverviewResponse complaints,
         int pendingApprovals,
         List<ReportTrendPointResponse> trend

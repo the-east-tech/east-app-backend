@@ -55,7 +55,7 @@ public class ApiExceptionHandler {
         return ResponseEntity.badRequest()
                 .body(ApiErrorResponse.of(
                         "IMAGE_TOO_LARGE",
-                        "SKU thumbnail must not exceed 5 MB."
+                        "Each image must not exceed 5 MB and the combined upload must not exceed 205 MB."
                 ));
     }
 

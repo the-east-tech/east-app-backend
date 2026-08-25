@@ -23,6 +23,8 @@ import com.eastapp.backend.stock.StockSkuRepository;
 import com.eastapp.backend.stock.StockSupplier;
 import com.eastapp.backend.stock.StockSupplierRepository;
 import com.eastapp.backend.stock.StockTag;
+import com.eastapp.backend.stock.StockTagAssignee;
+import com.eastapp.backend.stock.StockTagAssigneeRepository;
 import com.eastapp.backend.stock.StockTagRepository;
 import com.eastapp.backend.stock.api.CopyStockSkusRequest;
 import com.eastapp.backend.stock.api.BulkReviewStockCountsResponse;
@@ -41,10 +43,12 @@ import com.eastapp.backend.stock.api.StockReviewSummaryResponse;
 import com.eastapp.backend.stock.api.StockSkuResponse;
 import com.eastapp.backend.stock.api.StockSnapshotResponse;
 import com.eastapp.backend.stock.api.StockSupplierResponse;
+import com.eastapp.backend.stock.api.StockTagAssigneeResponse;
 import com.eastapp.backend.stock.api.StockTagResponse;
 import com.eastapp.backend.stock.api.UpdateStockBalanceRequest;
 import com.eastapp.backend.stock.api.UpdateStockTagRequest;
 import com.eastapp.backend.stock.api.UpsertStockSkuRequest;
+import com.eastapp.backend.tasks.DailyTaskTemplateRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -64,6 +68,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class StockService {
@@ -75,6 +80,7 @@ public class StockService {
     private final TenantRepository tenantRepository;
     private final UserAccountRepository userAccountRepository;
     private final StockTagRepository tagRepository;
+    private final StockTagAssigneeRepository tagAssigneeRepository;
     private final StockSupplierRepository supplierRepository;
     private final StockSkuRepository skuRepository;
     private final StockCountSubmissionRepository countRepository;
@@ -82,22 +88,26 @@ public class StockService {
     private final StockAuditEntryRepository auditRepository;
     private final StockMediaRepository mediaRepository;
     private final KnowledgeSopRepository knowledgeSopRepository;
+    private final DailyTaskTemplateRepository dailyTaskTemplateRepository;
 
     public StockService(
             TenantRepository tenantRepository,
             UserAccountRepository userAccountRepository,
             StockTagRepository tagRepository,
+            StockTagAssigneeRepository tagAssigneeRepository,
             StockSupplierRepository supplierRepository,
             StockSkuRepository skuRepository,
             StockCountSubmissionRepository countRepository,
             StockReceivingRepository receivingRepository,
             StockAuditEntryRepository auditRepository,
             StockMediaRepository mediaRepository,
-            KnowledgeSopRepository knowledgeSopRepository
+            KnowledgeSopRepository knowledgeSopRepository,
+            DailyTaskTemplateRepository dailyTaskTemplateRepository
     ) {
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
         this.tagRepository = tagRepository;
+        this.tagAssigneeRepository = tagAssigneeRepository;
         this.supplierRepository = supplierRepository;
         this.skuRepository = skuRepository;
         this.countRepository = countRepository;
@@ -105,6 +115,7 @@ public class StockService {
         this.auditRepository = auditRepository;
         this.mediaRepository = mediaRepository;
         this.knowledgeSopRepository = knowledgeSopRepository;
+        this.dailyTaskTemplateRepository = dailyTaskTemplateRepository;
     }
 
     @Transactional(readOnly = true)
@@ -112,7 +123,7 @@ public class StockService {
         UUID tenantId = principal.tenantId();
         return new StockSnapshotResponse(
                 tagRepository.findAllByTenant_IdOrderByTagAsc(tenantId)
-                        .stream().map(StockTagResponse::from).toList(),
+                        .stream().map(this::tagResponse).toList(),
                 supplierRepository.findAllByTenant_IdOrderBySupplierNameAsc(tenantId)
                         .stream().map(StockSupplierResponse::from).toList(),
                 skuRepository.findAllByTenant_IdOrderByNameAsc(tenantId)
@@ -137,7 +148,7 @@ public class StockService {
                 tagRepository.searchByTenant(
                         principal.tenantId(), normaliseSearch(search), pageRequest(page, size)
                 ),
-                StockTagResponse::from
+                this::tagResponse
         );
     }
 
@@ -392,11 +403,15 @@ public class StockService {
         }
         Tenant tenant = tenant(principal.tenantId());
         UserAccount actor = actor(principal);
-        StockTag saved = tagRepository.save(new StockTag(tenant, tag, actor));
+        StockTag saved = tagRepository.saveAndFlush(new StockTag(tenant, tag, actor));
+        List<UserAccount> assignedUsers = replaceTagAssignees(
+                principal.tenantId(), saved.getId(), request.assignedUserIds(), actor
+        );
         auditRepository.save(new StockAuditEntry(
                 tenant, "Tag", "Created tag", saved.getId(), saved.getTag(), principal, "")
-                .addChange("Tag", "-", saved.getTag()));
-        return StockTagResponse.from(saved);
+                .addChange("Tag", "-", saved.getTag())
+                .addChange("Assigned Users", "-", userLabels(assignedUsers)));
+        return tagResponse(saved, assignedUsers);
     }
 
     @Transactional
@@ -413,11 +428,18 @@ public class StockService {
             throw conflict("STOCK_TAG_EXISTS", "This stock tag already exists.");
         }
         UserAccount actor = actor(principal);
+        List<UserAccount> oldUsers = assignedUsers(principal.tenantId(), tagId);
         tag.rename(newName, actor);
+        List<UserAccount> newUsers = request.assignedUserIds() == null
+                ? oldUsers
+                : replaceTagAssignees(
+                        principal.tenantId(), tagId, request.assignedUserIds(), actor
+                );
         auditRepository.save(new StockAuditEntry(
-                tag.getTenant(), "Tag", "Renamed tag", tag.getId(), newName, principal, "")
-                .addChange("Tag", oldName, newName));
-        return StockTagResponse.from(tag);
+                tag.getTenant(), "Tag", "Updated tag", tag.getId(), newName, principal, "")
+                .addChange("Tag", oldName, newName)
+                .addChange("Assigned Users", userLabels(oldUsers), userLabels(newUsers)));
+        return tagResponse(tag, newUsers);
     }
 
     @Transactional
@@ -435,6 +457,12 @@ public class StockService {
             throw conflict(
                     "STOCK_TAG_IN_USE_BY_SOP",
                     "This tag is assigned to a Knowledge SOP and cannot be deleted."
+            );
+        }
+        if (dailyTaskTemplateRepository.existsByTenantIdAndTagId(principal.tenantId(), tagId)) {
+            throw conflict(
+                    "STOCK_TAG_IN_USE_BY_DAILY_TASK",
+                    "This tag belongs to a Daily Task and cannot be deleted."
             );
         }
         auditRepository.save(new StockAuditEntry(
@@ -955,6 +983,111 @@ public class StockService {
     private StockTag tag(UUID id, UUID tenantId) {
         return tagRepository.findByIdAndTenant_Id(id, tenantId)
                 .orElseThrow(() -> notFound("STOCK_TAG_NOT_FOUND", "Stock tag not found."));
+    }
+
+    private StockTagResponse tagResponse(StockTag tag) {
+        return tagResponse(tag, assignedUsers(tag.getTenant().getId(), tag.getId()));
+    }
+
+    private StockTagResponse tagResponse(StockTag tag, List<UserAccount> users) {
+        return StockTagResponse.from(
+                tag,
+                users.stream()
+                        .map(user -> new StockTagAssigneeResponse(
+                                user.getId(),
+                                user.getFullName(),
+                                user.getEmployeeId(),
+                                user.getRole().getSystemKey()
+                        ))
+                        .toList()
+        );
+    }
+
+    private List<UserAccount> assignedUsers(UUID tenantId, UUID tagId) {
+        return tagAssigneeRepository
+                .findAllByTenantIdAndTagIdOrderByCreatedAtAsc(tenantId, tagId)
+                .stream()
+                .map(assignment -> userAccountRepository
+                        .findByIdAndTenant_Id(assignment.getUserId(), tenantId)
+                        .orElseThrow(() -> notFound(
+                                "TAG_ASSIGNEE_NOT_FOUND",
+                                "A user assigned to this tag was not found."
+                        )))
+                .sorted((left, right) -> {
+                    int byName = left.getFullName().compareToIgnoreCase(right.getFullName());
+                    return byName != 0
+                            ? byName
+                            : left.getEmployeeId().compareToIgnoreCase(right.getEmployeeId());
+                })
+                .toList();
+    }
+
+    private List<UserAccount> replaceTagAssignees(
+            UUID tenantId,
+            UUID tagId,
+            List<UUID> requestedUserIds,
+            UserAccount actor
+    ) {
+        LinkedHashSet<UUID> uniqueIds = new LinkedHashSet<>(
+                requestedUserIds == null ? List.of() : requestedUserIds
+        );
+        List<UserAccount> users = new ArrayList<>();
+        for (UUID userId : uniqueIds) {
+            UserAccount user = userAccountRepository.findByIdAndTenant_Id(userId, tenantId)
+                    .orElseThrow(() -> notFound(
+                            "TAG_ASSIGNEE_NOT_FOUND",
+                            "One or more selected users were not found in this business."
+                    ));
+            if (!user.isActive() || !user.getRole().isActive()) {
+                throw badRequest(
+                        "TAG_ASSIGNEE_INACTIVE",
+                        "Only active users may be assigned to a tag."
+                );
+            }
+            users.add(user);
+        }
+
+        List<StockTagAssignee> existingAssignments = tagAssigneeRepository
+                .findAllByTenantIdAndTagIdOrderByCreatedAtAsc(tenantId, tagId);
+        Set<UUID> existingUserIds = existingAssignments.stream()
+                .map(StockTagAssignee::getUserId)
+                .collect(Collectors.toSet());
+        List<StockTagAssignee> removedAssignments = existingAssignments.stream()
+                .filter(assignment -> !uniqueIds.contains(assignment.getUserId()))
+                .toList();
+        if (!removedAssignments.isEmpty()) {
+            tagAssigneeRepository.deleteAllInBatch(removedAssignments);
+        }
+        List<UserAccount> addedUsers = users.stream()
+                .filter(user -> !existingUserIds.contains(user.getId()))
+                .toList();
+        if (!addedUsers.isEmpty()) {
+            tagAssigneeRepository.saveAllAndFlush(addedUsers.stream()
+                    .map(user -> new StockTagAssignee(
+                            tenantId, tagId, user.getId(), actor.getId()
+                    ))
+                    .toList());
+        }
+        users.sort((left, right) -> {
+            int byName = left.getFullName().compareToIgnoreCase(right.getFullName());
+            return byName != 0
+                    ? byName
+                    : left.getEmployeeId().compareToIgnoreCase(right.getEmployeeId());
+        });
+        return List.copyOf(users);
+    }
+
+    private static String userLabels(List<UserAccount> users) {
+        if (users == null || users.isEmpty()) return "None";
+        List<String> labels = users.stream()
+                .map(user -> user.getFullName() + " (" + user.getEmployeeId() + ")")
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+        String visible = String.join(", ", labels.stream().limit(5).toList());
+        return labels.size() <= 5
+                ? visible
+                : visible + " (and " + (labels.size() - 5) + " more; "
+                        + labels.size() + " total)";
     }
 
     private StockSupplier supplier(UUID id, UUID tenantId) {

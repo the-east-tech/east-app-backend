@@ -33,6 +33,16 @@ public class ReportMediaService {
 
     @Transactional
     public ReportMediaUploadResponse saveImage(AuthenticatedUser principal, MultipartFile file) {
+        ReportMedia saved = saveImageEntity(principal, file);
+        return new ReportMediaUploadResponse(
+                saved.getStorageKey(),
+                saved.getContentType(),
+                saved.getSizeBytes()
+        );
+    }
+
+    @Transactional
+    public ReportMedia saveImageEntity(AuthenticatedUser principal, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "REPORT_IMAGE_REQUIRED", "Take a report photo first.");
         }
@@ -63,14 +73,13 @@ public class ReportMediaService {
 
         String extension = detectedType.equals("image/png") ? ".png" : ".jpg";
         String storageKey = UUID.randomUUID() + extension;
-        ReportMedia saved = mediaRepository.saveAndFlush(new ReportMedia(
+        return mediaRepository.saveAndFlush(new ReportMedia(
                 principal.tenantId(),
                 storageKey,
                 detectedType,
                 bytes,
                 principal.userId()
         ));
-        return new ReportMediaUploadResponse(saved.getStorageKey(), saved.getContentType(), saved.getSizeBytes());
     }
 
     public StoredReportMedia loadImage(AuthenticatedUser principal, String storageKey) {

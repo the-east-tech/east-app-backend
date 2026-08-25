@@ -1,7 +1,7 @@
--- EastApp clean baseline (v081).
+-- EastApp clean reset-per-release schema (v090).
 -- This V1 contains the complete schema for a brand-new EastApp database.
--- It requires one deliberate development database reset. After that reset, keep
--- this file immutable and add every future schema change as an append-only V2+ migration.
+-- While the reset-per-release policy is active, merge every schema change into
+-- this file, keep V1 as the only migration, and reset the database each release.
 
 CREATE TABLE application_setup (
     id SMALLINT PRIMARY KEY,
@@ -867,3 +867,205 @@ CREATE TABLE complaint_report_details (
 );
 CREATE INDEX ix_complaint_report_details_tenant_status
     ON complaint_report_details (tenant_id, complaint_status);
+
+-- Daily Tasks
+CREATE TABLE stock_tag_assignees (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    tag_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    assigned_by_user_id UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_stock_tag_assignees_tag_same_tenant
+        FOREIGN KEY (tenant_id, tag_id)
+        REFERENCES stock_tags (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT fk_stock_tag_assignees_user_same_tenant
+        FOREIGN KEY (tenant_id, user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_tag_assignees_actor_same_tenant
+        FOREIGN KEY (tenant_id, assigned_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT uq_stock_tag_assignees_tenant_tag_user
+        UNIQUE (tenant_id, tag_id, user_id)
+);
+CREATE INDEX ix_stock_tag_assignees_tenant_user
+    ON stock_tag_assignees (tenant_id, user_id, tag_id);
+
+-- A template belongs to one Stock Tag. Each business date has one shared task
+-- record, regardless of how many users are assigned to that Tag.
+CREATE TABLE daily_task_templates (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    tag_id UUID NOT NULL,
+    title VARCHAR(160) NOT NULL,
+    instruction VARCHAR(1000) NOT NULL DEFAULT '',
+    required_photo_count INTEGER NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by_user_id UUID NOT NULL,
+    updated_by_user_id UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_daily_task_templates_tag_same_tenant
+        FOREIGN KEY (tenant_id, tag_id)
+        REFERENCES stock_tags (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_daily_task_templates_creator_same_tenant
+        FOREIGN KEY (tenant_id, created_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_daily_task_templates_updater_same_tenant
+        FOREIGN KEY (tenant_id, updated_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT uq_daily_task_templates_tenant_id_id UNIQUE (tenant_id, id),
+    CONSTRAINT ck_daily_task_templates_title_not_blank CHECK (btrim(title) <> ''),
+    CONSTRAINT ck_daily_task_templates_photo_count CHECK (required_photo_count BETWEEN 1 AND 40)
+);
+CREATE INDEX ix_daily_task_templates_tenant_active_tag
+    ON daily_task_templates (tenant_id, active, tag_id, lower(title));
+
+CREATE TABLE daily_task_template_checklist_items (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    template_id UUID NOT NULL,
+    position INTEGER NOT NULL,
+    description VARCHAR(300) NOT NULL,
+    CONSTRAINT fk_daily_task_template_checks_template_same_tenant
+        FOREIGN KEY (tenant_id, template_id)
+        REFERENCES daily_task_templates (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT uq_daily_task_template_checks_position
+        UNIQUE (tenant_id, template_id, position),
+    CONSTRAINT ck_daily_task_template_checks_position CHECK (position BETWEEN 0 AND 4),
+    CONSTRAINT ck_daily_task_template_checks_description CHECK (btrim(description) <> '')
+);
+
+CREATE TABLE daily_task_records (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    template_id UUID NOT NULL,
+    tag_id UUID NOT NULL,
+    task_date DATE NOT NULL,
+    title VARCHAR(160) NOT NULL,
+    instruction VARCHAR(1000) NOT NULL DEFAULT '',
+    tag_name VARCHAR(80) NOT NULL,
+    required_photo_count INTEGER NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    submitted_by_user_id UUID,
+    submitted_by_role VARCHAR(32),
+    submitted_at TIMESTAMPTZ,
+    rating INTEGER,
+    rating_comment VARCHAR(1000),
+    rated_by_user_id UUID,
+    rated_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_daily_task_records_template_same_tenant
+        FOREIGN KEY (tenant_id, template_id)
+        REFERENCES daily_task_templates (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_daily_task_records_tag_same_tenant
+        FOREIGN KEY (tenant_id, tag_id)
+        REFERENCES stock_tags (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_daily_task_records_submitter_same_tenant
+        FOREIGN KEY (tenant_id, submitted_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_daily_task_records_rater_same_tenant
+        FOREIGN KEY (tenant_id, rated_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT uq_daily_task_records_tenant_id_id UNIQUE (tenant_id, id),
+    CONSTRAINT uq_daily_task_records_template_date UNIQUE (tenant_id, template_id, task_date),
+    CONSTRAINT ck_daily_task_records_title_not_blank CHECK (btrim(title) <> ''),
+    CONSTRAINT ck_daily_task_records_tag_not_blank CHECK (btrim(tag_name) <> ''),
+    CONSTRAINT ck_daily_task_records_photo_count CHECK (required_photo_count BETWEEN 1 AND 40),
+    CONSTRAINT ck_daily_task_records_status CHECK (status IN ('PENDING', 'SUBMITTED', 'DONE')),
+    CONSTRAINT ck_daily_task_records_submitter_role CHECK (
+        submitted_by_role IS NULL OR submitted_by_role IN (
+            'OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR', 'STAFF_1', 'STAFF_2'
+        )
+    ),
+    CONSTRAINT ck_daily_task_records_submission CHECK (
+        (status = 'PENDING' AND submitted_by_user_id IS NULL AND submitted_by_role IS NULL AND submitted_at IS NULL)
+        OR
+        (status IN ('SUBMITTED', 'DONE') AND submitted_by_user_id IS NOT NULL
+            AND submitted_by_role IS NOT NULL AND submitted_at IS NOT NULL)
+    ),
+    CONSTRAINT ck_daily_task_records_rating CHECK (
+        (status <> 'DONE' AND rating IS NULL AND rating_comment IS NULL
+            AND rated_by_user_id IS NULL AND rated_at IS NULL)
+        OR
+        (status = 'DONE' AND rating IS NOT NULL AND rating BETWEEN 1 AND 5
+            AND rating_comment IS NOT NULL AND btrim(rating_comment) <> ''
+            AND rated_by_user_id IS NOT NULL AND rated_at IS NOT NULL)
+    )
+);
+CREATE INDEX ix_daily_task_records_tenant_date_status
+    ON daily_task_records (tenant_id, task_date DESC, status, tag_id);
+CREATE INDEX ix_daily_task_records_tenant_submitter_date
+    ON daily_task_records (tenant_id, submitted_by_user_id, task_date DESC);
+
+CREATE TABLE daily_task_record_checklist_items (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    record_id UUID NOT NULL,
+    position INTEGER NOT NULL,
+    description VARCHAR(300) NOT NULL,
+    completed_by_user_id UUID,
+    completed_at TIMESTAMPTZ,
+    CONSTRAINT fk_daily_task_record_checks_record_same_tenant
+        FOREIGN KEY (tenant_id, record_id)
+        REFERENCES daily_task_records (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT fk_daily_task_record_checks_user_same_tenant
+        FOREIGN KEY (tenant_id, completed_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT uq_daily_task_record_checks_position UNIQUE (tenant_id, record_id, position),
+    CONSTRAINT ck_daily_task_record_checks_position CHECK (position BETWEEN 0 AND 4),
+    CONSTRAINT ck_daily_task_record_checks_description CHECK (btrim(description) <> ''),
+    CONSTRAINT ck_daily_task_record_checks_completion CHECK (
+        (completed_by_user_id IS NULL AND completed_at IS NULL)
+        OR (completed_by_user_id IS NOT NULL AND completed_at IS NOT NULL)
+    )
+);
+
+CREATE TABLE daily_task_photos (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    record_id UUID NOT NULL,
+    photo_media_id UUID NOT NULL,
+    submitted_by_user_id UUID NOT NULL,
+    submitted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_daily_task_photos_record_same_tenant
+        FOREIGN KEY (tenant_id, record_id)
+        REFERENCES daily_task_records (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT fk_daily_task_photos_media_same_tenant
+        FOREIGN KEY (tenant_id, photo_media_id)
+        REFERENCES report_media (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_daily_task_photos_submitter_same_tenant
+        FOREIGN KEY (tenant_id, submitted_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT uq_daily_task_photos_media UNIQUE (tenant_id, photo_media_id)
+);
+CREATE INDEX ix_daily_task_photos_tenant_record_time
+    ON daily_task_photos (tenant_id, record_id, submitted_at, id);
+
+CREATE TABLE daily_task_audit_entries (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    template_id UUID,
+    record_id UUID,
+    actor_user_id UUID NOT NULL,
+    action VARCHAR(48) NOT NULL,
+    details VARCHAR(1200) NOT NULL DEFAULT '',
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_daily_task_audit_template_same_tenant
+        FOREIGN KEY (tenant_id, template_id)
+        REFERENCES daily_task_templates (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_daily_task_audit_record_same_tenant
+        FOREIGN KEY (tenant_id, record_id)
+        REFERENCES daily_task_records (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT fk_daily_task_audit_actor_same_tenant
+        FOREIGN KEY (tenant_id, actor_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT ck_daily_task_audit_target CHECK (template_id IS NOT NULL OR record_id IS NOT NULL),
+    CONSTRAINT ck_daily_task_audit_action CHECK (btrim(action) <> '')
+);
+CREATE INDEX ix_daily_task_audit_tenant_record_time
+    ON daily_task_audit_entries (tenant_id, record_id, occurred_at, id);
+CREATE INDEX ix_daily_task_audit_tenant_template_time
+    ON daily_task_audit_entries (tenant_id, template_id, occurred_at, id)
+    WHERE record_id IS NULL;

@@ -192,7 +192,7 @@ The script:
 4. Starts Spring Boot
 5. Prints a one-time Initial Setup code only when setup has not been completed
 
-A destructive reset remains available through `scripts/run-fresh-local.sh`, but it now requires the explicit environment variable `EASTAPP_CONFIRM_DATABASE_RESET=YES`.
+A destructive reset is available by running `./scripts/run-fresh-local.sh`; no additional environment variable is required because the script sets the reset request itself. The source-code reset gate must still be enabled.
 
 The setup code is valid for 1 hour.
 
@@ -349,7 +349,7 @@ EASTAPP_DATABASE_RESET_ON_START=false
 Fresh local reset request:
 
 ```bash
-EASTAPP_CONFIRM_DATABASE_RESET=YES ./scripts/run-fresh-local.sh
+./scripts/run-fresh-local.sh
 ```
 
 `run-fresh-local.sh` no longer runs `docker compose down -v` and no longer deletes the PostgreSQL Docker volume directly. It sets `EASTAPP_DATABASE_RESET_ON_START=true`, starts PostgreSQL, and lets the backend's two-gate protection decide whether `flyway.clean()` is allowed.
@@ -364,9 +364,9 @@ Keep the existing Railway variable:
 EASTAPP_DATABASE_RESET_ON_START=false
 ```
 
-For a deliberate reset, both the source-code gate and Railway variable must be deliberately changed to `true`. On Railway, the current consolidated-baseline transition also retains the additional legacy-history safety check.
+For a deliberate Railway reset, the source-code gate and Railway variable must both be `true`. Return the Railway variable to `false` after the reset deployment.
 
-The consolidated `V1__create_eastapp_schema.sql` is the clean baseline containing the former V1-V4 schema. Once established, V1 must remain immutable and all future schema changes must use new append-only V2+ migrations.
+The current release policy deliberately resets the database for each release. Keep one clean `V1__create_eastapp_schema.sql`, merge every schema change into that file, and do not create V2+ migrations unless this policy is explicitly changed.
 
 
 ## Railway deployment
@@ -424,10 +424,7 @@ src/main/java/com/eastapp/backend/
 src/main/resources/
 ├── application.yaml
 └── db/migration/
-    ├── V1__create_eastapp_schema.sql
-    ├── V2__link_knowledge_sop_videos.sql
-    ├── V3__normalise_linked_knowledge_sop_content.sql
-    └── V4__create_translation_cache.sql
+    └── V1__create_eastapp_schema.sql
 
 scripts/
 ├── run-local.sh

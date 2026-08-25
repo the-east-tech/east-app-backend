@@ -52,6 +52,8 @@ import com.eastapp.backend.stock.StockCountSubmission;
 import com.eastapp.backend.stock.StockCountSubmissionRepository;
 import com.eastapp.backend.stock.StockSku;
 import com.eastapp.backend.stock.StockSkuRepository;
+import com.eastapp.backend.tasks.api.DailyTaskOverviewResponse;
+import com.eastapp.backend.tasks.service.DailyTaskService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -96,6 +98,7 @@ public class BusinessReportService {
     private final StockCountSubmissionRepository stockCountRepository;
     private final StockSkuRepository skuRepository;
     private final ReportProperties properties;
+    private final DailyTaskService dailyTaskService;
 
     public BusinessReportService(
             BusinessReportRepository reportRepository,
@@ -110,7 +113,8 @@ public class BusinessReportService {
             AttendanceEventRepository attendanceRepository,
             StockCountSubmissionRepository stockCountRepository,
             StockSkuRepository skuRepository,
-            ReportProperties properties
+            ReportProperties properties,
+            DailyTaskService dailyTaskService
     ) {
         this.reportRepository = reportRepository;
         this.salesRepository = salesRepository;
@@ -125,9 +129,10 @@ public class BusinessReportService {
         this.stockCountRepository = stockCountRepository;
         this.skuRepository = skuRepository;
         this.properties = properties;
+        this.dailyTaskService = dailyTaskService;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ReportDashboardResponse dashboard(AuthenticatedUser principal, int requestedDays) {
         int days = Math.max(1, Math.min(requestedDays, 31));
         LocalDate today = today();
@@ -135,6 +140,7 @@ public class BusinessReportService {
         boolean managementView = isManagement(principal.systemRole());
 
         DailyPhotoOverviewResponse dailyOverview = dailyPhotoOverview(principal, today);
+        DailyTaskOverviewResponse dailyTaskOverview = dailyTaskService.overview(principal, today);
         if (!managementView) {
             return new ReportDashboardResponse(
                     today,
@@ -146,6 +152,7 @@ public class BusinessReportService {
                     null,
                     null,
                     dailyOverview,
+                    dailyTaskOverview,
                     null,
                     0,
                     List.of()
@@ -242,6 +249,7 @@ public class BusinessReportService {
                 inventory,
                 wasteOverview,
                 dailyOverview,
+                dailyTaskOverview,
                 complaints,
                 pendingApprovals,
                 trend

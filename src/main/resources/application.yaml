@@ -6,7 +6,7 @@ spring:
   servlet:
     multipart:
       max-file-size: 5MB
-      max-request-size: 6MB
+      max-request-size: 205MB
   application:
     name: east-app
 

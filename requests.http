@@ -36,6 +36,9 @@
 @reportMediaKey = 00000000-0000-0000-0000-000000000000.jpg
 @reportPhotoFile = /absolute/path/to/report-photo.jpg
 @advertisementId = 00000000-0000-0000-0000-000000000000
+@dailyTaskTemplateId = 00000000-0000-0000-0000-000000000000
+@dailyTaskRecordId = 00000000-0000-0000-0000-000000000000
+@dailyTaskChecklistItemId = 00000000-0000-0000-0000-000000000000
 
 ### Initial setup status
 GET {{baseUrl}}/api/v1/setup/status
@@ -217,7 +220,7 @@ Content-Type: application/json
   "qrPayload": "{{attendanceCheckInQrPayload}}",
   "devicePlatform": "ANDROID",
   "deviceOsVersion": "Android",
-  "appVersion": "east_app_v275"
+  "appVersion": "east_app_v298"
 }
 
 ### Tenant-wide attendance audit
@@ -256,7 +259,8 @@ Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
 
 {
-  "tag": "Chiller"
+  "tag": "Kitchen",
+  "assignedUserIds": ["{{userId}}"]
 }
 
 ### Update stock tag
@@ -265,7 +269,8 @@ Authorization: Bearer {{eastappToken}}
 Content-Type: application/json
 
 {
-  "tag": "Cold Storage"
+  "tag": "Main Kitchen",
+  "assignedUserIds": ["{{userId}}"]
 }
 
 ### Delete stock tag
@@ -743,6 +748,85 @@ Content-Type: application/json
 ### Submit Daily Photo batch after minimum evidence count
 POST {{baseUrl}}/api/v1/reports/daily-photos/{{reportId}}/submit
 Authorization: Bearer {{eastappToken}}
+
+### Daily Task overview — Owner / Head / Manager see all; other roles see assigned Tags
+GET {{baseUrl}}/api/v1/daily-tasks/overview?date={{reportDate}}
+Authorization: Bearer {{eastappToken}}
+
+### List Daily Task templates — Owner / Head / Manager only
+GET {{baseUrl}}/api/v1/daily-tasks/templates
+Authorization: Bearer {{eastappToken}}
+
+### Create Daily Task template — one shared record per active template and date
+POST {{baseUrl}}/api/v1/daily-tasks/templates
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "title": "Kitchen closing check",
+  "instruction": "Complete after the final service and before locking up.",
+  "tagId": "{{tagId}}",
+  "requiredPhotoCount": 3,
+  "checklistItems": [
+    "Clean and sanitise all worktops",
+    "Switch off cooking equipment",
+    "Confirm chiller doors are closed"
+  ],
+  "active": true
+}
+
+### Update Daily Task template — changes apply to future task records
+PATCH {{baseUrl}}/api/v1/daily-tasks/templates/{{dailyTaskTemplateId}}
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "title": "Kitchen closing check",
+  "instruction": "Complete after the final service and before locking up.",
+  "tagId": "{{tagId}}",
+  "requiredPhotoCount": 4,
+  "checklistItems": [
+    "Clean and sanitise all worktops",
+    "Switch off cooking equipment",
+    "Confirm chiller doors are closed"
+  ],
+  "active": true
+}
+
+### Load shared Daily Task history — maximum 30 days; filters are optional
+GET {{baseUrl}}/api/v1/daily-tasks/records?dateFrom={{fromDate}}&dateTo={{toDate}}&tagId={{tagId}}&status=PENDING&submittedByMe=false
+Authorization: Bearer {{eastappToken}}
+
+### Read one shared Daily Task record
+GET {{baseUrl}}/api/v1/daily-tasks/records/{{dailyTaskRecordId}}
+Authorization: Bearer {{eastappToken}}
+
+### Submit final Daily Task evidence in one operation
+### Use every checklist item ID, comma-separated, and repeat the photos part for each final photo.
+POST {{baseUrl}}/api/v1/daily-tasks/records/{{dailyTaskRecordId}}/submit
+Authorization: Bearer {{eastappToken}}
+Content-Type: multipart/form-data; boundary=DailyTaskBoundary
+
+--DailyTaskBoundary
+Content-Disposition: form-data; name="completedChecklistItemIds"
+
+{{dailyTaskChecklistItemId}}
+--DailyTaskBoundary
+Content-Disposition: form-data; name="photos"; filename="daily-task-photo.jpg"
+Content-Type: image/jpeg
+
+< {{reportPhotoFile}}
+--DailyTaskBoundary--
+
+### Rate a submitted Daily Task — higher rank required, except unrestricted Owner
+POST {{baseUrl}}/api/v1/daily-tasks/records/{{dailyTaskRecordId}}/rate
+Authorization: Bearer {{eastappToken}}
+Content-Type: application/json
+
+{
+  "rating": 5,
+  "comment": "Every checklist item was completed and the evidence is clear."
+}
 
 ### Create Complaint report — any active user
 POST {{baseUrl}}/api/v1/reports/complaints
