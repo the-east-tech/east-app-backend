@@ -8,6 +8,7 @@ import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.reports.ReportMedia;
 import com.eastapp.backend.reports.ReportMediaRepository;
+import com.eastapp.backend.reports.ReportMediaReference;
 import com.eastapp.backend.reports.config.ReportProperties;
 import com.eastapp.backend.reports.service.ReportMediaService;
 import com.eastapp.backend.stock.StockTag;
@@ -549,11 +550,14 @@ public class DailyTaskService {
                 .map(DailyTaskPhoto::getPhotoMediaId)
                 .distinct()
                 .toList();
-        Map<UUID, ReportMedia> mediaById = mediaIds.isEmpty()
+        Map<UUID, String> storageKeyByMediaId = mediaIds.isEmpty()
                 ? Map.of()
-                : mediaRepository.findAllByTenantIdAndIdIn(tenantId, mediaIds)
+                : mediaRepository.findAllReferencesByTenantIdAndIdIn(tenantId, mediaIds)
                         .stream()
-                        .collect(Collectors.toMap(ReportMedia::getId, media -> media));
+                        .collect(Collectors.toMap(
+                                ReportMediaReference::id,
+                                ReportMediaReference::storageKey
+                        ));
 
         Set<UUID> userIds = new LinkedHashSet<>();
         for (DailyTaskRecord record : records) {
@@ -591,7 +595,7 @@ public class DailyTaskService {
                     checks,
                     photos,
                     activityByRecord.getOrDefault(record.getId(), List.of()),
-                    mediaById,
+                    storageKeyByMediaId,
                     usersById,
                     assignedTagIds
             ));
@@ -605,7 +609,7 @@ public class DailyTaskService {
             List<DailyTaskRecordChecklistItem> checks,
             List<DailyTaskPhoto> photos,
             List<DailyTaskAuditEntry> activity,
-            Map<UUID, ReportMedia> mediaById,
+            Map<UUID, String> storageKeyByMediaId,
             Map<UUID, UserAccount> usersById,
             Set<UUID> assignedTagIds
     ) {
@@ -629,8 +633,8 @@ public class DailyTaskService {
                 .toList();
         List<DailyTaskPhotoResponse> photoResponses = photos.stream()
                 .map(photo -> {
-                    ReportMedia media = mediaById.get(photo.getPhotoMediaId());
-                    if (media == null) {
+                    String storageKey = storageKeyByMediaId.get(photo.getPhotoMediaId());
+                    if (storageKey == null) {
                         throw notFound(
                                     "DAILY_TASK_PHOTO_MEDIA_NOT_FOUND",
                                     "A confirmed task photo was not found."
@@ -638,7 +642,7 @@ public class DailyTaskService {
                     }
                     return new DailyTaskPhotoResponse(
                             photo.getId(),
-                            media.getStorageKey(),
+                            storageKey,
                             person(usersById, photo.getSubmittedByUserId()),
                             photo.getSubmittedAt()
                     );
