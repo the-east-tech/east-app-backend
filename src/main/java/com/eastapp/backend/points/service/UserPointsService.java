@@ -83,10 +83,7 @@ public class UserPointsService {
 
         long currentUserTotal = principal.isOwner()
                 ? 0L
-                : totals.getOrDefault(
-                        principal.userId(),
-                        adjustmentRepository.totalForUser(principal.tenantId(), principal.userId())
-                );
+                : totals.getOrDefault(principal.userId(), 0L);
         return new LeaderboardResponse(currentUserTotal, currentUserRank, List.copyOf(members));
     }
 

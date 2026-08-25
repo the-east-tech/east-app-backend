@@ -45,4 +45,9 @@ public interface BusinessReportRepository extends JpaRepository<BusinessReport, 
             UUID tenantId,
             ReportWorkflowStatus workflowStatus
     );
+
+    long countByTenantIdAndWorkflowStatus(
+            UUID tenantId,
+            ReportWorkflowStatus workflowStatus
+    );
 }

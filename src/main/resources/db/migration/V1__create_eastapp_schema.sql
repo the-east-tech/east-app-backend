@@ -404,6 +404,7 @@ CREATE TABLE stock_count_submissions (
     CONSTRAINT ck_stock_counts_review_status CHECK (review_status IN ('Pending Review', 'Approved', 'Rejected'))
 );
 CREATE INDEX ix_stock_counts_tenant_captured_at ON stock_count_submissions (tenant_id, captured_at DESC);
+CREATE INDEX ix_stock_counts_tenant_review_captured_at ON stock_count_submissions (tenant_id, review_status, captured_at DESC);
 
 CREATE TABLE stock_count_submission_checks (
     submission_id UUID NOT NULL,
@@ -448,6 +449,7 @@ CREATE TABLE stock_receivings (
     CONSTRAINT ck_stock_receivings_review_status CHECK (review_status IN ('Pending Review', 'Approved', 'Rejected'))
 );
 CREATE INDEX ix_stock_receivings_tenant_captured_at ON stock_receivings (tenant_id, captured_at DESC);
+CREATE INDEX ix_stock_receivings_tenant_review_captured_at ON stock_receivings (tenant_id, review_status, captured_at DESC);
 
 CREATE TABLE stock_receiving_items (
     id UUID PRIMARY KEY DEFAULT uuidv7(),

@@ -2,6 +2,7 @@ package com.eastapp.backend.tasks;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -14,5 +15,10 @@ public interface DailyTaskAuditEntryRepository extends JpaRepository<DailyTaskAu
     List<DailyTaskAuditEntry> findAllByTenantIdAndRecordIdOrderByOccurredAtAscIdAsc(
             UUID tenantId,
             UUID recordId
+    );
+
+    List<DailyTaskAuditEntry> findAllByTenantIdAndRecordIdIn(
+            UUID tenantId,
+            Collection<UUID> recordIds
     );
 }

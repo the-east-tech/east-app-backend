@@ -139,7 +139,16 @@ public class BusinessReportService {
         LocalDate from = today.minusDays(days - 1L);
         boolean managementView = isManagement(principal.systemRole());
 
-        DailyPhotoOverviewResponse dailyOverview = dailyPhotoOverview(principal, today);
+        // Daily Tasks superseded the legacy Daily Photo dashboard card. Keep
+        // the response field for older clients without running its N+1 query.
+        DailyPhotoOverviewResponse dailyOverview = new DailyPhotoOverviewResponse(
+                0,
+                properties.getDailyPhotoMinimum(),
+                false,
+                0,
+                0,
+                0.0
+        );
         DailyTaskOverviewResponse dailyTaskOverview = dailyTaskService.overview(principal, today);
         if (!managementView) {
             return new ReportDashboardResponse(
@@ -224,10 +233,10 @@ public class BusinessReportService {
         Map<UUID, ComplaintReportDetail> complaintDetails = complaintDetails(complaintReports);
         ComplaintOverviewResponse complaints = complaintOverview(complaintDetails.values());
 
-        int pendingApprovals = reportRepository
-                .findAllByTenantIdAndWorkflowStatusOrderBySubmittedAtAsc(
+        int pendingApprovals = Math.toIntExact(reportRepository
+                .countByTenantIdAndWorkflowStatus(
                         principal.tenantId(), ReportWorkflowStatus.SUBMITTED
-                ).size();
+                ));
 
         List<ReportTrendPointResponse> trend = buildTrend(
                 from,
@@ -1061,56 +1070,6 @@ public class BusinessReportService {
                 percentValue(percentage(periodLoss, periodNetSales)),
                 top.getKey(),
                 moneyValue(top.getValue())
-        );
-    }
-
-    private DailyPhotoOverviewResponse dailyPhotoOverview(AuthenticatedUser principal, LocalDate today) {
-        Optional<BusinessReport> current = reportRepository
-                .findByTenantIdAndReportTypeAndReportDateAndSubmittedByUserId(
-                        principal.tenantId(), BusinessReportType.DAILY_PHOTO, today, principal.userId()
-                );
-        int currentCount = current
-                .map(report -> (int) dailyPhotoRepository.countByTenantIdAndReportId(principal.tenantId(), report.getId()))
-                .orElse(0);
-        int required = properties.getDailyPhotoMinimum();
-
-        if (!isManagement(principal.systemRole())) {
-            return new DailyPhotoOverviewResponse(
-                    currentCount,
-                    required,
-                    currentCount >= required,
-                    0,
-                    0,
-                    0
-            );
-        }
-
-        List<UserAccount> eligible = userRepository
-                .findAllByTenant_IdAndActiveTrueOrderByIdentity_FullNameAsc(principal.tenantId())
-                .stream()
-                .filter(this::requiresDailyPhotos)
-                .toList();
-        int completed = 0;
-        for (UserAccount user : eligible) {
-            Optional<BusinessReport> report = reportRepository
-                    .findByTenantIdAndReportTypeAndReportDateAndSubmittedByUserId(
-                            principal.tenantId(), BusinessReportType.DAILY_PHOTO, today, user.getId()
-                    );
-            if (report.isPresent()) {
-                long count = dailyPhotoRepository.countByTenantIdAndReportId(principal.tenantId(), report.get().getId());
-                if (count >= required && report.get().getWorkflowStatus() == ReportWorkflowStatus.APPROVED) {
-                    completed++;
-                }
-            }
-        }
-        double completion = eligible.isEmpty() ? 100.0 : completed * 100.0 / eligible.size();
-        return new DailyPhotoOverviewResponse(
-                currentCount,
-                required,
-                currentCount >= required,
-                eligible.size(),
-                completed,
-                BigDecimal.valueOf(completion).setScale(1, RoundingMode.HALF_UP).doubleValue()
         );
     }
 

@@ -44,8 +44,11 @@ import org.springframework.web.multipart.MultipartFile;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -234,7 +237,9 @@ public class DailyTaskService {
                 .findAllByTenantIdAndTaskDateBetweenOrderByTaskDateDescTagNameAscTitleAsc(
                         principal.tenantId(), dateFrom, dateTo
                 );
-        Set<UUID> assignedTagIds = assignedTagIds(principal);
+        Set<UUID> assignedTagIds = principal.isOwner()
+                ? Set.of()
+                : assignedTagIds(principal);
         boolean oversight = accessPolicy.canOversee(principal.systemRole());
 
         List<DailyTaskRecord> visible = records.stream()
@@ -254,7 +259,7 @@ public class DailyTaskService {
                 dateFrom,
                 dateTo,
                 overviewOf(visible),
-                visible.stream().map(record -> toRecordResponse(principal, record)).toList()
+                toRecordResponses(principal, visible, assignedTagIds)
         );
     }
 
@@ -483,16 +488,132 @@ public class DailyTaskService {
             AuthenticatedUser principal,
             DailyTaskRecord record
     ) {
+        Set<UUID> assignedTagIds = principal.isOwner()
+                ? Set.of()
+                : assignedTagIds(principal);
+        return toRecordResponses(principal, List.of(record), assignedTagIds).getFirst();
+    }
+
+    private List<DailyTaskRecordResponse> toRecordResponses(
+            AuthenticatedUser principal,
+            List<DailyTaskRecord> records,
+            Set<UUID> assignedTagIds
+    ) {
+        if (records.isEmpty()) return List.of();
         UUID tenantId = principal.tenantId();
-        List<DailyTaskRecordChecklistItem> checks = recordChecklistRepository
-                .findAllByTenantIdAndRecordIdOrderByPositionAsc(tenantId, record.getId());
-        List<DailyTaskPhoto> photos = photoRepository
-                .findAllByTenantIdAndRecordIdOrderBySubmittedAtAscIdAsc(tenantId, record.getId());
+        Set<UUID> recordIds = records.stream()
+                .map(DailyTaskRecord::getId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Map<UUID, List<DailyTaskRecordChecklistItem>> checksByRecord = new HashMap<>();
+        for (DailyTaskRecordChecklistItem item : recordChecklistRepository
+                .findAllByTenantIdAndRecordIdIn(tenantId, recordIds)) {
+            checksByRecord.computeIfAbsent(item.getRecordId(), ignored -> new ArrayList<>())
+                    .add(item);
+        }
+        checksByRecord.values().forEach(items -> items.sort(
+                Comparator.comparingInt(DailyTaskRecordChecklistItem::getPosition)
+                        .thenComparing(DailyTaskRecordChecklistItem::getId)
+        ));
+
+        Map<UUID, List<DailyTaskPhoto>> photosByRecord = new HashMap<>();
+        for (DailyTaskPhoto photo : photoRepository
+                .findAllByTenantIdAndRecordIdIn(tenantId, recordIds)) {
+            photosByRecord.computeIfAbsent(photo.getRecordId(), ignored -> new ArrayList<>())
+                    .add(photo);
+        }
+        photosByRecord.values().forEach(items -> items.sort(
+                Comparator.comparing(
+                                DailyTaskPhoto::getSubmittedAt,
+                                Comparator.nullsLast(Comparator.naturalOrder())
+                        )
+                        .thenComparing(DailyTaskPhoto::getId)
+        ));
+
+        Map<UUID, List<DailyTaskAuditEntry>> activityByRecord = new HashMap<>();
+        for (DailyTaskAuditEntry entry : auditRepository
+                .findAllByTenantIdAndRecordIdIn(tenantId, recordIds)) {
+            activityByRecord.computeIfAbsent(entry.getRecordId(), ignored -> new ArrayList<>())
+                    .add(entry);
+        }
+        activityByRecord.values().forEach(items -> items.sort(
+                Comparator.comparing(
+                                DailyTaskAuditEntry::getOccurredAt,
+                                Comparator.nullsLast(Comparator.naturalOrder())
+                        )
+                        .thenComparing(DailyTaskAuditEntry::getId)
+        ));
+
+        List<UUID> mediaIds = photosByRecord.values().stream()
+                .flatMap(List::stream)
+                .map(DailyTaskPhoto::getPhotoMediaId)
+                .distinct()
+                .toList();
+        Map<UUID, ReportMedia> mediaById = mediaIds.isEmpty()
+                ? Map.of()
+                : mediaRepository.findAllByTenantIdAndIdIn(tenantId, mediaIds)
+                        .stream()
+                        .collect(Collectors.toMap(ReportMedia::getId, media -> media));
+
+        Set<UUID> userIds = new LinkedHashSet<>();
+        for (DailyTaskRecord record : records) {
+            if (record.getSubmittedByUserId() != null) userIds.add(record.getSubmittedByUserId());
+            if (record.getRatedByUserId() != null) userIds.add(record.getRatedByUserId());
+        }
+        checksByRecord.values().stream()
+                .flatMap(List::stream)
+                .map(DailyTaskRecordChecklistItem::getCompletedByUserId)
+                .filter(java.util.Objects::nonNull)
+                .forEach(userIds::add);
+        photosByRecord.values().stream()
+                .flatMap(List::stream)
+                .map(DailyTaskPhoto::getSubmittedByUserId)
+                .forEach(userIds::add);
+        activityByRecord.values().stream()
+                .flatMap(List::stream)
+                .map(DailyTaskAuditEntry::getActorUserId)
+                .forEach(userIds::add);
+        Map<UUID, UserAccount> usersById = userIds.isEmpty()
+                ? Map.of()
+                : userRepository.findAllByTenant_IdAndIdIn(tenantId, userIds)
+                        .stream()
+                        .collect(Collectors.toMap(UserAccount::getId, user -> user));
+
+        List<DailyTaskRecordResponse> responses = new ArrayList<>(records.size());
+        for (DailyTaskRecord record : records) {
+            List<DailyTaskRecordChecklistItem> checks = checksByRecord
+                    .getOrDefault(record.getId(), List.of());
+            List<DailyTaskPhoto> photos = photosByRecord
+                    .getOrDefault(record.getId(), List.of());
+            responses.add(toRecordResponse(
+                    principal,
+                    record,
+                    checks,
+                    photos,
+                    activityByRecord.getOrDefault(record.getId(), List.of()),
+                    mediaById,
+                    usersById,
+                    assignedTagIds
+            ));
+        }
+        return List.copyOf(responses);
+    }
+
+    private DailyTaskRecordResponse toRecordResponse(
+            AuthenticatedUser principal,
+            DailyTaskRecord record,
+            List<DailyTaskRecordChecklistItem> checks,
+            List<DailyTaskPhoto> photos,
+            List<DailyTaskAuditEntry> activity,
+            Map<UUID, ReportMedia> mediaById,
+            Map<UUID, UserAccount> usersById,
+            Set<UUID> assignedTagIds
+    ) {
         boolean requirementsMet = photos.size() >= record.getRequiredPhotoCount()
                 && !checks.isEmpty()
                 && checks.stream().allMatch(DailyTaskRecordChecklistItem::isCompleted);
         boolean canContribute = record.getStatus() == DailyTaskStatus.PENDING
-                && canContribute(principal, record);
+                && (principal.isOwner() || assignedTagIds.contains(record.getTagId()));
         boolean canRate = record.getStatus() == DailyTaskStatus.SUBMITTED
                 && accessPolicy.canRate(principal.systemRole(), record.getSubmittedByRole());
 
@@ -502,31 +623,29 @@ public class DailyTaskService {
                         item.getPosition(),
                         item.getDescription(),
                         item.isCompleted(),
-                        personOrNull(tenantId, item.getCompletedByUserId()),
+                        personOrNull(usersById, item.getCompletedByUserId()),
                         item.getCompletedAt()
                 ))
                 .toList();
         List<DailyTaskPhotoResponse> photoResponses = photos.stream()
                 .map(photo -> {
-                    ReportMedia media = mediaRepository.findByIdAndTenantId(
-                                    photo.getPhotoMediaId(), tenantId
-                            )
-                            .orElseThrow(() -> notFound(
+                    ReportMedia media = mediaById.get(photo.getPhotoMediaId());
+                    if (media == null) {
+                        throw notFound(
                                     "DAILY_TASK_PHOTO_MEDIA_NOT_FOUND",
                                     "A confirmed task photo was not found."
-                            ));
+                        );
+                    }
                     return new DailyTaskPhotoResponse(
                             photo.getId(),
                             media.getStorageKey(),
-                            person(tenantId, photo.getSubmittedByUserId()),
+                            person(usersById, photo.getSubmittedByUserId()),
                             photo.getSubmittedAt()
                     );
                 })
                 .toList();
-        List<DailyTaskAuditResponse> activity = auditRepository
-                .findAllByTenantIdAndRecordIdOrderByOccurredAtAscIdAsc(tenantId, record.getId())
-                .stream()
-                .map(entry -> toAuditResponse(tenantId, entry))
+        List<DailyTaskAuditResponse> activityResponses = activity.stream()
+                .map(entry -> toAuditResponse(usersById, entry))
                 .toList();
         return new DailyTaskRecordResponse(
                 record.getId(),
@@ -542,16 +661,16 @@ public class DailyTaskService {
                 checkResponses,
                 photoResponses,
                 requirementsMet,
-                personOrNull(tenantId, record.getSubmittedByUserId()),
+                personOrNull(usersById, record.getSubmittedByUserId()),
                 record.getSubmittedAt(),
                 record.getRating(),
                 record.getRatingComment(),
-                personOrNull(tenantId, record.getRatedByUserId()),
+                personOrNull(usersById, record.getRatedByUserId()),
                 record.getRatedAt(),
                 canContribute,
                 canContribute && requirementsMet,
                 canRate,
-                activity
+                activityResponses
         );
     }
 
@@ -664,6 +783,18 @@ public class DailyTaskService {
 
     private DailyTaskPersonResponse person(UUID tenantId, UUID userId) {
         UserAccount user = requireUser(tenantId, userId);
+        return person(user);
+    }
+
+    private DailyTaskPersonResponse person(Map<UUID, UserAccount> usersById, UUID userId) {
+        UserAccount user = usersById.get(userId);
+        if (user == null) {
+            throw notFound("USER_NOT_FOUND", "User was not found.");
+        }
+        return person(user);
+    }
+
+    private DailyTaskPersonResponse person(UserAccount user) {
         return new DailyTaskPersonResponse(
                 user.getId(),
                 user.getFullName(),
@@ -685,8 +816,28 @@ public class DailyTaskService {
         );
     }
 
+    private DailyTaskAuditResponse toAuditResponse(
+            Map<UUID, UserAccount> usersById,
+            DailyTaskAuditEntry entry
+    ) {
+        return new DailyTaskAuditResponse(
+                entry.getId(),
+                entry.getAction(),
+                entry.getDetails(),
+                person(usersById, entry.getActorUserId()),
+                entry.getOccurredAt()
+        );
+    }
+
     private DailyTaskPersonResponse personOrNull(UUID tenantId, UUID userId) {
         return userId == null ? null : person(tenantId, userId);
+    }
+
+    private DailyTaskPersonResponse personOrNull(
+            Map<UUID, UserAccount> usersById,
+            UUID userId
+    ) {
+        return userId == null ? null : person(usersById, userId);
     }
 
     private void requireManagement(AuthenticatedUser principal) {
