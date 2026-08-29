@@ -1,6 +1,7 @@
 package com.eastapp.backend.tasks.service;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.auth.permission.SystemPermission;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.SystemRole;
@@ -217,6 +218,7 @@ public class DailyTaskService {
             DailyTaskStatus status,
             boolean submittedByMe
     ) {
+        requireTaskView(principal);
         LocalDate today = today();
         LocalDate dateFrom;
         LocalDate dateTo;
@@ -266,6 +268,7 @@ public class DailyTaskService {
 
     @Transactional
     public DailyTaskOverviewResponse overview(AuthenticatedUser principal, LocalDate requestedDate) {
+        requireTaskView(principal);
         LocalDate date = requestedDate == null ? today() : requestedDate;
         validateDate(date);
         if (date.equals(today())) materialiseActiveTemplates(principal.tenantId(), date);
@@ -282,6 +285,7 @@ public class DailyTaskService {
     }
 
     public DailyTaskRecordResponse record(AuthenticatedUser principal, UUID recordId) {
+        requireTaskView(principal);
         DailyTaskRecord record = requireRecord(principal.tenantId(), recordId);
         requireCanView(principal, record);
         return toRecordResponse(principal, record);
@@ -294,6 +298,7 @@ public class DailyTaskService {
             String completedChecklistItemIds,
             List<MultipartFile> photos
     ) {
+        requireTaskContribution(principal);
         DailyTaskRecord record = requireRecordForUpdate(principal.tenantId(), recordId);
         if (record.getStatus() != DailyTaskStatus.PENDING) {
             requireCanView(principal, record);
@@ -360,6 +365,7 @@ public class DailyTaskService {
             UUID recordId,
             RateDailyTaskRequest request
     ) {
+        requireTaskRating(principal);
         DailyTaskRecord record = requireRecordForUpdate(principal.tenantId(), recordId);
         if (record.getStatus() != DailyTaskStatus.SUBMITTED) {
             throw conflict("DAILY_TASK_NOT_SUBMITTED", "Only a submitted task may be rated.");
@@ -845,12 +851,50 @@ public class DailyTaskService {
     }
 
     private void requireManagement(AuthenticatedUser principal) {
-        if (!accessPolicy.canOversee(principal.systemRole())) {
+        if (!principal.hasPermission(SystemPermission.DAILY_TASK_MANAGE)) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "DAILY_TASK_MANAGEMENT_REQUIRED",
                     "Only Owner, Head or Manager may manage daily task templates."
             );
+        }
+    }
+
+    private void requireTaskView(AuthenticatedUser principal) {
+        requirePermission(
+                principal,
+                SystemPermission.DAILY_TASK_VIEW,
+                "DAILY_TASK_ACCESS_REQUIRED",
+                "Daily Task access has not been granted to this role."
+        );
+    }
+
+    private void requireTaskContribution(AuthenticatedUser principal) {
+        requirePermission(
+                principal,
+                SystemPermission.DAILY_TASK_CONTRIBUTE,
+                "DAILY_TASK_CONTRIBUTION_REQUIRED",
+                "Daily Task submission has not been granted to this role."
+        );
+    }
+
+    private void requireTaskRating(AuthenticatedUser principal) {
+        requirePermission(
+                principal,
+                SystemPermission.DAILY_TASK_RATE,
+                "DAILY_TASK_RATING_REQUIRED",
+                "Daily Task rating has not been granted to this role."
+        );
+    }
+
+    private void requirePermission(
+            AuthenticatedUser principal,
+            SystemPermission permission,
+            String code,
+            String message
+    ) {
+        if (!principal.hasPermission(permission)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, code, message);
         }
     }
 

@@ -70,7 +70,7 @@ public class BusinessReportsController {
     }
 
     @GetMapping("/sales/history")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR')")
+    @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
     List<SalesReportResponse> salesHistory(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false)
@@ -83,7 +83,7 @@ public class BusinessReportsController {
     }
 
     @GetMapping("/sales")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR')")
+    @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
     SalesReportResponse sales(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false)
@@ -93,7 +93,7 @@ public class BusinessReportsController {
     }
 
     @PutMapping("/sales")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR')")
+    @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
     SalesReportResponse upsertSales(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody UpsertSalesReportRequest request
@@ -111,7 +111,7 @@ public class BusinessReportsController {
     }
 
     @PostMapping("/sales/submit")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR')")
+    @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
     SalesReportResponse submitSalesDirect(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody UpsertSalesReportRequest request
@@ -120,7 +120,7 @@ public class BusinessReportsController {
     }
 
     @PostMapping("/sales/{reportId}/submit")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR')")
+    @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
     SalesReportResponse submitSales(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID reportId
@@ -195,7 +195,7 @@ public class BusinessReportsController {
     }
 
     @PatchMapping("/complaints/{reportId}")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR')")
+    @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
     ComplaintReportResponse updateComplaint(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID reportId,
@@ -205,7 +205,7 @@ public class BusinessReportsController {
     }
 
     @GetMapping("/approvals")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    @PreAuthorize("hasAuthority('PERMISSION_REPORT_REVIEW')")
     List<ApprovalReportResponse> approvals(
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
@@ -213,7 +213,7 @@ public class BusinessReportsController {
     }
 
     @PostMapping("/{reportId}/review")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    @PreAuthorize("hasAuthority('PERMISSION_REPORT_REVIEW')")
     ApprovalReportResponse review(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID reportId,

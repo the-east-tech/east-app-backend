@@ -1,6 +1,8 @@
 package com.eastapp.backend.reports.service;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.auth.permission.RolePermissionPolicy;
+import com.eastapp.backend.auth.permission.SystemPermission;
 import com.eastapp.backend.attendance.AttendanceEventRepository;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.people.SystemRole;
@@ -137,7 +139,9 @@ public class BusinessReportService {
         int days = Math.max(1, Math.min(requestedDays, 31));
         LocalDate today = today();
         LocalDate from = today.minusDays(days - 1L);
-        boolean managementView = isManagement(principal.systemRole());
+        boolean managementView = principal.hasPermission(
+                SystemPermission.REPORT_INTELLIGENCE_VIEW
+        );
 
         // Daily Tasks superseded the legacy Daily Photo dashboard card. Keep
         // the response field for older clients without running its N+1 query.
@@ -1453,23 +1457,22 @@ public class BusinessReportService {
     }
 
     private void requireManagement(AuthenticatedUser principal) {
-        if (!isManagement(principal.systemRole())) {
+        if (!principal.hasPermission(SystemPermission.REPORT_OPERATIONS_ACCESS)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "REPORT_ACCESS_DENIED", "This report is available to management only.");
         }
     }
 
     private void requireReviewer(AuthenticatedUser principal) {
-        SystemRole role = principal.systemRole();
-        if (role != SystemRole.OWNER && role != SystemRole.HEAD && role != SystemRole.MANAGER) {
+        if (!principal.hasPermission(SystemPermission.REPORT_REVIEW)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "REPORT_REVIEW_ACCESS_DENIED", "Only Owner, Head or Manager can review reports.");
         }
     }
 
     private boolean isManagement(SystemRole role) {
-        return role == SystemRole.OWNER
-                || role == SystemRole.HEAD
-                || role == SystemRole.MANAGER
-                || role == SystemRole.SUPERVISOR;
+        return RolePermissionPolicy.allows(
+                role,
+                SystemPermission.REPORT_OPERATIONS_ACCESS
+        );
     }
 
     private boolean isSeniorManagement(SystemRole role) {

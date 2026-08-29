@@ -35,6 +35,7 @@ public class DailyTaskController {
     }
 
     @GetMapping("/overview")
+    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_VIEW')")
     DailyTaskOverviewResponse overview(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false)
@@ -44,7 +45,7 @@ public class DailyTaskController {
     }
 
     @GetMapping("/templates")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_MANAGE')")
     List<DailyTaskTemplateResponse> templates(
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
@@ -52,7 +53,7 @@ public class DailyTaskController {
     }
 
     @PostMapping("/templates")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_MANAGE')")
     ResponseEntity<DailyTaskTemplateResponse> createTemplate(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody UpsertDailyTaskTemplateRequest request
@@ -62,7 +63,7 @@ public class DailyTaskController {
     }
 
     @PatchMapping("/templates/{templateId}")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_MANAGE')")
     DailyTaskTemplateResponse updateTemplate(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID templateId,
@@ -72,6 +73,7 @@ public class DailyTaskController {
     }
 
     @GetMapping("/records")
+    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_VIEW')")
     DailyTaskListResponse records(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false)
@@ -90,6 +92,7 @@ public class DailyTaskController {
     }
 
     @GetMapping("/records/{recordId}")
+    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_VIEW')")
     DailyTaskRecordResponse record(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID recordId
@@ -101,6 +104,7 @@ public class DailyTaskController {
             value = "/records/{recordId}/submit",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
+    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_CONTRIBUTE')")
     DailyTaskRecordResponse submit(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID recordId,
@@ -116,7 +120,7 @@ public class DailyTaskController {
     }
 
     @PostMapping("/records/{recordId}/rate")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_RATE')")
     DailyTaskRecordResponse rate(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID recordId,
