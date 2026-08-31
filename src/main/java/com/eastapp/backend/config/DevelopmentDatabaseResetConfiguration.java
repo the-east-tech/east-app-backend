@@ -25,6 +25,9 @@ public class DevelopmentDatabaseResetConfiguration {
             @Value("${eastapp.database.reset-on-start:false}") boolean resetOnStart
     ) {
         return configuration -> {
+            // V1 is intentionally mutable during development. Do not let an old
+            // recorded checksum block a non-reset startup, and never run repair.
+            configuration.validateOnMigrate(false);
             if (databaseResetApproved(resetOnStart)) {
                 configuration.cleanDisabled(false);
             }

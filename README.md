@@ -4,8 +4,8 @@ Backend API for **EastApp**, a multi-business operations application covering id
 
 ## Current development model
 
-- `v091` returns the one-time Initial Setup Code to the uninitialised Flutter app so it can be copied without reading backend logs
-- While reset-per-release remains active, every schema change is merged into the single clean `V1__create_eastapp_schema.sql` and each release starts with a database reset
+- `v098` returns the one-time Initial Setup Code to the uninitialised Flutter app so it can be copied without reading backend logs
+- While the disposable-development policy remains active, every schema change is merged into the single clean `V1__create_eastapp_schema.sql`; startup resets only when both reset gates are `true`
 - No seeded tenants or users
 - Initial Setup creates the first tenant and first `OWNER`
 - Each tenant represents one independent business location
@@ -176,7 +176,7 @@ Enable **Places API (New)** for that key.
 
 Maven does not need to be installed separately because the repository includes `mvnw`.
 
-## Run locally while preserving the database
+## Run locally
 
 From the repository root:
 
@@ -186,13 +186,19 @@ From the repository root:
 
 The script:
 
-1. Preserves the existing PostgreSQL volume
+1. Reads `EASTAPP_DATABASE_RESET_ON_START` and defaults it to `false`
 2. Starts PostgreSQL 18
-3. Applies pending Flyway migrations
+3. Resets the database only when both independent reset gates are `true`
 4. Starts Spring Boot
 5. Generates a one-time Initial Setup code only when setup has not been completed
 
-A destructive reset is available by running `./scripts/run-fresh-local.sh`; no additional environment variable is required because the script sets the reset request itself. The source-code reset gate must still be enabled.
+To request a reset, use the same script:
+
+```bash
+EASTAPP_DATABASE_RESET_ON_START=true ./scripts/run-local.sh
+```
+
+There is no repair step. When reset is not approved, Flyway checksum validation is skipped and the existing database is preserved.
 
 The setup code is valid for 1 hour.
 
@@ -317,7 +323,7 @@ No Redis or general backend data cache is added at this stage.
 
 ## Database and Flyway
 
-EastApp `v080` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
+EastApp `v098` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
 
 1. Code gate: `DATABASE_RESET_ALLOWED_BY_CODE`
 2. Environment gate: `EASTAPP_DATABASE_RESET_ON_START`
@@ -325,7 +331,7 @@ EastApp `v080` protects destructive database reset with two independent gates. `
 Current code gate in this package:
 
 ```text
-DATABASE_RESET_ALLOWED_BY_CODE=false
+DATABASE_RESET_ALLOWED_BY_CODE=true
 ```
 
 Truth table:
@@ -345,21 +351,19 @@ Normal local start, preserving all database data:
 ./scripts/run-local.sh
 ```
 
-`run-local.sh` explicitly sets:
+Without an environment value, `run-local.sh` defaults to:
 
 ```text
 EASTAPP_DATABASE_RESET_ON_START=false
 ```
 
-Fresh local reset request:
+Local reset request using the same script:
 
 ```bash
-./scripts/run-fresh-local.sh
+EASTAPP_DATABASE_RESET_ON_START=true ./scripts/run-local.sh
 ```
 
-`run-fresh-local.sh` no longer runs `docker compose down -v` and no longer deletes the PostgreSQL Docker volume directly. It sets `EASTAPP_DATABASE_RESET_ON_START=true`, starts PostgreSQL, and lets the backend's two-gate protection decide whether `flyway.clean()` is allowed.
-
-Therefore a local reset occurs only when the code gate is also `true`.
+The script never deletes the PostgreSQL Docker volume directly. The backend resets only when the code gate is also `true`. Otherwise it preserves the database and skips checksum validation. Flyway repair is never run.
 
 ### Railway
 
@@ -432,8 +436,7 @@ src/main/resources/
     └── V1__create_eastapp_schema.sql
 
 scripts/
-├── run-local.sh
-└── run-fresh-local.sh
+└── run-local.sh
 
 requests.http
 compose.yaml
@@ -446,8 +449,8 @@ For every backend change:
 
 1. Apply the change locally
 2. Start Spring Boot locally
-3. Let Flyway validate the existing schema and apply pending migrations
-4. Verify Hibernate validation
+3. Let Flyway reset and apply V1 when both reset gates are enabled; otherwise preserve the database
+4. Verify the affected behaviour
 5. Test affected endpoints in `requests.http`
 6. Keep all changed and newly added endpoints represented in `requests.http`
 7. Commit and push only after local success

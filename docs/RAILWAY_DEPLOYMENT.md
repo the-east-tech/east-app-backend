@@ -28,10 +28,10 @@ memberships need to change.
 ## 2. Local fresh run
 
 ```bash
-./scripts/run-fresh-local.sh
+EASTAPP_DATABASE_RESET_ON_START=true ./scripts/run-local.sh
 ```
 
-The script recreates local PostgreSQL, applies Flyway V1, and bootstraps every user
+The backend resets local PostgreSQL only when its code gate is also enabled, applies Flyway V1, and bootstraps every user
 from `config/bootstrap-users.local.json`.
 
 ## 3. Configure the same list in Railway
