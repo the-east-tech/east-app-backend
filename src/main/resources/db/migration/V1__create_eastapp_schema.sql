@@ -1,4 +1,4 @@
--- EastApp clean reset-per-release schema (v091).
+-- EastApp clean reset-per-release schema (v097).
 -- This V1 contains the complete schema for a brand-new EastApp database.
 -- While the reset-per-release policy is active, merge every schema change into
 -- this file, keep V1 as the only migration, and reset the database each release.
@@ -135,6 +135,108 @@ CREATE TABLE user_sessions (
     CONSTRAINT ck_user_sessions_revoked_at CHECK (revoked_at IS NULL OR revoked_at >= created_at)
 );
 CREATE INDEX ix_user_sessions_identity_id ON user_sessions (identity_id);
+
+-- One immutable business event drives both Home activity and notifications.
+-- Recipient rows only hold read/dismiss state, avoiding duplicate event data.
+CREATE TABLE activity_events (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    actor_user_id UUID NOT NULL,
+    actor_name VARCHAR(120) NOT NULL,
+    actor_employee_id VARCHAR(32) NOT NULL,
+    actor_role VARCHAR(80) NOT NULL,
+    module VARCHAR(64) NOT NULL,
+    action VARCHAR(64) NOT NULL,
+    entity_type VARCHAR(100) NOT NULL,
+    subject VARCHAR(240) NOT NULL DEFAULT '',
+    detail VARCHAR(2000) NOT NULL DEFAULT '',
+    target_id UUID,
+    route VARCHAR(240) NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_activity_events_tenant FOREIGN KEY (tenant_id)
+        REFERENCES tenants (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_activity_events_actor_same_tenant FOREIGN KEY (tenant_id, actor_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT uq_activity_events_tenant_id_id UNIQUE (tenant_id, id),
+    CONSTRAINT ck_activity_events_actor_name_not_blank CHECK (btrim(actor_name) <> ''),
+    CONSTRAINT ck_activity_events_module_not_blank CHECK (btrim(module) <> ''),
+    CONSTRAINT ck_activity_events_action_not_blank CHECK (btrim(action) <> ''),
+    CONSTRAINT ck_activity_events_entity_not_blank CHECK (btrim(entity_type) <> ''),
+    CONSTRAINT ck_activity_events_route_not_blank CHECK (btrim(route) <> '')
+);
+CREATE INDEX ix_activity_events_tenant_time
+    ON activity_events (tenant_id, occurred_at DESC, id DESC);
+
+CREATE TABLE user_notifications (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    recipient_user_id UUID NOT NULL,
+    activity_event_id UUID NOT NULL,
+    read_at TIMESTAMPTZ,
+    dismissed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_user_notifications_tenant FOREIGN KEY (tenant_id)
+        REFERENCES tenants (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_user_notifications_recipient_same_tenant FOREIGN KEY (tenant_id, recipient_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_user_notifications_event_same_tenant FOREIGN KEY (tenant_id, activity_event_id)
+        REFERENCES activity_events (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT uq_user_notifications_event_recipient UNIQUE (activity_event_id, recipient_user_id),
+    CONSTRAINT ck_user_notifications_read_time CHECK (read_at IS NULL OR read_at >= created_at),
+    CONSTRAINT ck_user_notifications_dismiss_time CHECK (dismissed_at IS NULL OR dismissed_at >= created_at)
+);
+CREATE INDEX ix_user_notifications_inbox
+    ON user_notifications (tenant_id, recipient_user_id, created_at DESC, id DESC)
+    WHERE dismissed_at IS NULL;
+CREATE INDEX ix_user_notifications_unread
+    ON user_notifications (tenant_id, recipient_user_id)
+    WHERE read_at IS NULL AND dismissed_at IS NULL;
+
+CREATE TABLE push_devices (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    session_id UUID NOT NULL,
+    token VARCHAR(2048) NOT NULL,
+    platform VARCHAR(16) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    last_seen_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_push_devices_user_same_tenant FOREIGN KEY (tenant_id, user_id)
+        REFERENCES users (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT fk_push_devices_session FOREIGN KEY (session_id)
+        REFERENCES user_sessions (id) ON DELETE CASCADE,
+    CONSTRAINT uq_push_devices_token UNIQUE (token),
+    CONSTRAINT uq_push_devices_id UNIQUE (id),
+    CONSTRAINT ck_push_devices_token_not_blank CHECK (btrim(token) <> ''),
+    CONSTRAINT ck_push_devices_platform CHECK (platform IN ('ANDROID', 'IOS'))
+);
+CREATE INDEX ix_push_devices_user_active
+    ON push_devices (tenant_id, user_id, active);
+
+CREATE TABLE push_outbox (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    notification_id UUID NOT NULL,
+    device_id UUID NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    sent_at TIMESTAMPTZ,
+    last_error VARCHAR(500),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_push_outbox_notification FOREIGN KEY (notification_id)
+        REFERENCES user_notifications (id) ON DELETE CASCADE,
+    CONSTRAINT fk_push_outbox_device FOREIGN KEY (device_id)
+        REFERENCES push_devices (id) ON DELETE CASCADE,
+    CONSTRAINT uq_push_outbox_notification_device UNIQUE (notification_id, device_id),
+    CONSTRAINT ck_push_outbox_attempts CHECK (attempts >= 0),
+    CONSTRAINT ck_push_outbox_expiry CHECK (expires_at > created_at),
+    CONSTRAINT ck_push_outbox_sent_time CHECK (sent_at IS NULL OR sent_at >= created_at)
+);
+CREATE INDEX ix_push_outbox_due
+    ON push_outbox (next_attempt_at, created_at, id)
+    WHERE sent_at IS NULL;
 
 CREATE TABLE attendance_qr_codes (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -555,6 +657,29 @@ CREATE INDEX ix_knowledge_sops_tenant_tag
     ON knowledge_sops (tenant_id, tag_id);
 CREATE INDEX ix_knowledge_sops_tenant_link_group
     ON knowledge_sops (tenant_id, link_group_id);
+
+CREATE TABLE knowledge_sop_watch_sessions (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    sop_id UUID NOT NULL,
+    played_seconds BIGINT NOT NULL DEFAULT 0,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_sop_watch_session_user_same_tenant
+        FOREIGN KEY (tenant_id, user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_sop_watch_session_sop_same_tenant
+        FOREIGN KEY (tenant_id, sop_id)
+        REFERENCES knowledge_sops (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT uq_sop_watch_session_tenant_id_id UNIQUE (tenant_id, id),
+    CONSTRAINT ck_sop_watch_session_played_seconds CHECK (played_seconds >= 0)
+);
+CREATE INDEX ix_sop_watch_session_tenant_user_time
+    ON knowledge_sop_watch_sessions (tenant_id, user_id, last_heartbeat_at DESC);
+CREATE INDEX ix_sop_watch_session_tenant_sop
+    ON knowledge_sop_watch_sessions (tenant_id, sop_id);
 
 CREATE TABLE translation_cache (
     id UUID PRIMARY KEY DEFAULT uuidv7(),

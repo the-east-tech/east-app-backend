@@ -1,5 +1,6 @@
 package com.eastapp.backend.people.api;
 
+import com.eastapp.backend.activity.tracking.ActivityTracked;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.people.SystemRole;
@@ -52,6 +53,7 @@ public class UserController {
         return userAccountService.get(principal, userId);
     }
 
+    @ActivityTracked(module = "People", action = "created", entity = "employee")
     @PostMapping
     ResponseEntity<UserResponse> create(
             @AuthenticationPrincipal AuthenticatedUser principal,
@@ -61,6 +63,7 @@ public class UserController {
                 .body(userAccountService.create(principal, request));
     }
 
+    @ActivityTracked(module = "People", action = "updated", entity = "employee", targetPathVariable = "userId")
     @PatchMapping("/{userId}")
     UserResponse update(
             @AuthenticationPrincipal AuthenticatedUser principal,
@@ -70,6 +73,7 @@ public class UserController {
         return userAccountService.update(principal, userId, request);
     }
 
+    @ActivityTracked(module = "People", action = "reset", entity = "employee password", targetPathVariable = "userId")
     @PutMapping("/{userId}/password")
     ResponseEntity<Void> resetPassword(
             @AuthenticationPrincipal AuthenticatedUser principal,

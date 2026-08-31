@@ -14,10 +14,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RolePermissionPolicyTests {
     @Test
-    void ownerHeadAndManagerReceiveTheExplicitFullOperationalSet() {
-        Set<SystemPermission> expected = EnumSet.of(
+    void ownerAndHeadReceiveKnowledgeAuditWhileManagerDoesNot() {
+        Set<SystemPermission> management = EnumSet.of(
                 SystemPermission.REPORT_INTELLIGENCE_VIEW,
                 SystemPermission.REPORT_OPERATIONS_ACCESS,
+                SystemPermission.SALES_REPORT_ACCESS,
                 SystemPermission.REPORT_REVIEW,
                 SystemPermission.DAILY_TASK_VIEW,
                 SystemPermission.DAILY_TASK_CONTRIBUTE,
@@ -30,8 +31,14 @@ class RolePermissionPolicyTests {
                 EnumSet.allOf(SystemPermission.class),
                 RolePermissionPolicy.grantedTo(SystemRole.OWNER)
         );
-        assertEquals(expected, RolePermissionPolicy.grantedTo(SystemRole.HEAD));
-        assertEquals(expected, RolePermissionPolicy.grantedTo(SystemRole.MANAGER));
+        Set<SystemPermission> head = EnumSet.copyOf(management);
+        head.add(SystemPermission.KNOWLEDGE_AUDIT_VIEW);
+        assertEquals(head, RolePermissionPolicy.grantedTo(SystemRole.HEAD));
+        assertEquals(management, RolePermissionPolicy.grantedTo(SystemRole.MANAGER));
+        assertFalse(RolePermissionPolicy.allows(
+                SystemRole.MANAGER,
+                SystemPermission.KNOWLEDGE_AUDIT_VIEW
+        ));
     }
 
     @Test
@@ -84,6 +91,7 @@ class RolePermissionPolicyTests {
 
         assertTrue(authorities.contains("ROLE_MANAGER"));
         assertTrue(authorities.contains("PERMISSION_REPORT_INTELLIGENCE_VIEW"));
+        assertTrue(authorities.contains("PERMISSION_SALES_REPORT_ACCESS"));
         assertTrue(authorities.contains("PERMISSION_DAILY_TASK_MANAGE"));
     }
 }

@@ -1,5 +1,6 @@
 package com.eastapp.backend.stock.api;
 
+import com.eastapp.backend.activity.tracking.ActivityTracked;
 import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.stock.service.StockMediaService;
@@ -136,6 +137,7 @@ public class StockController {
         );
     }
 
+    @ActivityTracked(module = "Stock", action = "copied", entity = "stock setup")
     @PostMapping("/skus/copy")
     @PreAuthorize("hasRole('OWNER')")
     ResponseEntity<CopyStockSkusResponse> copySkus(
@@ -172,6 +174,7 @@ public class StockController {
         return stockService.listReceivings(principal, reviewStatus, from, to, page, size);
     }
 
+    @ActivityTracked(module = "Stock", action = "created", entity = "stock tag")
     @PostMapping("/tags")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<StockTagResponse> createTag(
@@ -181,6 +184,7 @@ public class StockController {
         return ResponseEntity.status(HttpStatus.CREATED).body(stockService.createTag(principal, request));
     }
 
+    @ActivityTracked(module = "Stock", action = "updated", entity = "stock tag", targetPathVariable = "tagId")
     @PatchMapping("/tags/{tagId}")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     StockTagResponse updateTag(
@@ -191,6 +195,7 @@ public class StockController {
         return stockService.updateTag(principal, tagId, request);
     }
 
+    @ActivityTracked(module = "Stock", action = "deleted", entity = "stock tag", targetPathVariable = "tagId")
     @DeleteMapping("/tags/{tagId}")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<Void> deleteTag(
@@ -201,6 +206,7 @@ public class StockController {
         return ResponseEntity.noContent().build();
     }
 
+    @ActivityTracked(module = "Stock", action = "created", entity = "supplier")
     @PostMapping("/suppliers")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<StockSupplierResponse> createSupplier(
@@ -210,6 +216,7 @@ public class StockController {
         return ResponseEntity.status(HttpStatus.CREATED).body(stockService.createSupplier(principal, request));
     }
 
+    @ActivityTracked(module = "Stock", action = "updated", entity = "supplier", targetPathVariable = "supplierId")
     @PatchMapping("/suppliers/{supplierId}")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     StockSupplierResponse updateSupplier(
@@ -220,6 +227,7 @@ public class StockController {
         return stockService.updateSupplier(principal, supplierId, request);
     }
 
+    @ActivityTracked(module = "Stock", action = "deleted", entity = "supplier", targetPathVariable = "supplierId")
     @DeleteMapping("/suppliers/{supplierId}")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<Void> deleteSupplier(
@@ -230,6 +238,7 @@ public class StockController {
         return ResponseEntity.noContent().build();
     }
 
+    @ActivityTracked(module = "Stock", action = "updated", entity = "supplier balance", targetPathVariable = "supplierId")
     @PatchMapping("/suppliers/{supplierId}/balance")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     StockSupplierResponse updateSupplierBalance(
@@ -240,6 +249,7 @@ public class StockController {
         return stockService.updateSupplierBalance(principal, supplierId, request);
     }
 
+    @ActivityTracked(module = "Stock", action = "created", entity = "stock item")
     @PostMapping("/skus")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<StockSkuResponse> createSku(
@@ -249,6 +259,7 @@ public class StockController {
         return ResponseEntity.status(HttpStatus.CREATED).body(stockService.createSku(principal, request));
     }
 
+    @ActivityTracked(module = "Stock", action = "updated", entity = "stock item", targetPathVariable = "skuId")
     @PatchMapping("/skus/{skuId}")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     StockSkuResponse updateSku(
@@ -259,6 +270,7 @@ public class StockController {
         return stockService.updateSku(principal, skuId, request);
     }
 
+    @ActivityTracked(module = "Stock", action = "updated", entity = "stock balance", targetPathVariable = "skuId")
     @PatchMapping("/skus/{skuId}/balance")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     StockSkuResponse updateSkuBalance(
@@ -269,6 +281,7 @@ public class StockController {
         return stockService.updateSkuBalance(principal, skuId, request);
     }
 
+    @ActivityTracked(module = "Stock", action = "submitted", entity = "stock count")
     @PostMapping("/counts")
     ResponseEntity<StockCountSubmissionResponse> createCount(
             @AuthenticationPrincipal AuthenticatedUser principal,
@@ -277,6 +290,7 @@ public class StockController {
         return ResponseEntity.status(HttpStatus.CREATED).body(stockService.createCount(principal, request));
     }
 
+    @ActivityTracked(module = "Stock", action = "reviewed", entity = "stock count", targetPathVariable = "submissionId")
     @PatchMapping("/counts/{submissionId}/review")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     StockCountSubmissionResponse reviewCount(
@@ -287,6 +301,7 @@ public class StockController {
         return stockService.reviewCount(principal, submissionId, request);
     }
 
+    @ActivityTracked(module = "Stock", action = "reviewed", entity = "stock counts")
     @PatchMapping("/counts/bulk-review")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     BulkReviewStockCountsResponse bulkReviewCounts(
@@ -296,6 +311,7 @@ public class StockController {
         return stockService.bulkReviewCounts(principal, request);
     }
 
+    @ActivityTracked(module = "Stock", action = "submitted", entity = "stock receiving")
     @PostMapping("/receivings")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     ResponseEntity<StockReceivingResponse> createReceiving(
@@ -305,6 +321,7 @@ public class StockController {
         return ResponseEntity.status(HttpStatus.CREATED).body(stockService.createReceiving(principal, request));
     }
 
+    @ActivityTracked(module = "Stock", action = "reviewed", entity = "stock receiving", targetPathVariable = "receivingId")
     @PatchMapping("/receivings/{receivingId}/review")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     StockReceivingResponse reviewReceiving(

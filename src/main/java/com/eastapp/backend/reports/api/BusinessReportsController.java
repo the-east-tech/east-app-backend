@@ -1,5 +1,6 @@
 package com.eastapp.backend.reports.api;
 
+import com.eastapp.backend.activity.tracking.ActivityTracked;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.reports.service.BusinessReportService;
 import com.eastapp.backend.reports.service.ReportMediaService;
@@ -70,7 +71,7 @@ public class BusinessReportsController {
     }
 
     @GetMapping("/sales/history")
-    @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
+    @PreAuthorize("hasAuthority('PERMISSION_SALES_REPORT_ACCESS')")
     List<SalesReportResponse> salesHistory(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false)
@@ -83,7 +84,7 @@ public class BusinessReportsController {
     }
 
     @GetMapping("/sales")
-    @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
+    @PreAuthorize("hasAuthority('PERMISSION_SALES_REPORT_ACCESS')")
     SalesReportResponse sales(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false)
@@ -92,8 +93,9 @@ public class BusinessReportsController {
         return reportService.salesForDate(principal, date);
     }
 
+    @ActivityTracked(module = "Sales", action = "saved", entity = "sales report")
     @PutMapping("/sales")
-    @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
+    @PreAuthorize("hasAuthority('PERMISSION_SALES_REPORT_ACCESS')")
     SalesReportResponse upsertSales(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody UpsertSalesReportRequest request
@@ -101,7 +103,9 @@ public class BusinessReportsController {
         return reportService.upsertSales(principal, request);
     }
 
+    @ActivityTracked(module = "Sales", action = "recorded", entity = "void bill")
     @PostMapping("/sales/void-bills")
+    @PreAuthorize("hasAuthority('PERMISSION_SALES_REPORT_ACCESS')")
     ResponseEntity<VoidBillResponse> addVoidBill(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody AddVoidBillRequest request
@@ -110,8 +114,9 @@ public class BusinessReportsController {
                 .body(reportService.addVoidBill(principal, request));
     }
 
+    @ActivityTracked(module = "Sales", action = "submitted", entity = "sales report")
     @PostMapping("/sales/submit")
-    @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
+    @PreAuthorize("hasAuthority('PERMISSION_SALES_REPORT_ACCESS')")
     SalesReportResponse submitSalesDirect(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody UpsertSalesReportRequest request
@@ -119,8 +124,9 @@ public class BusinessReportsController {
         return reportService.submitSales(principal, request);
     }
 
+    @ActivityTracked(module = "Sales", action = "submitted", entity = "sales report", targetPathVariable = "reportId")
     @PostMapping("/sales/{reportId}/submit")
-    @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
+    @PreAuthorize("hasAuthority('PERMISSION_SALES_REPORT_ACCESS')")
     SalesReportResponse submitSales(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID reportId
@@ -128,6 +134,7 @@ public class BusinessReportsController {
         return reportService.submitSales(principal, reportId);
     }
 
+    @ActivityTracked(module = "Waste", action = "submitted", entity = "waste report")
     @PostMapping("/waste")
     ResponseEntity<WasteReportResponse> createWaste(
             @AuthenticationPrincipal AuthenticatedUser principal,
@@ -158,6 +165,7 @@ public class BusinessReportsController {
         return reportService.dailyPhotoReport(principal, date, userId);
     }
 
+    @ActivityTracked(module = "Daily Photo", action = "added", entity = "daily report photo")
     @PostMapping("/daily-photos")
     DailyPhotoReportResponse addDailyPhoto(
             @AuthenticationPrincipal AuthenticatedUser principal,
@@ -166,6 +174,7 @@ public class BusinessReportsController {
         return reportService.addDailyPhoto(principal, request);
     }
 
+    @ActivityTracked(module = "Daily Photo", action = "submitted", entity = "daily photo report", targetPathVariable = "reportId")
     @PostMapping("/daily-photos/{reportId}/submit")
     DailyPhotoReportResponse submitDailyPhotos(
             @AuthenticationPrincipal AuthenticatedUser principal,
@@ -174,6 +183,7 @@ public class BusinessReportsController {
         return reportService.submitDailyPhotos(principal, reportId);
     }
 
+    @ActivityTracked(module = "Complaint", action = "created", entity = "complaint report")
     @PostMapping("/complaints")
     ResponseEntity<ComplaintReportResponse> createComplaint(
             @AuthenticationPrincipal AuthenticatedUser principal,
@@ -194,6 +204,7 @@ public class BusinessReportsController {
         return reportService.complaintReports(principal, from, to);
     }
 
+    @ActivityTracked(module = "Complaint", action = "updated", entity = "complaint report", targetPathVariable = "reportId")
     @PatchMapping("/complaints/{reportId}")
     @PreAuthorize("hasAuthority('PERMISSION_REPORT_OPERATIONS_ACCESS')")
     ComplaintReportResponse updateComplaint(
@@ -212,6 +223,7 @@ public class BusinessReportsController {
         return reportService.approvals(principal);
     }
 
+    @ActivityTracked(module = "Report", action = "reviewed", entity = "business report", targetPathVariable = "reportId")
     @PostMapping("/{reportId}/review")
     @PreAuthorize("hasAuthority('PERMISSION_REPORT_REVIEW')")
     ApprovalReportResponse review(

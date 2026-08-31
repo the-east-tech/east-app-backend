@@ -53,6 +53,9 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
     Optional<UserAccount> findByIdAndTenant_Id(UUID id, UUID tenantId);
 
+    @EntityGraph(attributePaths = {"identity", "tenant", "role"})
+    Optional<UserAccount> findByIdAndTenant_IdAndActiveTrue(UUID id, UUID tenantId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
     @Query("select user from UserAccount user where user.id = :id and user.tenant.id = :tenantId")

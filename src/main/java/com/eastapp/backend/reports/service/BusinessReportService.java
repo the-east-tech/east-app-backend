@@ -271,7 +271,7 @@ public class BusinessReportService {
 
     @Transactional(readOnly = true)
     public SalesReportResponse salesForDate(AuthenticatedUser principal, LocalDate date) {
-        requireManagement(principal);
+        requireSalesAccess(principal);
         LocalDate reportDate = date == null ? today() : date;
         validateViewDate(reportDate);
         Optional<BusinessReport> optional = reportRepository.findByTenantIdAndReportTypeAndReportDate(
@@ -290,7 +290,7 @@ public class BusinessReportService {
             LocalDate to,
             Integer requestedDays
     ) {
-        requireManagement(principal);
+        requireSalesAccess(principal);
         DateRange range;
         if (from == null && to == null && requestedDays != null) {
             int days = Math.max(1, Math.min(requestedDays, 30));
@@ -316,7 +316,7 @@ public class BusinessReportService {
             AuthenticatedUser principal,
             UpsertSalesReportRequest request
     ) {
-        requireManagement(principal);
+        requireSalesAccess(principal);
         validateEditableDate(principal, request.reportDate());
         BusinessReport report = reportRepository.findByTenantIdAndReportTypeAndReportDate(
                 principal.tenantId(), BusinessReportType.SALES, request.reportDate()
@@ -361,6 +361,7 @@ public class BusinessReportService {
             AuthenticatedUser principal,
             AddVoidBillRequest request
     ) {
+        requireSalesAccess(principal);
         validateEditableDate(principal, request.reportDate());
         ReportMedia media = reportMediaService.requireOwnedMedia(principal, request.photoStorageKey());
         BusinessReport report = reportRepository.findByTenantIdAndReportTypeAndReportDate(
@@ -409,7 +410,7 @@ public class BusinessReportService {
 
     @Transactional
     public SalesReportResponse submitSales(AuthenticatedUser principal, UUID reportId) {
-        requireManagement(principal);
+        requireSalesAccess(principal);
         BusinessReport report = requireReport(principal, reportId, BusinessReportType.SALES);
         if (salesRepository.findByReportIdAndTenantId(reportId, principal.tenantId()).isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "SALES_DETAILS_REQUIRED", "Enter the daily sales totals before submission.");
@@ -1459,6 +1460,16 @@ public class BusinessReportService {
     private void requireManagement(AuthenticatedUser principal) {
         if (!principal.hasPermission(SystemPermission.REPORT_OPERATIONS_ACCESS)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "REPORT_ACCESS_DENIED", "This report is available to management only.");
+        }
+    }
+
+    private void requireSalesAccess(AuthenticatedUser principal) {
+        if (!principal.hasPermission(SystemPermission.SALES_REPORT_ACCESS)) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "SALES_REPORT_ACCESS_DENIED",
+                    "Only Owner, Head or Manager can access Sales."
+            );
         }
     }
 

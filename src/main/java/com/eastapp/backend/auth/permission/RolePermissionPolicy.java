@@ -38,7 +38,7 @@ public final class RolePermissionPolicy {
         );
         grants.put(
                 SystemRole.HEAD,
-                fullManagementPermissions()
+                headManagementPermissions()
         );
         grants.put(
                 SystemRole.MANAGER,
@@ -78,6 +78,7 @@ public final class RolePermissionPolicy {
         return immutable(EnumSet.of(
                 SystemPermission.REPORT_INTELLIGENCE_VIEW,
                 SystemPermission.REPORT_OPERATIONS_ACCESS,
+                SystemPermission.SALES_REPORT_ACCESS,
                 SystemPermission.REPORT_REVIEW,
                 SystemPermission.DAILY_TASK_VIEW,
                 SystemPermission.DAILY_TASK_CONTRIBUTE,
@@ -85,5 +86,11 @@ public final class RolePermissionPolicy {
                 SystemPermission.DAILY_TASK_MANAGE,
                 SystemPermission.DAILY_TASK_RATE
         ));
+    }
+
+    private static Set<SystemPermission> headManagementPermissions() {
+        EnumSet<SystemPermission> permissions = EnumSet.copyOf(fullManagementPermissions());
+        permissions.add(SystemPermission.KNOWLEDGE_AUDIT_VIEW);
+        return immutable(permissions);
     }
 }

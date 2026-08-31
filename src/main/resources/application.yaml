@@ -44,6 +44,14 @@ eastapp:
     time-zone: ${EASTAPP_REPORT_TIME_ZONE:Asia/Kuala_Lumpur}
     daily-photo-minimum: 5
 
+  notifications:
+    # In-app notifications work without Firebase. Enable native push only after
+    # the Firebase project and service credentials are configured in Railway.
+    push-enabled: ${EASTAPP_NOTIFICATION_PUSH_ENABLED:false}
+    firebase-project-id: ${EASTAPP_FIREBASE_PROJECT_ID:}
+    firebase-service-account-json: ${EASTAPP_FIREBASE_SERVICE_ACCOUNT_JSON:}
+    dispatch-delay-ms: ${EASTAPP_NOTIFICATION_DISPATCH_DELAY_MS:5000}
+
   translation:
     provider-enabled: ${EASTAPP_TRANSLATION_PROVIDER_ENABLED:false}
     cloudflare-account-id: ${EASTAPP_CLOUDFLARE_ACCOUNT_ID:}
