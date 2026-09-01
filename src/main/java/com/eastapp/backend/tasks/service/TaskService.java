@@ -61,6 +61,7 @@ import java.util.stream.Collectors;
 public class TaskService {
     private static final int MAX_CONFIRMED_PHOTOS_PER_TASK = 40;
     private static final int MAX_HISTORY_RANGE_DAYS = 30;
+    private static final int ACTIVE_TASK_FUTURE_DAYS = 10;
 
     private final TaskTemplateRepository templateRepository;
     private final TaskTemplateChecklistItemRepository templateChecklistRepository;
@@ -253,8 +254,10 @@ public class TaskService {
             dateTo = requestedTo == null ? dateFrom : requestedTo;
         }
         validateDateRange(dateFrom, dateTo);
-        if (!dateFrom.isAfter(today) && !dateTo.isBefore(today)) {
-            materialiseActiveTemplates(principal.tenantId(), today);
+        LocalDate materialisationDate = dateFrom.isBefore(today) ? today : dateFrom;
+        while (!materialisationDate.isAfter(dateTo)) {
+            materialiseActiveTemplates(principal.tenantId(), materialisationDate);
+            materialisationDate = materialisationDate.plusDays(1);
         }
 
         List<TaskRecord> records = recordRepository
@@ -266,7 +269,7 @@ public class TaskService {
                 : assignedTagIds(principal);
         boolean oversight = accessPolicy.canOversee(principal.systemRole());
 
-        List<TaskRecord> visible = records.stream()
+        List<TaskRecord> visible = new ArrayList<>(records.stream()
                 .filter(record -> tagId == null || tagId.equals(record.getTagId()))
                 .filter(record -> status == null || status == record.getStatus())
                 .filter(record -> !submittedByMe
@@ -274,9 +277,14 @@ public class TaskService {
                 .filter(record -> oversight
                         || principal.isOwner()
                         || principal.userId().equals(record.getSubmittedByUserId())
-                        || record.getTaskDate().equals(today)
+                        || isActiveTaskDate(record.getTaskDate(), today)
                             && assignedTagIds.contains(record.getTagId()))
-                .toList();
+                .toList());
+        if (!dateFrom.isBefore(today)) {
+            visible.sort(Comparator.comparing(TaskRecord::getTaskDate)
+                    .thenComparing(TaskRecord::getTagName)
+                    .thenComparing(TaskRecord::getTitle));
+        }
 
         return new TaskListResponse(
                 dateTo,
@@ -290,9 +298,12 @@ public class TaskService {
     @Transactional
     public TaskOverviewResponse overview(AuthenticatedUser principal, LocalDate requestedDate) {
         requireTaskView(principal);
-        LocalDate date = requestedDate == null ? today() : requestedDate;
+        LocalDate today = today();
+        LocalDate date = requestedDate == null ? today : requestedDate;
         validateDate(date);
-        if (date.equals(today())) materialiseActiveTemplates(principal.tenantId(), date);
+        if (isActiveTaskDate(date, today)) {
+            materialiseActiveTemplates(principal.tenantId(), date);
+        }
         List<TaskRecord> records = recordRepository
                 .findAllByTenantIdAndTaskDateOrderByTagNameAscTitleAsc(principal.tenantId(), date);
 
@@ -651,6 +662,7 @@ public class TaskService {
                 && !checks.isEmpty()
                 && checks.stream().allMatch(TaskRecordChecklistItem::isCompleted);
         boolean canContribute = record.getStatus() == TaskStatus.PENDING
+                && record.getTaskDate().equals(today())
                 && (principal.isOwner() || assignedTagIds.contains(record.getTagId()));
         boolean canRate = record.getStatus() == TaskStatus.SUBMITTED
                 && accessPolicy.canRate(principal.systemRole(), record.getSubmittedByRole());
@@ -742,6 +754,12 @@ public class TaskService {
     }
 
     private void requireCanContribute(AuthenticatedUser principal, TaskRecord record) {
+        if (!record.getTaskDate().equals(today())) {
+            throw conflict(
+                    "TASK_NOT_DUE_TODAY",
+                    "This Task can only be completed on its scheduled date."
+            );
+        }
         if (!canContribute(principal, record)) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
@@ -752,10 +770,12 @@ public class TaskService {
     }
 
     private void requireCanView(AuthenticatedUser principal, TaskRecord record) {
+        LocalDate today = today();
         if (accessPolicy.canOversee(principal.systemRole())
                 || principal.isOwner()
                 || principal.userId().equals(record.getSubmittedByUserId())
-                || record.getTaskDate().equals(today()) && canContribute(principal, record)) {
+                || isActiveTaskDate(record.getTaskDate(), today)
+                    && canContribute(principal, record)) {
             return;
         }
         throw new ApiException(
@@ -944,9 +964,17 @@ public class TaskService {
     }
 
     private void validateDate(LocalDate date) {
-        if (date.isAfter(today())) {
-            throw badRequest("TASK_FUTURE_DATE", "Tasks cannot be loaded for a future date.");
+        if (date.isAfter(today().plusDays(ACTIVE_TASK_FUTURE_DAYS))) {
+            throw badRequest(
+                    "TASK_FUTURE_DATE",
+                    "Tasks may be loaded up to 10 days ahead."
+            );
         }
+    }
+
+    private boolean isActiveTaskDate(LocalDate date, LocalDate today) {
+        return !date.isBefore(today)
+                && !date.isAfter(today.plusDays(ACTIVE_TASK_FUTURE_DAYS));
     }
 
     private void validateDateRange(LocalDate dateFrom, LocalDate dateTo) {
