@@ -6,12 +6,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
-public interface DailyTaskPhotoRepository extends JpaRepository<DailyTaskPhoto, UUID> {
-    List<DailyTaskPhoto> findAllByTenantIdAndRecordIdOrderBySubmittedAtAscIdAsc(
+public interface TaskPhotoRepository extends JpaRepository<TaskPhoto, UUID> {
+    List<TaskPhoto> findAllByTenantIdAndRecordIdOrderBySubmittedAtAscIdAsc(
             UUID tenantId,
             UUID recordId
     );
-    List<DailyTaskPhoto> findAllByTenantIdAndRecordIdIn(
+    List<TaskPhoto> findAllByTenantIdAndRecordIdIn(
             UUID tenantId,
             Collection<UUID> recordIds
     );

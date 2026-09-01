@@ -20,11 +20,11 @@ class RolePermissionPolicyTests {
                 SystemPermission.REPORT_OPERATIONS_ACCESS,
                 SystemPermission.SALES_REPORT_ACCESS,
                 SystemPermission.REPORT_REVIEW,
-                SystemPermission.DAILY_TASK_VIEW,
-                SystemPermission.DAILY_TASK_CONTRIBUTE,
-                SystemPermission.DAILY_TASK_VIEW_ALL,
-                SystemPermission.DAILY_TASK_MANAGE,
-                SystemPermission.DAILY_TASK_RATE
+                SystemPermission.TASK_VIEW,
+                SystemPermission.TASK_CONTRIBUTE,
+                SystemPermission.TASK_VIEW_ALL,
+                SystemPermission.TASK_MANAGE,
+                SystemPermission.TASK_RATE
         );
 
         assertEquals(
@@ -42,22 +42,22 @@ class RolePermissionPolicyTests {
     }
 
     @Test
-    void supervisorReceivesOperationalReportsAndScopedDailyTasksOnly() {
+    void supervisorReceivesOperationalReportsAndScopedTasksOnly() {
         assertEquals(
                 Set.of(
                         SystemPermission.REPORT_OPERATIONS_ACCESS,
-                        SystemPermission.DAILY_TASK_VIEW,
-                        SystemPermission.DAILY_TASK_CONTRIBUTE
+                        SystemPermission.TASK_VIEW,
+                        SystemPermission.TASK_CONTRIBUTE
                 ),
                 RolePermissionPolicy.grantedTo(SystemRole.SUPERVISOR)
         );
     }
 
     @Test
-    void staffRolesReceiveScopedDailyTasksOnly() {
+    void staffRolesReceiveScopedTasksOnly() {
         Set<SystemPermission> expected = Set.of(
-                SystemPermission.DAILY_TASK_VIEW,
-                SystemPermission.DAILY_TASK_CONTRIBUTE
+                SystemPermission.TASK_VIEW,
+                SystemPermission.TASK_CONTRIBUTE
         );
 
         assertEquals(expected, RolePermissionPolicy.grantedTo(SystemRole.STAFF_1));
@@ -67,7 +67,7 @@ class RolePermissionPolicyTests {
     @Test
     void missingRoleOrPermissionFailsClosed() {
         assertTrue(RolePermissionPolicy.grantedTo(null).isEmpty());
-        assertFalse(RolePermissionPolicy.allows(null, SystemPermission.DAILY_TASK_VIEW));
+        assertFalse(RolePermissionPolicy.allows(null, SystemPermission.TASK_VIEW));
         assertFalse(RolePermissionPolicy.allows(SystemRole.OWNER, null));
     }
 
@@ -92,6 +92,6 @@ class RolePermissionPolicyTests {
         assertTrue(authorities.contains("ROLE_MANAGER"));
         assertTrue(authorities.contains("PERMISSION_REPORT_INTELLIGENCE_VIEW"));
         assertTrue(authorities.contains("PERMISSION_SALES_REPORT_ACCESS"));
-        assertTrue(authorities.contains("PERMISSION_DAILY_TASK_MANAGE"));
+        assertTrue(authorities.contains("PERMISSION_TASK_MANAGE"));
     }
 }

@@ -1,13 +1,14 @@
 package com.eastapp.backend.tasks.api;
 
-import com.eastapp.backend.tasks.DailyTaskStatus;
+import com.eastapp.backend.tasks.TaskStatus;
+import com.eastapp.backend.tasks.TaskScheduleType;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-public record DailyTaskRecordResponse(
+public record TaskRecordResponse(
         UUID id,
         UUID templateId,
         UUID tagId,
@@ -16,20 +17,21 @@ public record DailyTaskRecordResponse(
         String title,
         String instruction,
         int requiredPhotoCount,
+        TaskScheduleType scheduleType,
         int photoCount,
-        DailyTaskStatus status,
-        List<DailyTaskChecklistItemResponse> checklistItems,
-        List<DailyTaskPhotoResponse> photos,
+        TaskStatus status,
+        List<TaskChecklistItemResponse> checklistItems,
+        List<TaskPhotoResponse> photos,
         boolean requirementsMet,
-        DailyTaskPersonResponse submittedBy,
+        TaskPersonResponse submittedBy,
         Instant submittedAt,
         Integer rating,
         String ratingComment,
-        DailyTaskPersonResponse ratedBy,
+        TaskPersonResponse ratedBy,
         Instant ratedAt,
         boolean canContribute,
         boolean canSubmit,
         boolean canRate,
-        List<DailyTaskAuditResponse> activity
+        List<TaskAuditResponse> activity
 ) {
 }

@@ -6,11 +6,11 @@ public enum SystemPermission {
     SALES_REPORT_ACCESS,
     REPORT_REVIEW,
     KNOWLEDGE_AUDIT_VIEW,
-    DAILY_TASK_VIEW,
-    DAILY_TASK_CONTRIBUTE,
-    DAILY_TASK_VIEW_ALL,
-    DAILY_TASK_MANAGE,
-    DAILY_TASK_RATE;
+    TASK_VIEW,
+    TASK_CONTRIBUTE,
+    TASK_VIEW_ALL,
+    TASK_MANAGE,
+    TASK_RATE;
 
     public String authority() {
         return "PERMISSION_" + name();

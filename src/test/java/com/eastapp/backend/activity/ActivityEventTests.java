@@ -20,7 +20,7 @@ class ActivityEventTests {
     void optionalDetailIsTrimmedAndBoundedForNotificationStorage() {
         ActivityEvent event = event("  ", " x".repeat(1200));
 
-        assertEquals("Nicky submitted daily task", event.summary());
+        assertEquals("Nicky submitted task", event.summary());
         assertEquals(2000, event.getDetail().length());
     }
 
@@ -31,13 +31,13 @@ class ActivityEventTests {
                 "Nicky",
                 "E0001",
                 "STAFF_1",
-                "Daily Task",
+                "Task",
                 "submitted",
-                "daily task",
+                "task",
                 subject,
                 detail,
                 UUID.randomUUID(),
-                "/api/v1/daily-tasks/records/example/submit"
+                "/api/v1/tasks/records/example/submit"
         );
     }
 }

@@ -3,10 +3,10 @@ package com.eastapp.backend.tasks.api;
 import java.time.Instant;
 import java.util.UUID;
 
-public record DailyTaskPhotoResponse(
+public record TaskPhotoResponse(
         UUID id,
         String photoStorageKey,
-        DailyTaskPersonResponse submittedBy,
+        TaskPersonResponse submittedBy,
         Instant submittedAt
 ) {
 }

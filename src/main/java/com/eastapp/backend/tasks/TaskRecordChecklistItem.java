@@ -12,8 +12,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 @Entity
-@Table(name = "daily_task_record_checklist_items")
-public class DailyTaskRecordChecklistItem {
+@Table(name = "task_record_checklist_items")
+public class TaskRecordChecklistItem {
     @Id
     @Generated
     @ColumnDefault("uuidv7()")
@@ -38,10 +38,10 @@ public class DailyTaskRecordChecklistItem {
     @Column(name = "completed_at")
     private Instant completedAt;
 
-    protected DailyTaskRecordChecklistItem() {
+    protected TaskRecordChecklistItem() {
     }
 
-    public DailyTaskRecordChecklistItem(
+    public TaskRecordChecklistItem(
             UUID tenantId,
             UUID recordId,
             int position,

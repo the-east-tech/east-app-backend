@@ -11,35 +11,35 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface DailyTaskRecordRepository extends JpaRepository<DailyTaskRecord, UUID> {
-    Optional<DailyTaskRecord> findByIdAndTenantId(UUID id, UUID tenantId);
+public interface TaskRecordRepository extends JpaRepository<TaskRecord, UUID> {
+    Optional<TaskRecord> findByIdAndTenantId(UUID id, UUID tenantId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select task
-            from DailyTaskRecord task
+            from TaskRecord task
             where task.id = :id and task.tenantId = :tenantId
             """)
-    Optional<DailyTaskRecord> findByIdAndTenantIdForUpdate(
+    Optional<TaskRecord> findByIdAndTenantIdForUpdate(
             @Param("id") UUID id,
             @Param("tenantId") UUID tenantId
     );
 
-    Optional<DailyTaskRecord> findByTenantIdAndTemplateIdAndTaskDate(
+    Optional<TaskRecord> findByTenantIdAndTemplateIdAndTaskDate(
             UUID tenantId,
             UUID templateId,
             LocalDate taskDate
     );
-    List<DailyTaskRecord> findAllByTenantIdAndTaskDateOrderByTagNameAscTitleAsc(
+    List<TaskRecord> findAllByTenantIdAndTaskDateOrderByTagNameAscTitleAsc(
             UUID tenantId,
             LocalDate taskDate
     );
-    List<DailyTaskRecord> findAllByTenantIdAndTaskDateBetweenOrderByTaskDateDescTagNameAscTitleAsc(
+    List<TaskRecord> findAllByTenantIdAndTaskDateBetweenOrderByTaskDateDescTagNameAscTitleAsc(
             UUID tenantId,
             LocalDate dateFrom,
             LocalDate dateTo
     );
-    List<DailyTaskRecord> findAllByTenantIdAndSubmittedByUserIdOrderByTaskDateDescSubmittedAtDesc(
+    List<TaskRecord> findAllByTenantIdAndSubmittedByUserIdOrderByTaskDateDescSubmittedAtDesc(
             UUID tenantId,
             UUID submittedByUserId
     );

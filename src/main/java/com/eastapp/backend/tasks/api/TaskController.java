@@ -3,8 +3,8 @@ package com.eastapp.backend.tasks.api;
 import com.eastapp.backend.activity.tracking.ActivityTracked;
 import com.eastapp.backend.activity.tracking.ActivityEventContext;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
-import com.eastapp.backend.tasks.DailyTaskStatus;
-import com.eastapp.backend.tasks.service.DailyTaskService;
+import com.eastapp.backend.tasks.TaskStatus;
+import com.eastapp.backend.tasks.service.TaskService;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,17 +29,17 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/daily-tasks")
-public class DailyTaskController {
-    private final DailyTaskService service;
+@RequestMapping("/api/v1/tasks")
+public class TaskController {
+    private final TaskService service;
 
-    public DailyTaskController(DailyTaskService service) {
+    public TaskController(TaskService service) {
         this.service = service;
     }
 
     @GetMapping("/overview")
-    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_VIEW')")
-    DailyTaskOverviewResponse overview(
+    @PreAuthorize("hasAuthority('PERMISSION_TASK_VIEW')")
+    TaskOverviewResponse overview(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
@@ -48,22 +48,22 @@ public class DailyTaskController {
     }
 
     @GetMapping("/templates")
-    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_MANAGE')")
-    List<DailyTaskTemplateResponse> templates(
+    @PreAuthorize("hasAuthority('PERMISSION_TASK_MANAGE')")
+    List<TaskTemplateResponse> templates(
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
         return service.templates(principal);
     }
 
-    @ActivityTracked(module = "Daily Task", action = "created", entity = "task template")
+    @ActivityTracked(module = "Task", action = "created", entity = "task template")
     @PostMapping("/templates")
-    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_MANAGE')")
-    ResponseEntity<DailyTaskTemplateResponse> createTemplate(
+    @PreAuthorize("hasAuthority('PERMISSION_TASK_MANAGE')")
+    ResponseEntity<TaskTemplateResponse> createTemplate(
             @AuthenticationPrincipal AuthenticatedUser principal,
-            @Valid @RequestBody UpsertDailyTaskTemplateRequest request,
+            @Valid @RequestBody UpsertTaskTemplateRequest request,
             HttpServletRequest httpRequest
     ) {
-        DailyTaskTemplateResponse created = service.createTemplate(principal, request);
+        TaskTemplateResponse created = service.createTemplate(principal, request);
         ActivityEventContext.attach(
                 httpRequest,
                 created.id(),
@@ -74,16 +74,16 @@ public class DailyTaskController {
                 .body(created);
     }
 
-    @ActivityTracked(module = "Daily Task", action = "updated", entity = "task template", targetPathVariable = "templateId")
+    @ActivityTracked(module = "Task", action = "updated", entity = "task template", targetPathVariable = "templateId")
     @PatchMapping("/templates/{templateId}")
-    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_MANAGE')")
-    DailyTaskTemplateResponse updateTemplate(
+    @PreAuthorize("hasAuthority('PERMISSION_TASK_MANAGE')")
+    TaskTemplateResponse updateTemplate(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID templateId,
-            @Valid @RequestBody UpsertDailyTaskTemplateRequest request,
+            @Valid @RequestBody UpsertTaskTemplateRequest request,
             HttpServletRequest httpRequest
     ) {
-        DailyTaskTemplateResponse updated = service.updateTemplate(
+        TaskTemplateResponse updated = service.updateTemplate(
                 principal,
                 templateId,
                 request
@@ -98,8 +98,8 @@ public class DailyTaskController {
     }
 
     @GetMapping("/records")
-    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_VIEW')")
-    DailyTaskListResponse records(
+    @PreAuthorize("hasAuthority('PERMISSION_TASK_VIEW')")
+    TaskListResponse records(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
@@ -108,7 +108,7 @@ public class DailyTaskController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
             @RequestParam(required = false) UUID tagId,
-            @RequestParam(required = false) DailyTaskStatus status,
+            @RequestParam(required = false) TaskStatus status,
             @RequestParam(defaultValue = "false") boolean submittedByMe
     ) {
         return service.records(
@@ -117,28 +117,28 @@ public class DailyTaskController {
     }
 
     @GetMapping("/records/{recordId}")
-    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_VIEW')")
-    DailyTaskRecordResponse record(
+    @PreAuthorize("hasAuthority('PERMISSION_TASK_VIEW')")
+    TaskRecordResponse record(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID recordId
     ) {
         return service.record(principal, recordId);
     }
 
-    @ActivityTracked(module = "Daily Task", action = "submitted", entity = "daily task", targetPathVariable = "recordId")
+    @ActivityTracked(module = "Task", action = "submitted", entity = "task", targetPathVariable = "recordId")
     @PostMapping(
             value = "/records/{recordId}/submit",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_CONTRIBUTE')")
-    DailyTaskRecordResponse submit(
+    @PreAuthorize("hasAuthority('PERMISSION_TASK_CONTRIBUTE')")
+    TaskRecordResponse submit(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID recordId,
             @RequestParam(defaultValue = "") String completedChecklistItemIds,
             @RequestPart(value = "photos", required = false) List<MultipartFile> photos,
             HttpServletRequest httpRequest
     ) {
-        DailyTaskRecordResponse submitted = service.submit(
+        TaskRecordResponse submitted = service.submit(
                 principal,
                 recordId,
                 completedChecklistItemIds,
@@ -153,16 +153,16 @@ public class DailyTaskController {
         return submitted;
     }
 
-    @ActivityTracked(module = "Daily Task", action = "rated", entity = "daily task", targetPathVariable = "recordId")
+    @ActivityTracked(module = "Task", action = "rated", entity = "task", targetPathVariable = "recordId")
     @PostMapping("/records/{recordId}/rate")
-    @PreAuthorize("hasAuthority('PERMISSION_DAILY_TASK_RATE')")
-    DailyTaskRecordResponse rate(
+    @PreAuthorize("hasAuthority('PERMISSION_TASK_RATE')")
+    TaskRecordResponse rate(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID recordId,
-            @Valid @RequestBody RateDailyTaskRequest request,
+            @Valid @RequestBody RateTaskRequest request,
             HttpServletRequest httpRequest
     ) {
-        DailyTaskRecordResponse rated = service.rate(principal, recordId, request);
+        TaskRecordResponse rated = service.rate(principal, recordId, request);
         ActivityEventContext.attach(
                 httpRequest,
                 rated.id(),
@@ -172,16 +172,19 @@ public class DailyTaskController {
         return rated;
     }
 
-    private static String templateDetail(DailyTaskTemplateResponse template) {
+    private static String templateDetail(TaskTemplateResponse template) {
         return "Tag: " + template.tagName()
+                + "\nSchedule: " + template.scheduleType()
+                + "\nFirst task date: " + template.firstTaskDate()
+                + "\nEnd date: " + (template.endDate() == null ? "None" : template.endDate())
                 + "\nRequired photos: " + template.requiredPhotoCount()
                 + "\nChecklist items: " + template.checklistItems().size()
                 + "\nActive: " + (template.active() ? "Yes" : "No");
     }
 
-    private static String submissionDetail(DailyTaskRecordResponse record) {
+    private static String submissionDetail(TaskRecordResponse record) {
         long completedChecklist = record.checklistItems().stream()
-                .filter(DailyTaskChecklistItemResponse::completed)
+                .filter(TaskChecklistItemResponse::completed)
                 .count();
         String submittedBy = record.submittedBy() == null
                 ? "-"
@@ -194,7 +197,7 @@ public class DailyTaskController {
                 + "\nChecklist: " + completedChecklist + "/" + record.checklistItems().size();
     }
 
-    private static String ratingDetail(DailyTaskRecordResponse record) {
+    private static String ratingDetail(TaskRecordResponse record) {
         String submittedBy = record.submittedBy() == null
                 ? "-"
                 : record.submittedBy().fullName()

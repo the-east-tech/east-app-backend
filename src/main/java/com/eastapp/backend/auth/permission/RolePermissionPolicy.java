@@ -48,22 +48,22 @@ public final class RolePermissionPolicy {
                 SystemRole.SUPERVISOR,
                 immutable(EnumSet.of(
                         SystemPermission.REPORT_OPERATIONS_ACCESS,
-                        SystemPermission.DAILY_TASK_VIEW,
-                        SystemPermission.DAILY_TASK_CONTRIBUTE
+                        SystemPermission.TASK_VIEW,
+                        SystemPermission.TASK_CONTRIBUTE
                 ))
         );
         grants.put(
                 SystemRole.STAFF_1,
                 immutable(EnumSet.of(
-                        SystemPermission.DAILY_TASK_VIEW,
-                        SystemPermission.DAILY_TASK_CONTRIBUTE
+                        SystemPermission.TASK_VIEW,
+                        SystemPermission.TASK_CONTRIBUTE
                 ))
         );
         grants.put(
                 SystemRole.STAFF_2,
                 immutable(EnumSet.of(
-                        SystemPermission.DAILY_TASK_VIEW,
-                        SystemPermission.DAILY_TASK_CONTRIBUTE
+                        SystemPermission.TASK_VIEW,
+                        SystemPermission.TASK_CONTRIBUTE
                 ))
         );
 
@@ -80,11 +80,11 @@ public final class RolePermissionPolicy {
                 SystemPermission.REPORT_OPERATIONS_ACCESS,
                 SystemPermission.SALES_REPORT_ACCESS,
                 SystemPermission.REPORT_REVIEW,
-                SystemPermission.DAILY_TASK_VIEW,
-                SystemPermission.DAILY_TASK_CONTRIBUTE,
-                SystemPermission.DAILY_TASK_VIEW_ALL,
-                SystemPermission.DAILY_TASK_MANAGE,
-                SystemPermission.DAILY_TASK_RATE
+                SystemPermission.TASK_VIEW,
+                SystemPermission.TASK_CONTRIBUTE,
+                SystemPermission.TASK_VIEW_ALL,
+                SystemPermission.TASK_MANAGE,
+                SystemPermission.TASK_RATE
         ));
     }
 

@@ -18,8 +18,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 @Entity
-@Table(name = "daily_task_records")
-public class DailyTaskRecord {
+@Table(name = "task_records")
+public class TaskRecord {
     @Id
     @Generated
     @ColumnDefault("uuidv7()")
@@ -51,8 +51,12 @@ public class DailyTaskRecord {
     private int requiredPhotoCount;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "schedule_type", nullable = false, length = 16, updatable = false)
+    private TaskScheduleType scheduleType;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
-    private DailyTaskStatus status = DailyTaskStatus.PENDING;
+    private TaskStatus status = TaskStatus.PENDING;
 
     @Column(name = "submitted_by_user_id")
     private UUID submittedByUserId;
@@ -84,11 +88,11 @@ public class DailyTaskRecord {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    protected DailyTaskRecord() {
+    protected TaskRecord() {
     }
 
-    public DailyTaskRecord(
-            DailyTaskTemplate template,
+    public TaskRecord(
+            TaskTemplate template,
             LocalDate taskDate,
             String tagName
     ) {
@@ -100,20 +104,21 @@ public class DailyTaskRecord {
         this.instruction = template.getInstruction();
         this.tagName = requireText(tagName, "tagName");
         this.requiredPhotoCount = template.getRequiredPhotoCount();
+        this.scheduleType = template.getScheduleType();
     }
 
     public void submit(UUID userId, SystemRole role, Instant when) {
-        if (status != DailyTaskStatus.PENDING) {
+        if (status != TaskStatus.PENDING) {
             throw new IllegalStateException("Only a pending task may be submitted.");
         }
         submittedByUserId = Objects.requireNonNull(userId, "userId must not be null");
         submittedByRole = Objects.requireNonNull(role, "role must not be null");
         submittedAt = Objects.requireNonNull(when, "when must not be null");
-        status = DailyTaskStatus.SUBMITTED;
+        status = TaskStatus.SUBMITTED;
     }
 
     public void rate(int stars, String comment, UUID userId, Instant when) {
-        if (status != DailyTaskStatus.SUBMITTED) {
+        if (status != TaskStatus.SUBMITTED) {
             throw new IllegalStateException("Only a submitted task may be rated.");
         }
         if (stars < 1 || stars > 5) throw new IllegalArgumentException("rating must be between 1 and 5");
@@ -121,7 +126,7 @@ public class DailyTaskRecord {
         ratingComment = requireText(comment, "comment");
         ratedByUserId = Objects.requireNonNull(userId, "userId must not be null");
         ratedAt = Objects.requireNonNull(when, "when must not be null");
-        status = DailyTaskStatus.DONE;
+        status = TaskStatus.DONE;
     }
 
     public UUID getId() { return id; }
@@ -133,7 +138,8 @@ public class DailyTaskRecord {
     public String getInstruction() { return instruction; }
     public String getTagName() { return tagName; }
     public int getRequiredPhotoCount() { return requiredPhotoCount; }
-    public DailyTaskStatus getStatus() { return status; }
+    public TaskScheduleType getScheduleType() { return scheduleType; }
+    public TaskStatus getStatus() { return status; }
     public UUID getSubmittedByUserId() { return submittedByUserId; }
     public SystemRole getSubmittedByRole() { return submittedByRole; }
     public Instant getSubmittedAt() { return submittedAt; }

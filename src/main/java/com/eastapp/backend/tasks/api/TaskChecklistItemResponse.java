@@ -3,12 +3,12 @@ package com.eastapp.backend.tasks.api;
 import java.time.Instant;
 import java.util.UUID;
 
-public record DailyTaskChecklistItemResponse(
+public record TaskChecklistItemResponse(
         UUID id,
         int position,
         String description,
         boolean completed,
-        DailyTaskPersonResponse completedBy,
+        TaskPersonResponse completedBy,
         Instant completedAt
 ) {
 }

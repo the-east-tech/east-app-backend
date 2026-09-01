@@ -1,6 +1,6 @@
 package com.eastapp.backend.tasks.api;
 
-public record DailyTaskOverviewResponse(
+public record TaskOverviewResponse(
         int total,
         int pending,
         int submitted,

@@ -48,7 +48,7 @@ import com.eastapp.backend.stock.api.StockTagResponse;
 import com.eastapp.backend.stock.api.UpdateStockBalanceRequest;
 import com.eastapp.backend.stock.api.UpdateStockTagRequest;
 import com.eastapp.backend.stock.api.UpsertStockSkuRequest;
-import com.eastapp.backend.tasks.DailyTaskTemplateRepository;
+import com.eastapp.backend.tasks.TaskTemplateRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -88,7 +88,7 @@ public class StockService {
     private final StockAuditEntryRepository auditRepository;
     private final StockMediaRepository mediaRepository;
     private final KnowledgeSopRepository knowledgeSopRepository;
-    private final DailyTaskTemplateRepository dailyTaskTemplateRepository;
+    private final TaskTemplateRepository taskTemplateRepository;
 
     public StockService(
             TenantRepository tenantRepository,
@@ -102,7 +102,7 @@ public class StockService {
             StockAuditEntryRepository auditRepository,
             StockMediaRepository mediaRepository,
             KnowledgeSopRepository knowledgeSopRepository,
-            DailyTaskTemplateRepository dailyTaskTemplateRepository
+            TaskTemplateRepository taskTemplateRepository
     ) {
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
@@ -115,7 +115,7 @@ public class StockService {
         this.auditRepository = auditRepository;
         this.mediaRepository = mediaRepository;
         this.knowledgeSopRepository = knowledgeSopRepository;
-        this.dailyTaskTemplateRepository = dailyTaskTemplateRepository;
+        this.taskTemplateRepository = taskTemplateRepository;
     }
 
     @Transactional(readOnly = true)
@@ -459,10 +459,10 @@ public class StockService {
                     "This tag is assigned to a Knowledge SOP and cannot be deleted."
             );
         }
-        if (dailyTaskTemplateRepository.existsByTenantIdAndTagId(principal.tenantId(), tagId)) {
+        if (taskTemplateRepository.existsByTenantIdAndTagId(principal.tenantId(), tagId)) {
             throw conflict(
-                    "STOCK_TAG_IN_USE_BY_DAILY_TASK",
-                    "This tag belongs to a Daily Task and cannot be deleted."
+                    "STOCK_TAG_IN_USE_BY_TASK",
+                    "This tag belongs to a Task and cannot be deleted."
             );
         }
         auditRepository.save(new StockAuditEntry(

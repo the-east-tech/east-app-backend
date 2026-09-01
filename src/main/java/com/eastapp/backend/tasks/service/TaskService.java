@@ -15,29 +15,30 @@ import com.eastapp.backend.reports.service.ReportMediaService;
 import com.eastapp.backend.stock.StockTag;
 import com.eastapp.backend.stock.StockTagAssigneeRepository;
 import com.eastapp.backend.stock.StockTagRepository;
-import com.eastapp.backend.tasks.DailyTaskAuditEntry;
-import com.eastapp.backend.tasks.DailyTaskAuditEntryRepository;
-import com.eastapp.backend.tasks.DailyTaskPhoto;
-import com.eastapp.backend.tasks.DailyTaskPhotoRepository;
-import com.eastapp.backend.tasks.DailyTaskRecord;
-import com.eastapp.backend.tasks.DailyTaskRecordChecklistItem;
-import com.eastapp.backend.tasks.DailyTaskRecordChecklistItemRepository;
-import com.eastapp.backend.tasks.DailyTaskRecordRepository;
-import com.eastapp.backend.tasks.DailyTaskStatus;
-import com.eastapp.backend.tasks.DailyTaskTemplate;
-import com.eastapp.backend.tasks.DailyTaskTemplateChecklistItem;
-import com.eastapp.backend.tasks.DailyTaskTemplateChecklistItemRepository;
-import com.eastapp.backend.tasks.DailyTaskTemplateRepository;
-import com.eastapp.backend.tasks.api.DailyTaskAuditResponse;
-import com.eastapp.backend.tasks.api.DailyTaskChecklistItemResponse;
-import com.eastapp.backend.tasks.api.DailyTaskListResponse;
-import com.eastapp.backend.tasks.api.DailyTaskOverviewResponse;
-import com.eastapp.backend.tasks.api.DailyTaskPersonResponse;
-import com.eastapp.backend.tasks.api.DailyTaskPhotoResponse;
-import com.eastapp.backend.tasks.api.DailyTaskRecordResponse;
-import com.eastapp.backend.tasks.api.DailyTaskTemplateResponse;
-import com.eastapp.backend.tasks.api.RateDailyTaskRequest;
-import com.eastapp.backend.tasks.api.UpsertDailyTaskTemplateRequest;
+import com.eastapp.backend.tasks.TaskAuditEntry;
+import com.eastapp.backend.tasks.TaskAuditEntryRepository;
+import com.eastapp.backend.tasks.TaskPhoto;
+import com.eastapp.backend.tasks.TaskPhotoRepository;
+import com.eastapp.backend.tasks.TaskRecord;
+import com.eastapp.backend.tasks.TaskRecordChecklistItem;
+import com.eastapp.backend.tasks.TaskRecordChecklistItemRepository;
+import com.eastapp.backend.tasks.TaskRecordRepository;
+import com.eastapp.backend.tasks.TaskScheduleType;
+import com.eastapp.backend.tasks.TaskStatus;
+import com.eastapp.backend.tasks.TaskTemplate;
+import com.eastapp.backend.tasks.TaskTemplateChecklistItem;
+import com.eastapp.backend.tasks.TaskTemplateChecklistItemRepository;
+import com.eastapp.backend.tasks.TaskTemplateRepository;
+import com.eastapp.backend.tasks.api.TaskAuditResponse;
+import com.eastapp.backend.tasks.api.TaskChecklistItemResponse;
+import com.eastapp.backend.tasks.api.TaskListResponse;
+import com.eastapp.backend.tasks.api.TaskOverviewResponse;
+import com.eastapp.backend.tasks.api.TaskPersonResponse;
+import com.eastapp.backend.tasks.api.TaskPhotoResponse;
+import com.eastapp.backend.tasks.api.TaskRecordResponse;
+import com.eastapp.backend.tasks.api.TaskTemplateResponse;
+import com.eastapp.backend.tasks.api.RateTaskRequest;
+import com.eastapp.backend.tasks.api.UpsertTaskTemplateRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,16 +58,16 @@ import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
-public class DailyTaskService {
+public class TaskService {
     private static final int MAX_CONFIRMED_PHOTOS_PER_TASK = 40;
     private static final int MAX_HISTORY_RANGE_DAYS = 30;
 
-    private final DailyTaskTemplateRepository templateRepository;
-    private final DailyTaskTemplateChecklistItemRepository templateChecklistRepository;
-    private final DailyTaskRecordRepository recordRepository;
-    private final DailyTaskRecordChecklistItemRepository recordChecklistRepository;
-    private final DailyTaskPhotoRepository photoRepository;
-    private final DailyTaskAuditEntryRepository auditRepository;
+    private final TaskTemplateRepository templateRepository;
+    private final TaskTemplateChecklistItemRepository templateChecklistRepository;
+    private final TaskRecordRepository recordRepository;
+    private final TaskRecordChecklistItemRepository recordChecklistRepository;
+    private final TaskPhotoRepository photoRepository;
+    private final TaskAuditEntryRepository auditRepository;
     private final StockTagRepository tagRepository;
     private final StockTagAssigneeRepository tagAssigneeRepository;
     private final UserAccountRepository userRepository;
@@ -74,15 +75,15 @@ public class DailyTaskService {
     private final ReportMediaRepository mediaRepository;
     private final ReportMediaService mediaService;
     private final ReportProperties reportProperties;
-    private final DailyTaskAccessPolicy accessPolicy;
+    private final TaskAccessPolicy accessPolicy;
 
-    public DailyTaskService(
-            DailyTaskTemplateRepository templateRepository,
-            DailyTaskTemplateChecklistItemRepository templateChecklistRepository,
-            DailyTaskRecordRepository recordRepository,
-            DailyTaskRecordChecklistItemRepository recordChecklistRepository,
-            DailyTaskPhotoRepository photoRepository,
-            DailyTaskAuditEntryRepository auditRepository,
+    public TaskService(
+            TaskTemplateRepository templateRepository,
+            TaskTemplateChecklistItemRepository templateChecklistRepository,
+            TaskRecordRepository recordRepository,
+            TaskRecordChecklistItemRepository recordChecklistRepository,
+            TaskPhotoRepository photoRepository,
+            TaskAuditEntryRepository auditRepository,
             StockTagRepository tagRepository,
             StockTagAssigneeRepository tagAssigneeRepository,
             UserAccountRepository userRepository,
@@ -90,7 +91,7 @@ public class DailyTaskService {
             ReportMediaRepository mediaRepository,
             ReportMediaService mediaService,
             ReportProperties reportProperties,
-            DailyTaskAccessPolicy accessPolicy
+            TaskAccessPolicy accessPolicy
     ) {
         this.templateRepository = templateRepository;
         this.templateChecklistRepository = templateChecklistRepository;
@@ -108,7 +109,7 @@ public class DailyTaskService {
         this.accessPolicy = accessPolicy;
     }
 
-    public List<DailyTaskTemplateResponse> templates(AuthenticatedUser principal) {
+    public List<TaskTemplateResponse> templates(AuthenticatedUser principal) {
         requireManagement(principal);
         return templateRepository.findAllByTenantIdOrderByActiveDescTitleAsc(principal.tenantId())
                 .stream()
@@ -117,33 +118,40 @@ public class DailyTaskService {
     }
 
     @Transactional
-    public DailyTaskTemplateResponse createTemplate(
+    public TaskTemplateResponse createTemplate(
             AuthenticatedUser principal,
-            UpsertDailyTaskTemplateRequest request
+            UpsertTaskTemplateRequest request
     ) {
         requireManagement(principal);
+        validateTemplateSchedule(request);
         StockTag tag = requireTag(principal.tenantId(), request.tagId());
         UserAccount actor = requireUser(principal.tenantId(), principal.userId());
-        DailyTaskTemplate template = templateRepository.saveAndFlush(new DailyTaskTemplate(
+        TaskTemplate template = templateRepository.saveAndFlush(new TaskTemplate(
                 principal.tenantId(),
                 tag.getId(),
                 request.title(),
                 request.instruction(),
                 request.requiredPhotoCount(),
+                request.scheduleType(),
+                request.firstTaskDate(),
+                request.endDate(),
                 request.active(),
                 actor.getId()
         ));
         saveTemplateChecklist(principal.tenantId(), template.getId(), request.checklistItems());
-        auditRepository.save(new DailyTaskAuditEntry(
+        auditRepository.save(new TaskAuditEntry(
                 principal.tenantId(), template.getId(), null, actor.getId(),
                 "TEMPLATE_CREATED",
                 "Tag: " + tag.getTag()
                         + "; title: " + template.getTitle()
+                        + "; schedule: " + template.getScheduleType()
+                        + "; first task date: " + template.getFirstTaskDate()
+                        + "; end date: " + (template.getEndDate() == null ? "none" : template.getEndDate())
                         + "; required photos: " + template.getRequiredPhotoCount()
                         + "; checklist items: " + request.checklistItems().size()
                         + "; active: " + template.isActive()
         ));
-        if (template.isActive()) {
+        if (template.isActive() && template.isScheduledFor(today())) {
             lockTenant(principal.tenantId());
             materialiseTemplate(template, today(), tag);
         }
@@ -151,28 +159,32 @@ public class DailyTaskService {
     }
 
     @Transactional
-    public DailyTaskTemplateResponse updateTemplate(
+    public TaskTemplateResponse updateTemplate(
             AuthenticatedUser principal,
             UUID templateId,
-            UpsertDailyTaskTemplateRequest request
+            UpsertTaskTemplateRequest request
     ) {
         requireManagement(principal);
-        DailyTaskTemplate template = requireTemplate(principal.tenantId(), templateId);
+        validateTemplateSchedule(request);
+        TaskTemplate template = requireTemplate(principal.tenantId(), templateId);
         StockTag previousTag = requireTag(principal.tenantId(), template.getTagId());
         String previousTitle = template.getTitle();
         String previousInstruction = template.getInstruction();
         int previousPhotoCount = template.getRequiredPhotoCount();
+        String previousSchedule = template.getScheduleType().name();
+        LocalDate previousFirstTaskDate = template.getFirstTaskDate();
+        LocalDate previousEndDate = template.getEndDate();
         boolean previousActive = template.isActive();
         List<String> previousChecklist = templateChecklistRepository
                 .findAllByTenantIdAndTemplateIdOrderByPositionAsc(
                         principal.tenantId(), templateId
                 )
                 .stream()
-                .map(DailyTaskTemplateChecklistItem::getDescription)
+                .map(TaskTemplateChecklistItem::getDescription)
                 .toList();
         // Freeze today's version before changing the template. Edits affect the
         // next business date, while a newly-created template starts today.
-        if (template.isActive()) {
+        if (template.isActive() && template.isScheduledFor(today())) {
             lockTenant(principal.tenantId());
             materialiseTemplate(template, today(), previousTag);
         }
@@ -183,6 +195,9 @@ public class DailyTaskService {
                 request.title(),
                 request.instruction(),
                 request.requiredPhotoCount(),
+                request.scheduleType(),
+                request.firstTaskDate(),
+                request.endDate(),
                 request.active(),
                 principal.userId()
         );
@@ -191,7 +206,7 @@ public class DailyTaskService {
         );
         templateChecklistRepository.flush();
         saveTemplateChecklist(principal.tenantId(), templateId, request.checklistItems());
-        auditRepository.save(new DailyTaskAuditEntry(
+        auditRepository.save(new TaskAuditEntry(
                 principal.tenantId(), templateId, null, principal.userId(),
                 "TEMPLATE_UPDATED",
                 "Tag: " + previousTag.getTag() + " -> " + nextTag.getTag()
@@ -200,6 +215,12 @@ public class DailyTaskService {
                         + !previousInstruction.equals(template.getInstruction())
                         + "; required photos: " + previousPhotoCount
                         + " -> " + template.getRequiredPhotoCount()
+                        + "; schedule: " + previousSchedule
+                        + " -> " + template.getScheduleType()
+                        + "; first task date: " + previousFirstTaskDate
+                        + " -> " + template.getFirstTaskDate()
+                        + "; end date: " + (previousEndDate == null ? "none" : previousEndDate)
+                        + " -> " + (template.getEndDate() == null ? "none" : template.getEndDate())
                         + "; checklist changed: "
                         + !previousChecklist.equals(request.checklistItems().stream()
                                 .map(String::trim).toList())
@@ -209,13 +230,13 @@ public class DailyTaskService {
     }
 
     @Transactional
-    public DailyTaskListResponse records(
+    public TaskListResponse records(
             AuthenticatedUser principal,
             LocalDate requestedDate,
             LocalDate requestedFrom,
             LocalDate requestedTo,
             UUID tagId,
-            DailyTaskStatus status,
+            TaskStatus status,
             boolean submittedByMe
     ) {
         requireTaskView(principal);
@@ -236,7 +257,7 @@ public class DailyTaskService {
             materialiseActiveTemplates(principal.tenantId(), today);
         }
 
-        List<DailyTaskRecord> records = recordRepository
+        List<TaskRecord> records = recordRepository
                 .findAllByTenantIdAndTaskDateBetweenOrderByTaskDateDescTagNameAscTitleAsc(
                         principal.tenantId(), dateFrom, dateTo
                 );
@@ -245,7 +266,7 @@ public class DailyTaskService {
                 : assignedTagIds(principal);
         boolean oversight = accessPolicy.canOversee(principal.systemRole());
 
-        List<DailyTaskRecord> visible = records.stream()
+        List<TaskRecord> visible = records.stream()
                 .filter(record -> tagId == null || tagId.equals(record.getTagId()))
                 .filter(record -> status == null || status == record.getStatus())
                 .filter(record -> !submittedByMe
@@ -257,7 +278,7 @@ public class DailyTaskService {
                             && assignedTagIds.contains(record.getTagId()))
                 .toList();
 
-        return new DailyTaskListResponse(
+        return new TaskListResponse(
                 dateTo,
                 dateFrom,
                 dateTo,
@@ -267,12 +288,12 @@ public class DailyTaskService {
     }
 
     @Transactional
-    public DailyTaskOverviewResponse overview(AuthenticatedUser principal, LocalDate requestedDate) {
+    public TaskOverviewResponse overview(AuthenticatedUser principal, LocalDate requestedDate) {
         requireTaskView(principal);
         LocalDate date = requestedDate == null ? today() : requestedDate;
         validateDate(date);
         if (date.equals(today())) materialiseActiveTemplates(principal.tenantId(), date);
-        List<DailyTaskRecord> records = recordRepository
+        List<TaskRecord> records = recordRepository
                 .findAllByTenantIdAndTaskDateOrderByTagNameAscTitleAsc(principal.tenantId(), date);
 
         if (!accessPolicy.canOversee(principal.systemRole()) && !principal.isOwner()) {
@@ -284,55 +305,55 @@ public class DailyTaskService {
         return overviewOf(records);
     }
 
-    public DailyTaskRecordResponse record(AuthenticatedUser principal, UUID recordId) {
+    public TaskRecordResponse record(AuthenticatedUser principal, UUID recordId) {
         requireTaskView(principal);
-        DailyTaskRecord record = requireRecord(principal.tenantId(), recordId);
+        TaskRecord record = requireRecord(principal.tenantId(), recordId);
         requireCanView(principal, record);
         return toRecordResponse(principal, record);
     }
 
     @Transactional
-    public DailyTaskRecordResponse submit(
+    public TaskRecordResponse submit(
             AuthenticatedUser principal,
             UUID recordId,
             String completedChecklistItemIds,
             List<MultipartFile> photos
     ) {
         requireTaskContribution(principal);
-        DailyTaskRecord record = requireRecordForUpdate(principal.tenantId(), recordId);
-        if (record.getStatus() != DailyTaskStatus.PENDING) {
+        TaskRecord record = requireRecordForUpdate(principal.tenantId(), recordId);
+        if (record.getStatus() != TaskStatus.PENDING) {
             requireCanView(principal, record);
             String submitter = record.getSubmittedByUserId() == null
                     ? "another user"
                     : requireUser(principal.tenantId(), record.getSubmittedByUserId()).getFullName();
             throw conflict(
-                    "DAILY_TASK_ALREADY_SUBMITTED",
+                    "TASK_ALREADY_SUBMITTED",
                     "This task has already been submitted by " + submitter + "."
             );
         }
         requireCanContribute(principal, record);
-        List<DailyTaskRecordChecklistItem> checks = recordChecklistRepository
+        List<TaskRecordChecklistItem> checks = recordChecklistRepository
                 .findAllByTenantIdAndRecordIdOrderByPositionAsc(principal.tenantId(), recordId);
         Set<UUID> completedIds = parseChecklistItemIds(completedChecklistItemIds);
         Set<UUID> requiredIds = checks.stream()
-                .map(DailyTaskRecordChecklistItem::getId)
+                .map(TaskRecordChecklistItem::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (checks.isEmpty() || !completedIds.equals(requiredIds)) {
             throw badRequest(
-                    "DAILY_TASK_CHECKLIST_INCOMPLETE",
+                    "TASK_CHECKLIST_INCOMPLETE",
                     "Complete every checklist item before submitting."
             );
         }
         if (photos.size() < record.getRequiredPhotoCount()) {
             throw badRequest(
-                    "DAILY_TASK_PHOTOS_INCOMPLETE",
+                    "TASK_PHOTOS_INCOMPLETE",
                     "Take at least " + record.getRequiredPhotoCount() + " confirmed photos before submitting."
             );
         }
         if (photos.size() > MAX_CONFIRMED_PHOTOS_PER_TASK) {
             throw badRequest(
-                    "DAILY_TASK_PHOTO_LIMIT",
-                    "A Daily Task may contain at most " + MAX_CONFIRMED_PHOTOS_PER_TASK + " photos."
+                    "TASK_PHOTO_LIMIT",
+                    "A Task may contain at most " + MAX_CONFIRMED_PHOTOS_PER_TASK + " photos."
             );
         }
 
@@ -340,17 +361,17 @@ public class DailyTaskService {
         checks.forEach(item -> item.setCompleted(true, principal.userId(), submittedAt));
         recordChecklistRepository.saveAll(checks);
 
-        List<DailyTaskPhoto> selectedPhotos = new ArrayList<>();
+        List<TaskPhoto> selectedPhotos = new ArrayList<>();
         for (MultipartFile file : photos) {
             ReportMedia media = mediaService.saveImageEntity(principal, file);
-            selectedPhotos.add(new DailyTaskPhoto(
+            selectedPhotos.add(new TaskPhoto(
                     principal.tenantId(), recordId, media.getId(), principal.userId()
             ));
         }
         photoRepository.saveAllAndFlush(selectedPhotos);
 
         record.submit(principal.userId(), principal.systemRole(), submittedAt);
-        auditRepository.save(new DailyTaskAuditEntry(
+        auditRepository.save(new TaskAuditEntry(
                 principal.tenantId(), record.getTemplateId(), recordId, principal.userId(),
                 "TASK_SUBMITTED",
                 "Final evidence stored: " + checks.size() + " checklist item(s), "
@@ -360,25 +381,25 @@ public class DailyTaskService {
     }
 
     @Transactional
-    public DailyTaskRecordResponse rate(
+    public TaskRecordResponse rate(
             AuthenticatedUser principal,
             UUID recordId,
-            RateDailyTaskRequest request
+            RateTaskRequest request
     ) {
         requireTaskRating(principal);
-        DailyTaskRecord record = requireRecordForUpdate(principal.tenantId(), recordId);
-        if (record.getStatus() != DailyTaskStatus.SUBMITTED) {
-            throw conflict("DAILY_TASK_NOT_SUBMITTED", "Only a submitted task may be rated.");
+        TaskRecord record = requireRecordForUpdate(principal.tenantId(), recordId);
+        if (record.getStatus() != TaskStatus.SUBMITTED) {
+            throw conflict("TASK_NOT_SUBMITTED", "Only a submitted task may be rated.");
         }
         if (!accessPolicy.canRate(principal.systemRole(), record.getSubmittedByRole())) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
-                    "DAILY_TASK_RATING_RANK_REQUIRED",
+                    "TASK_RATING_RANK_REQUIRED",
                     "Only a higher-ranked Manager, Head or Owner may rate this submission."
             );
         }
         record.rate(request.rating(), request.comment(), principal.userId(), Instant.now());
-        auditRepository.save(new DailyTaskAuditEntry(
+        auditRepository.save(new TaskAuditEntry(
                 principal.tenantId(), record.getTemplateId(), recordId, principal.userId(),
                 "TASK_RATED", request.rating() + " star(s): " + request.comment().trim()
         ));
@@ -386,17 +407,21 @@ public class DailyTaskService {
     }
 
     private void materialiseActiveTemplates(UUID tenantId, LocalDate date) {
-        List<DailyTaskTemplate> templates = templateRepository
-                .findAllByTenantIdAndActiveTrueOrderByTitleAsc(tenantId);
+        List<TaskTemplate> templates = templateRepository
+                .findAllByTenantIdAndActiveTrueOrderByTitleAsc(tenantId)
+                .stream()
+                .filter(template -> template.isScheduledFor(date))
+                .toList();
+        if (templates.isEmpty()) return;
         Set<UUID> existing = recordRepository
                 .findAllByTenantIdAndTaskDateOrderByTagNameAscTitleAsc(tenantId, date)
                 .stream()
-                .map(DailyTaskRecord::getTemplateId)
+                .map(TaskRecord::getTemplateId)
                 .collect(Collectors.toSet());
         if (templates.stream().allMatch(template -> existing.contains(template.getId()))) return;
 
         lockTenant(tenantId);
-        for (DailyTaskTemplate template : templates) {
+        for (TaskTemplate template : templates) {
             if (recordRepository.findByTenantIdAndTemplateIdAndTaskDate(
                     tenantId, template.getId(), date
             ).isEmpty()) {
@@ -405,8 +430,8 @@ public class DailyTaskService {
         }
     }
 
-    private DailyTaskRecord materialiseTemplate(
-            DailyTaskTemplate template,
+    private TaskRecord materialiseTemplate(
+            TaskTemplate template,
             LocalDate date,
             StockTag tag
     ) {
@@ -414,15 +439,15 @@ public class DailyTaskService {
                         template.getTenantId(), template.getId(), date
                 )
                 .orElseGet(() -> {
-                    DailyTaskRecord saved = recordRepository.saveAndFlush(
-                            new DailyTaskRecord(template, date, tag.getTag())
+                    TaskRecord saved = recordRepository.saveAndFlush(
+                            new TaskRecord(template, date, tag.getTag())
                     );
-                    List<DailyTaskTemplateChecklistItem> templateChecks = templateChecklistRepository
+                    List<TaskTemplateChecklistItem> templateChecks = templateChecklistRepository
                             .findAllByTenantIdAndTemplateIdOrderByPositionAsc(
                                     template.getTenantId(), template.getId()
                             );
                     recordChecklistRepository.saveAll(templateChecks.stream()
-                            .map(item -> new DailyTaskRecordChecklistItem(
+                            .map(item -> new TaskRecordChecklistItem(
                                     template.getTenantId(),
                                     saved.getId(),
                                     item.getPosition(),
@@ -441,40 +466,43 @@ public class DailyTaskService {
     private void saveTemplateChecklist(UUID tenantId, UUID templateId, List<String> items) {
         if (items == null || items.isEmpty() || items.size() > 5) {
             throw badRequest(
-                    "DAILY_TASK_CHECKLIST_SIZE",
-                    "A daily task requires between 1 and 5 checklist items."
+                    "TASK_CHECKLIST_SIZE",
+                    "A task requires between 1 and 5 checklist items."
             );
         }
-        List<DailyTaskTemplateChecklistItem> entities = new ArrayList<>();
+        List<TaskTemplateChecklistItem> entities = new ArrayList<>();
         for (int index = 0; index < items.size(); index++) {
             String description = items.get(index) == null ? "" : items.get(index).trim();
             if (description.isEmpty()) {
                 throw badRequest(
-                        "DAILY_TASK_CHECKLIST_DESCRIPTION_REQUIRED",
+                        "TASK_CHECKLIST_DESCRIPTION_REQUIRED",
                         "Every checklist item needs a description."
                 );
             }
-            entities.add(new DailyTaskTemplateChecklistItem(
+            entities.add(new TaskTemplateChecklistItem(
                     tenantId, templateId, index, description
             ));
         }
         templateChecklistRepository.saveAll(entities);
     }
 
-    private DailyTaskTemplateResponse toTemplateResponse(UUID tenantId, DailyTaskTemplate template) {
+    private TaskTemplateResponse toTemplateResponse(UUID tenantId, TaskTemplate template) {
         StockTag tag = requireTag(tenantId, template.getTagId());
         List<String> checks = templateChecklistRepository
                 .findAllByTenantIdAndTemplateIdOrderByPositionAsc(tenantId, template.getId())
                 .stream()
-                .map(DailyTaskTemplateChecklistItem::getDescription)
+                .map(TaskTemplateChecklistItem::getDescription)
                 .toList();
-        return new DailyTaskTemplateResponse(
+        return new TaskTemplateResponse(
                 template.getId(),
                 template.getTagId(),
                 tag.getTag(),
                 template.getTitle(),
                 template.getInstruction(),
                 template.getRequiredPhotoCount(),
+                template.getScheduleType(),
+                template.getFirstTaskDate(),
+                template.getEndDate(),
                 checks,
                 template.isActive(),
                 person(tenantId, template.getCreatedByUserId()),
@@ -491,9 +519,9 @@ public class DailyTaskService {
         );
     }
 
-    private DailyTaskRecordResponse toRecordResponse(
+    private TaskRecordResponse toRecordResponse(
             AuthenticatedUser principal,
-            DailyTaskRecord record
+            TaskRecord record
     ) {
         Set<UUID> assignedTagIds = principal.isOwner()
                 ? Set.of()
@@ -501,59 +529,59 @@ public class DailyTaskService {
         return toRecordResponses(principal, List.of(record), assignedTagIds).getFirst();
     }
 
-    private List<DailyTaskRecordResponse> toRecordResponses(
+    private List<TaskRecordResponse> toRecordResponses(
             AuthenticatedUser principal,
-            List<DailyTaskRecord> records,
+            List<TaskRecord> records,
             Set<UUID> assignedTagIds
     ) {
         if (records.isEmpty()) return List.of();
         UUID tenantId = principal.tenantId();
         Set<UUID> recordIds = records.stream()
-                .map(DailyTaskRecord::getId)
+                .map(TaskRecord::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        Map<UUID, List<DailyTaskRecordChecklistItem>> checksByRecord = new HashMap<>();
-        for (DailyTaskRecordChecklistItem item : recordChecklistRepository
+        Map<UUID, List<TaskRecordChecklistItem>> checksByRecord = new HashMap<>();
+        for (TaskRecordChecklistItem item : recordChecklistRepository
                 .findAllByTenantIdAndRecordIdIn(tenantId, recordIds)) {
             checksByRecord.computeIfAbsent(item.getRecordId(), ignored -> new ArrayList<>())
                     .add(item);
         }
         checksByRecord.values().forEach(items -> items.sort(
-                Comparator.comparingInt(DailyTaskRecordChecklistItem::getPosition)
-                        .thenComparing(DailyTaskRecordChecklistItem::getId)
+                Comparator.comparingInt(TaskRecordChecklistItem::getPosition)
+                        .thenComparing(TaskRecordChecklistItem::getId)
         ));
 
-        Map<UUID, List<DailyTaskPhoto>> photosByRecord = new HashMap<>();
-        for (DailyTaskPhoto photo : photoRepository
+        Map<UUID, List<TaskPhoto>> photosByRecord = new HashMap<>();
+        for (TaskPhoto photo : photoRepository
                 .findAllByTenantIdAndRecordIdIn(tenantId, recordIds)) {
             photosByRecord.computeIfAbsent(photo.getRecordId(), ignored -> new ArrayList<>())
                     .add(photo);
         }
         photosByRecord.values().forEach(items -> items.sort(
                 Comparator.comparing(
-                                DailyTaskPhoto::getSubmittedAt,
+                                TaskPhoto::getSubmittedAt,
                                 Comparator.nullsLast(Comparator.naturalOrder())
                         )
-                        .thenComparing(DailyTaskPhoto::getId)
+                        .thenComparing(TaskPhoto::getId)
         ));
 
-        Map<UUID, List<DailyTaskAuditEntry>> activityByRecord = new HashMap<>();
-        for (DailyTaskAuditEntry entry : auditRepository
+        Map<UUID, List<TaskAuditEntry>> activityByRecord = new HashMap<>();
+        for (TaskAuditEntry entry : auditRepository
                 .findAllByTenantIdAndRecordIdIn(tenantId, recordIds)) {
             activityByRecord.computeIfAbsent(entry.getRecordId(), ignored -> new ArrayList<>())
                     .add(entry);
         }
         activityByRecord.values().forEach(items -> items.sort(
                 Comparator.comparing(
-                                DailyTaskAuditEntry::getOccurredAt,
+                                TaskAuditEntry::getOccurredAt,
                                 Comparator.nullsLast(Comparator.naturalOrder())
                         )
-                        .thenComparing(DailyTaskAuditEntry::getId)
+                        .thenComparing(TaskAuditEntry::getId)
         ));
 
         List<UUID> mediaIds = photosByRecord.values().stream()
                 .flatMap(List::stream)
-                .map(DailyTaskPhoto::getPhotoMediaId)
+                .map(TaskPhoto::getPhotoMediaId)
                 .distinct()
                 .toList();
         Map<UUID, String> storageKeyByMediaId = mediaIds.isEmpty()
@@ -566,22 +594,22 @@ public class DailyTaskService {
                         ));
 
         Set<UUID> userIds = new LinkedHashSet<>();
-        for (DailyTaskRecord record : records) {
+        for (TaskRecord record : records) {
             if (record.getSubmittedByUserId() != null) userIds.add(record.getSubmittedByUserId());
             if (record.getRatedByUserId() != null) userIds.add(record.getRatedByUserId());
         }
         checksByRecord.values().stream()
                 .flatMap(List::stream)
-                .map(DailyTaskRecordChecklistItem::getCompletedByUserId)
+                .map(TaskRecordChecklistItem::getCompletedByUserId)
                 .filter(java.util.Objects::nonNull)
                 .forEach(userIds::add);
         photosByRecord.values().stream()
                 .flatMap(List::stream)
-                .map(DailyTaskPhoto::getSubmittedByUserId)
+                .map(TaskPhoto::getSubmittedByUserId)
                 .forEach(userIds::add);
         activityByRecord.values().stream()
                 .flatMap(List::stream)
-                .map(DailyTaskAuditEntry::getActorUserId)
+                .map(TaskAuditEntry::getActorUserId)
                 .forEach(userIds::add);
         Map<UUID, UserAccount> usersById = userIds.isEmpty()
                 ? Map.of()
@@ -589,11 +617,11 @@ public class DailyTaskService {
                         .stream()
                         .collect(Collectors.toMap(UserAccount::getId, user -> user));
 
-        List<DailyTaskRecordResponse> responses = new ArrayList<>(records.size());
-        for (DailyTaskRecord record : records) {
-            List<DailyTaskRecordChecklistItem> checks = checksByRecord
+        List<TaskRecordResponse> responses = new ArrayList<>(records.size());
+        for (TaskRecord record : records) {
+            List<TaskRecordChecklistItem> checks = checksByRecord
                     .getOrDefault(record.getId(), List.of());
-            List<DailyTaskPhoto> photos = photosByRecord
+            List<TaskPhoto> photos = photosByRecord
                     .getOrDefault(record.getId(), List.of());
             responses.add(toRecordResponse(
                     principal,
@@ -609,26 +637,26 @@ public class DailyTaskService {
         return List.copyOf(responses);
     }
 
-    private DailyTaskRecordResponse toRecordResponse(
+    private TaskRecordResponse toRecordResponse(
             AuthenticatedUser principal,
-            DailyTaskRecord record,
-            List<DailyTaskRecordChecklistItem> checks,
-            List<DailyTaskPhoto> photos,
-            List<DailyTaskAuditEntry> activity,
+            TaskRecord record,
+            List<TaskRecordChecklistItem> checks,
+            List<TaskPhoto> photos,
+            List<TaskAuditEntry> activity,
             Map<UUID, String> storageKeyByMediaId,
             Map<UUID, UserAccount> usersById,
             Set<UUID> assignedTagIds
     ) {
         boolean requirementsMet = photos.size() >= record.getRequiredPhotoCount()
                 && !checks.isEmpty()
-                && checks.stream().allMatch(DailyTaskRecordChecklistItem::isCompleted);
-        boolean canContribute = record.getStatus() == DailyTaskStatus.PENDING
+                && checks.stream().allMatch(TaskRecordChecklistItem::isCompleted);
+        boolean canContribute = record.getStatus() == TaskStatus.PENDING
                 && (principal.isOwner() || assignedTagIds.contains(record.getTagId()));
-        boolean canRate = record.getStatus() == DailyTaskStatus.SUBMITTED
+        boolean canRate = record.getStatus() == TaskStatus.SUBMITTED
                 && accessPolicy.canRate(principal.systemRole(), record.getSubmittedByRole());
 
-        List<DailyTaskChecklistItemResponse> checkResponses = checks.stream()
-                .map(item -> new DailyTaskChecklistItemResponse(
+        List<TaskChecklistItemResponse> checkResponses = checks.stream()
+                .map(item -> new TaskChecklistItemResponse(
                         item.getId(),
                         item.getPosition(),
                         item.getDescription(),
@@ -637,16 +665,16 @@ public class DailyTaskService {
                         item.getCompletedAt()
                 ))
                 .toList();
-        List<DailyTaskPhotoResponse> photoResponses = photos.stream()
+        List<TaskPhotoResponse> photoResponses = photos.stream()
                 .map(photo -> {
                     String storageKey = storageKeyByMediaId.get(photo.getPhotoMediaId());
                     if (storageKey == null) {
                         throw notFound(
-                                    "DAILY_TASK_PHOTO_MEDIA_NOT_FOUND",
+                                    "TASK_PHOTO_MEDIA_NOT_FOUND",
                                     "A confirmed task photo was not found."
                         );
                     }
-                    return new DailyTaskPhotoResponse(
+                    return new TaskPhotoResponse(
                             photo.getId(),
                             storageKey,
                             person(usersById, photo.getSubmittedByUserId()),
@@ -654,10 +682,10 @@ public class DailyTaskService {
                     );
                 })
                 .toList();
-        List<DailyTaskAuditResponse> activityResponses = activity.stream()
+        List<TaskAuditResponse> activityResponses = activity.stream()
                 .map(entry -> toAuditResponse(usersById, entry))
                 .toList();
-        return new DailyTaskRecordResponse(
+        return new TaskRecordResponse(
                 record.getId(),
                 record.getTemplateId(),
                 record.getTagId(),
@@ -666,6 +694,7 @@ public class DailyTaskService {
                 record.getTitle(),
                 record.getInstruction(),
                 record.getRequiredPhotoCount(),
+                record.getScheduleType(),
                 photoResponses.size(),
                 record.getStatus(),
                 checkResponses,
@@ -684,18 +713,18 @@ public class DailyTaskService {
         );
     }
 
-    private DailyTaskOverviewResponse overviewOf(List<DailyTaskRecord> records) {
+    private TaskOverviewResponse overviewOf(List<TaskRecord> records) {
         int pending = 0;
         int submitted = 0;
         int done = 0;
-        for (DailyTaskRecord record : records) {
+        for (TaskRecord record : records) {
             switch (record.getStatus()) {
                 case PENDING -> pending++;
                 case SUBMITTED -> submitted++;
                 case DONE -> done++;
             }
         }
-        return new DailyTaskOverviewResponse(records.size(), pending, submitted, done);
+        return new TaskOverviewResponse(records.size(), pending, submitted, done);
     }
 
     private Set<UUID> assignedTagIds(AuthenticatedUser principal) {
@@ -706,23 +735,23 @@ public class DailyTaskService {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    private boolean canContribute(AuthenticatedUser principal, DailyTaskRecord record) {
+    private boolean canContribute(AuthenticatedUser principal, TaskRecord record) {
         return principal.isOwner() || tagAssigneeRepository.existsByTenantIdAndTagIdAndUserId(
                 principal.tenantId(), record.getTagId(), principal.userId()
         );
     }
 
-    private void requireCanContribute(AuthenticatedUser principal, DailyTaskRecord record) {
+    private void requireCanContribute(AuthenticatedUser principal, TaskRecord record) {
         if (!canContribute(principal, record)) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
-                    "DAILY_TASK_TAG_ACCESS_REQUIRED",
+                    "TASK_TAG_ACCESS_REQUIRED",
                     "Only users assigned to this task's tag may contribute or submit."
             );
         }
     }
 
-    private void requireCanView(AuthenticatedUser principal, DailyTaskRecord record) {
+    private void requireCanView(AuthenticatedUser principal, TaskRecord record) {
         if (accessPolicy.canOversee(principal.systemRole())
                 || principal.isOwner()
                 || principal.userId().equals(record.getSubmittedByUserId())
@@ -731,8 +760,8 @@ public class DailyTaskService {
         }
         throw new ApiException(
                 HttpStatus.FORBIDDEN,
-                "DAILY_TASK_VIEW_DENIED",
-                "This daily task is not available to the current user."
+                "TASK_VIEW_DENIED",
+                "This task is not available to the current user."
         );
     }
 
@@ -743,7 +772,7 @@ public class DailyTaskService {
             String itemId = rawId.trim();
             if (itemId.isEmpty()) {
                 throw badRequest(
-                        "DAILY_TASK_CHECKLIST_INVALID",
+                        "TASK_CHECKLIST_INVALID",
                         "The submitted checklist is invalid."
                 );
             }
@@ -752,13 +781,13 @@ public class DailyTaskService {
                 id = UUID.fromString(itemId);
             } catch (IllegalArgumentException exception) {
                 throw badRequest(
-                        "DAILY_TASK_CHECKLIST_INVALID",
+                        "TASK_CHECKLIST_INVALID",
                         "The submitted checklist is invalid."
                 );
             }
             if (!ids.add(id)) {
                 throw badRequest(
-                        "DAILY_TASK_CHECKLIST_INVALID",
+                        "TASK_CHECKLIST_INVALID",
                         "The submitted checklist contains a duplicate item."
                 );
             }
@@ -766,19 +795,19 @@ public class DailyTaskService {
         return ids;
     }
 
-    private DailyTaskTemplate requireTemplate(UUID tenantId, UUID templateId) {
+    private TaskTemplate requireTemplate(UUID tenantId, UUID templateId) {
         return templateRepository.findByIdAndTenantId(templateId, tenantId)
-                .orElseThrow(() -> notFound("DAILY_TASK_TEMPLATE_NOT_FOUND", "Daily task template was not found."));
+                .orElseThrow(() -> notFound("TASK_TEMPLATE_NOT_FOUND", "Task template was not found."));
     }
 
-    private DailyTaskRecord requireRecord(UUID tenantId, UUID recordId) {
+    private TaskRecord requireRecord(UUID tenantId, UUID recordId) {
         return recordRepository.findByIdAndTenantId(recordId, tenantId)
-                .orElseThrow(() -> notFound("DAILY_TASK_NOT_FOUND", "Daily task was not found."));
+                .orElseThrow(() -> notFound("TASK_NOT_FOUND", "Task was not found."));
     }
 
-    private DailyTaskRecord requireRecordForUpdate(UUID tenantId, UUID recordId) {
+    private TaskRecord requireRecordForUpdate(UUID tenantId, UUID recordId) {
         return recordRepository.findByIdAndTenantIdForUpdate(recordId, tenantId)
-                .orElseThrow(() -> notFound("DAILY_TASK_NOT_FOUND", "Daily task was not found."));
+                .orElseThrow(() -> notFound("TASK_NOT_FOUND", "Task was not found."));
     }
 
     private StockTag requireTag(UUID tenantId, UUID tagId) {
@@ -791,12 +820,12 @@ public class DailyTaskService {
                 .orElseThrow(() -> notFound("USER_NOT_FOUND", "User was not found."));
     }
 
-    private DailyTaskPersonResponse person(UUID tenantId, UUID userId) {
+    private TaskPersonResponse person(UUID tenantId, UUID userId) {
         UserAccount user = requireUser(tenantId, userId);
         return person(user);
     }
 
-    private DailyTaskPersonResponse person(Map<UUID, UserAccount> usersById, UUID userId) {
+    private TaskPersonResponse person(Map<UUID, UserAccount> usersById, UUID userId) {
         UserAccount user = usersById.get(userId);
         if (user == null) {
             throw notFound("USER_NOT_FOUND", "User was not found.");
@@ -804,8 +833,8 @@ public class DailyTaskService {
         return person(user);
     }
 
-    private DailyTaskPersonResponse person(UserAccount user) {
-        return new DailyTaskPersonResponse(
+    private TaskPersonResponse person(UserAccount user) {
+        return new TaskPersonResponse(
                 user.getId(),
                 user.getFullName(),
                 user.getEmployeeId(),
@@ -813,11 +842,11 @@ public class DailyTaskService {
         );
     }
 
-    private DailyTaskAuditResponse toAuditResponse(
+    private TaskAuditResponse toAuditResponse(
             UUID tenantId,
-            DailyTaskAuditEntry entry
+            TaskAuditEntry entry
     ) {
-        return new DailyTaskAuditResponse(
+        return new TaskAuditResponse(
                 entry.getId(),
                 entry.getAction(),
                 entry.getDetails(),
@@ -826,11 +855,11 @@ public class DailyTaskService {
         );
     }
 
-    private DailyTaskAuditResponse toAuditResponse(
+    private TaskAuditResponse toAuditResponse(
             Map<UUID, UserAccount> usersById,
-            DailyTaskAuditEntry entry
+            TaskAuditEntry entry
     ) {
-        return new DailyTaskAuditResponse(
+        return new TaskAuditResponse(
                 entry.getId(),
                 entry.getAction(),
                 entry.getDetails(),
@@ -839,11 +868,11 @@ public class DailyTaskService {
         );
     }
 
-    private DailyTaskPersonResponse personOrNull(UUID tenantId, UUID userId) {
+    private TaskPersonResponse personOrNull(UUID tenantId, UUID userId) {
         return userId == null ? null : person(tenantId, userId);
     }
 
-    private DailyTaskPersonResponse personOrNull(
+    private TaskPersonResponse personOrNull(
             Map<UUID, UserAccount> usersById,
             UUID userId
     ) {
@@ -851,11 +880,27 @@ public class DailyTaskService {
     }
 
     private void requireManagement(AuthenticatedUser principal) {
-        if (!principal.hasPermission(SystemPermission.DAILY_TASK_MANAGE)) {
+        if (!principal.hasPermission(SystemPermission.TASK_MANAGE)) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
-                    "DAILY_TASK_MANAGEMENT_REQUIRED",
-                    "Only Owner, Head or Manager may manage daily task templates."
+                    "TASK_MANAGEMENT_REQUIRED",
+                    "Only Owner, Head or Manager may manage task templates."
+            );
+        }
+    }
+
+    private void validateTemplateSchedule(UpsertTaskTemplateRequest request) {
+        if (request.endDate() != null && request.endDate().isBefore(request.firstTaskDate())) {
+            throw badRequest(
+                    "TASK_END_DATE_INVALID",
+                    "End date must not be before the first task date."
+            );
+        }
+        if (request.scheduleType() == TaskScheduleType.AD_HOC
+                && request.endDate() != null) {
+            throw badRequest(
+                    "TASK_END_DATE_NOT_ALLOWED",
+                    "An ad hoc task does not need an end date."
             );
         }
     }
@@ -863,27 +908,27 @@ public class DailyTaskService {
     private void requireTaskView(AuthenticatedUser principal) {
         requirePermission(
                 principal,
-                SystemPermission.DAILY_TASK_VIEW,
-                "DAILY_TASK_ACCESS_REQUIRED",
-                "Daily Task access has not been granted to this role."
+                SystemPermission.TASK_VIEW,
+                "TASK_ACCESS_REQUIRED",
+                "Task access has not been granted to this role."
         );
     }
 
     private void requireTaskContribution(AuthenticatedUser principal) {
         requirePermission(
                 principal,
-                SystemPermission.DAILY_TASK_CONTRIBUTE,
-                "DAILY_TASK_CONTRIBUTION_REQUIRED",
-                "Daily Task submission has not been granted to this role."
+                SystemPermission.TASK_CONTRIBUTE,
+                "TASK_CONTRIBUTION_REQUIRED",
+                "Task submission has not been granted to this role."
         );
     }
 
     private void requireTaskRating(AuthenticatedUser principal) {
         requirePermission(
                 principal,
-                SystemPermission.DAILY_TASK_RATE,
-                "DAILY_TASK_RATING_REQUIRED",
-                "Daily Task rating has not been granted to this role."
+                SystemPermission.TASK_RATE,
+                "TASK_RATING_REQUIRED",
+                "Task rating has not been granted to this role."
         );
     }
 
@@ -900,23 +945,23 @@ public class DailyTaskService {
 
     private void validateDate(LocalDate date) {
         if (date.isAfter(today())) {
-            throw badRequest("DAILY_TASK_FUTURE_DATE", "Daily tasks cannot be loaded for a future date.");
+            throw badRequest("TASK_FUTURE_DATE", "Tasks cannot be loaded for a future date.");
         }
     }
 
     private void validateDateRange(LocalDate dateFrom, LocalDate dateTo) {
         if (dateFrom.isAfter(dateTo)) {
             throw badRequest(
-                    "DAILY_TASK_DATE_RANGE_INVALID",
-                    "Daily task start date must not be after the end date."
+                    "TASK_DATE_RANGE_INVALID",
+                    "Task start date must not be after the end date."
             );
         }
         validateDate(dateFrom);
         validateDate(dateTo);
         if (dateFrom.plusDays(MAX_HISTORY_RANGE_DAYS - 1L).isBefore(dateTo)) {
             throw badRequest(
-                    "DAILY_TASK_DATE_RANGE_TOO_LARGE",
-                    "Daily task history may be loaded for a maximum of 30 days."
+                    "TASK_DATE_RANGE_TOO_LARGE",
+                    "Task history may be loaded for a maximum of 30 days."
             );
         }
     }

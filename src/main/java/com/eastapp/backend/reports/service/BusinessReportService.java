@@ -54,8 +54,8 @@ import com.eastapp.backend.stock.StockCountSubmission;
 import com.eastapp.backend.stock.StockCountSubmissionRepository;
 import com.eastapp.backend.stock.StockSku;
 import com.eastapp.backend.stock.StockSkuRepository;
-import com.eastapp.backend.tasks.api.DailyTaskOverviewResponse;
-import com.eastapp.backend.tasks.service.DailyTaskService;
+import com.eastapp.backend.tasks.api.TaskOverviewResponse;
+import com.eastapp.backend.tasks.service.TaskService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -100,7 +100,7 @@ public class BusinessReportService {
     private final StockCountSubmissionRepository stockCountRepository;
     private final StockSkuRepository skuRepository;
     private final ReportProperties properties;
-    private final DailyTaskService dailyTaskService;
+    private final TaskService taskService;
 
     public BusinessReportService(
             BusinessReportRepository reportRepository,
@@ -116,7 +116,7 @@ public class BusinessReportService {
             StockCountSubmissionRepository stockCountRepository,
             StockSkuRepository skuRepository,
             ReportProperties properties,
-            DailyTaskService dailyTaskService
+            TaskService taskService
     ) {
         this.reportRepository = reportRepository;
         this.salesRepository = salesRepository;
@@ -131,7 +131,7 @@ public class BusinessReportService {
         this.stockCountRepository = stockCountRepository;
         this.skuRepository = skuRepository;
         this.properties = properties;
-        this.dailyTaskService = dailyTaskService;
+        this.taskService = taskService;
     }
 
     @Transactional
@@ -143,7 +143,7 @@ public class BusinessReportService {
                 SystemPermission.REPORT_INTELLIGENCE_VIEW
         );
 
-        // Daily Tasks superseded the legacy Daily Photo dashboard card. Keep
+        // Tasks superseded the legacy Daily Photo dashboard card. Keep
         // the response field for older clients without running its N+1 query.
         DailyPhotoOverviewResponse dailyOverview = new DailyPhotoOverviewResponse(
                 0,
@@ -153,7 +153,7 @@ public class BusinessReportService {
                 0,
                 0.0
         );
-        DailyTaskOverviewResponse dailyTaskOverview = dailyTaskService.overview(principal, today);
+        TaskOverviewResponse taskOverview = taskService.overview(principal, today);
         if (!managementView) {
             return new ReportDashboardResponse(
                     today,
@@ -165,7 +165,7 @@ public class BusinessReportService {
                     null,
                     null,
                     dailyOverview,
-                    dailyTaskOverview,
+                    taskOverview,
                     null,
                     0,
                     List.of()
@@ -262,7 +262,7 @@ public class BusinessReportService {
                 inventory,
                 wasteOverview,
                 dailyOverview,
-                dailyTaskOverview,
+                taskOverview,
                 complaints,
                 pendingApprovals,
                 trend

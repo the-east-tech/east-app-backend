@@ -11,8 +11,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 @Entity
-@Table(name = "daily_task_template_checklist_items")
-public class DailyTaskTemplateChecklistItem {
+@Table(name = "task_template_checklist_items")
+public class TaskTemplateChecklistItem {
     @Id
     @Generated
     @ColumnDefault("uuidv7()")
@@ -31,10 +31,10 @@ public class DailyTaskTemplateChecklistItem {
     @Column(nullable = false, length = 300, updatable = false)
     private String description;
 
-    protected DailyTaskTemplateChecklistItem() {
+    protected TaskTemplateChecklistItem() {
     }
 
-    public DailyTaskTemplateChecklistItem(
+    public TaskTemplateChecklistItem(
             UUID tenantId,
             UUID templateId,
             int position,

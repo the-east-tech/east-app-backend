@@ -6,18 +6,18 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
-public interface DailyTaskAuditEntryRepository extends JpaRepository<DailyTaskAuditEntry, UUID> {
-    List<DailyTaskAuditEntry> findAllByTenantIdAndTemplateIdAndRecordIdIsNullOrderByOccurredAtAscIdAsc(
+public interface TaskAuditEntryRepository extends JpaRepository<TaskAuditEntry, UUID> {
+    List<TaskAuditEntry> findAllByTenantIdAndTemplateIdAndRecordIdIsNullOrderByOccurredAtAscIdAsc(
             UUID tenantId,
             UUID templateId
     );
 
-    List<DailyTaskAuditEntry> findAllByTenantIdAndRecordIdOrderByOccurredAtAscIdAsc(
+    List<TaskAuditEntry> findAllByTenantIdAndRecordIdOrderByOccurredAtAscIdAsc(
             UUID tenantId,
             UUID recordId
     );
 
-    List<DailyTaskAuditEntry> findAllByTenantIdAndRecordIdIn(
+    List<TaskAuditEntry> findAllByTenantIdAndRecordIdIn(
             UUID tenantId,
             Collection<UUID> recordIds
     );

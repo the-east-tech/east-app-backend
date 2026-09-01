@@ -6,13 +6,13 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
-public interface DailyTaskTemplateChecklistItemRepository
-        extends JpaRepository<DailyTaskTemplateChecklistItem, UUID> {
-    List<DailyTaskTemplateChecklistItem> findAllByTenantIdAndTemplateIdOrderByPositionAsc(
+public interface TaskTemplateChecklistItemRepository
+        extends JpaRepository<TaskTemplateChecklistItem, UUID> {
+    List<TaskTemplateChecklistItem> findAllByTenantIdAndTemplateIdOrderByPositionAsc(
             UUID tenantId,
             UUID templateId
     );
-    List<DailyTaskTemplateChecklistItem> findAllByTenantIdAndTemplateIdIn(
+    List<TaskTemplateChecklistItem> findAllByTenantIdAndTemplateIdIn(
             UUID tenantId,
             Collection<UUID> templateIds
     );

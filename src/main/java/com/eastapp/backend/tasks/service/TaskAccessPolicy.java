@@ -6,13 +6,13 @@ import com.eastapp.backend.people.SystemRole;
 import org.springframework.stereotype.Component;
 
 @Component
-public class DailyTaskAccessPolicy {
+public class TaskAccessPolicy {
     public boolean canOversee(SystemRole role) {
-        return RolePermissionPolicy.allows(role, SystemPermission.DAILY_TASK_VIEW_ALL);
+        return RolePermissionPolicy.allows(role, SystemPermission.TASK_VIEW_ALL);
     }
 
     public boolean canRate(SystemRole reviewerRole, SystemRole submitterRole) {
-        if (!RolePermissionPolicy.allows(reviewerRole, SystemPermission.DAILY_TASK_RATE)) {
+        if (!RolePermissionPolicy.allows(reviewerRole, SystemPermission.TASK_RATE)) {
             return false;
         }
         if (reviewerRole == SystemRole.OWNER) return true;

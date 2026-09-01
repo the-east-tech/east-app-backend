@@ -13,8 +13,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 @Entity
-@Table(name = "daily_task_audit_entries")
-public class DailyTaskAuditEntry {
+@Table(name = "task_audit_entries")
+public class TaskAuditEntry {
     @Id
     @Generated
     @ColumnDefault("uuidv7()")
@@ -43,10 +43,10 @@ public class DailyTaskAuditEntry {
     @Column(name = "occurred_at", nullable = false, updatable = false)
     private Instant occurredAt;
 
-    protected DailyTaskAuditEntry() {
+    protected TaskAuditEntry() {
     }
 
-    public DailyTaskAuditEntry(
+    public TaskAuditEntry(
             UUID tenantId,
             UUID templateId,
             UUID recordId,
