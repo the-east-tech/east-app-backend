@@ -243,6 +243,69 @@
     requestAnimationFrame(countPrice);
   }
 
+
+  const reasonStack = document.getElementById("reasonStack");
+  const stackCards = reasonStack ? Array.from(reasonStack.querySelectorAll(".reason-card")) : [];
+  const stackCurrent = document.getElementById("stackCurrent");
+  const stackProgress = document.getElementById("stackProgress");
+  let stackTicking = false;
+
+  const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
+
+  const updateReasonStack = () => {
+    if (!stackCards.length) {
+      stackTicking = false;
+      return;
+    }
+
+    const mobile = window.innerWidth <= 760;
+    const baseTop = mobile ? 145 : 154;
+    const layerGap = mobile ? 9 : 12;
+    const coverDistance = mobile ? 175 : 215;
+    let activeIndex = 0;
+
+    stackCards.forEach((card, index) => {
+      const top = baseTop + index * layerGap;
+      card.style.setProperty("--stack-top", top + "px");
+      card.style.setProperty("--stack-z", String(20 + index));
+
+      const cardRect = card.getBoundingClientRect();
+      if (cardRect.top <= top + 34) activeIndex = index;
+
+      const nextCard = stackCards[index + 1];
+      const nextTop = nextCard ? nextCard.getBoundingClientRect().top : Number.POSITIVE_INFINITY;
+      const covered = nextCard
+        ? clamp((top + coverDistance - nextTop) / coverDistance, 0, 1)
+        : 0;
+
+      card.style.setProperty("--stack-scale", (1 - covered * .042).toFixed(3));
+      card.style.setProperty("--stack-shift", (-covered * 7) + "px");
+      card.style.setProperty("--stack-opacity", (1 - covered * .16).toFixed(3));
+      card.classList.toggle("is-stack-active", index === activeIndex);
+    });
+
+    const displayIndex = String(activeIndex + 1).padStart(2, "0");
+    if (stackCurrent && stackCurrent.textContent !== displayIndex) {
+      stackCurrent.textContent = displayIndex;
+    }
+    if (stackProgress) {
+      stackProgress.style.transform = "scaleX(" + ((activeIndex + 1) / stackCards.length) + ")";
+    }
+    stackTicking = false;
+  };
+
+  const requestStackUpdate = () => {
+    if (stackTicking) return;
+    stackTicking = true;
+    requestAnimationFrame(updateReasonStack);
+  };
+
+  if (stackCards.length) {
+    window.addEventListener("scroll", requestStackUpdate, { passive: true });
+    window.addEventListener("resize", requestStackUpdate, { passive: true });
+    updateReasonStack();
+  }
+
   const year = document.getElementById("year");
   if (year) year.textContent = new Date().getFullYear();
 })();
