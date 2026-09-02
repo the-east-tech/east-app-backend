@@ -41,6 +41,7 @@ import com.eastapp.backend.reports.api.PeriodCountCoverageResponse;
 import com.eastapp.backend.reports.api.ReportDashboardResponse;
 import com.eastapp.backend.reports.api.ReportTrendPointResponse;
 import com.eastapp.backend.reports.api.ReviewBusinessReportRequest;
+import com.eastapp.backend.reports.api.SalesCashRecipientResponse;
 import com.eastapp.backend.reports.api.SalesOverviewResponse;
 import com.eastapp.backend.reports.api.SalesReportResponse;
 import com.eastapp.backend.reports.api.UpdateComplaintRequest;
@@ -85,6 +86,11 @@ public class BusinessReportService {
     private static final Set<ReportWorkflowStatus> ANALYTICS_STATUSES = Set.of(
             ReportWorkflowStatus.SUBMITTED,
             ReportWorkflowStatus.APPROVED
+    );
+    private static final Set<SystemRole> CASH_RECIPIENT_ROLES = Set.of(
+            SystemRole.OWNER,
+            SystemRole.HEAD,
+            SystemRole.MANAGER
     );
 
     private final BusinessReportRepository reportRepository;
@@ -284,6 +290,21 @@ public class BusinessReportService {
     }
 
     @Transactional(readOnly = true)
+    public List<SalesCashRecipientResponse> salesCashRecipients(
+            AuthenticatedUser principal
+    ) {
+        requireSalesAccess(principal);
+        return userRepository
+                .findAllByTenant_IdAndActiveTrueAndRole_SystemKeyInOrderByIdentity_FullNameAsc(
+                        principal.tenantId(),
+                        CASH_RECIPIENT_ROLES
+                )
+                .stream()
+                .map(SalesCashRecipientResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<SalesReportResponse> salesHistory(
             AuthenticatedUser principal,
             LocalDate from,
@@ -318,6 +339,10 @@ public class BusinessReportService {
     ) {
         requireSalesAccess(principal);
         validateEditableDate(principal, request.reportDate());
+        UserAccount cashReceiver = requireCashRecipient(
+                principal.tenantId(),
+                request.cashReceivedByUserId()
+        );
         BusinessReport report = reportRepository.findByTenantIdAndReportTypeAndReportDate(
                 principal.tenantId(), BusinessReportType.SALES, request.reportDate()
         ).orElseGet(() -> reportRepository.saveAndFlush(new BusinessReport(
@@ -340,14 +365,16 @@ public class BusinessReportService {
                 report.getId(),
                 principal.tenantId(),
                 request.cashTotalRm(),
-                request.cashReceivedBy(),
+                cashReceiver.getId(),
+                cashReceiver.getFullName(),
                 request.foodDeliverySalesRm(),
                 request.ewalletTotalRm(),
                 request.staffOnDuty()
         ));
         detail.update(
                 request.cashTotalRm(),
-                request.cashReceivedBy(),
+                cashReceiver.getId(),
+                cashReceiver.getFullName(),
                 request.foodDeliverySalesRm(),
                 request.ewalletTotalRm(),
                 request.staffOnDuty()
@@ -1152,6 +1179,9 @@ public class BusinessReportService {
                 .map(item -> toVoidBillResponse(item, media.get(item.getPhotoMediaId()), names))
                 .toList();
         BigDecimal cashTotal = detail == null ? BigDecimal.ZERO : detail.getSubTotalRm();
+        UUID cashReceivedByUserId = detail == null
+                ? null
+                : detail.getCashReceivedByUserId();
         String cashReceivedBy = detail == null ? "" : detail.getCashReceivedBy();
         BigDecimal foodDelivery = detail == null ? BigDecimal.ZERO : detail.getPandaSalesRm();
         BigDecimal ewalletTotal = detail == null ? BigDecimal.ZERO : detail.getEwalletTotalRm();
@@ -1168,6 +1198,7 @@ public class BusinessReportService {
                 report.getReportDate(),
                 report.getWorkflowStatus(),
                 moneyValue(cashTotal),
+                cashReceivedByUserId,
                 cashReceivedBy,
                 moneyValue(foodDelivery),
                 detail == null ? BigDecimal.ZERO.setScale(2) : moneyValue(detail.netFoodDeliverySalesRm()),
@@ -1190,7 +1221,7 @@ public class BusinessReportService {
         BigDecimal zero = BigDecimal.ZERO.setScale(2);
         return new SalesReportResponse(
                 null, date, ReportWorkflowStatus.DRAFT,
-                zero, "", zero, zero, zero, zero, zero, zero, 0, zero,
+                zero, null, "", zero, zero, zero, zero, zero, zero, 0, zero,
                 BigDecimal.ZERO.setScale(1), null, null, null, null, List.of()
         );
     }
@@ -1455,6 +1486,23 @@ public class BusinessReportService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "REPORT_TYPE_MISMATCH", "The selected report has the wrong type.");
         }
         return report;
+    }
+
+    private UserAccount requireCashRecipient(UUID tenantId, UUID userId) {
+        UserAccount user = userRepository.findByIdAndTenant_IdAndActiveTrue(userId, tenantId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.BAD_REQUEST,
+                        "SALES_CASH_RECIPIENT_NOT_FOUND",
+                        "Select an active cash recipient from this business."
+                ));
+        if (!CASH_RECIPIENT_ROLES.contains(user.getRole().getSystemKey())) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "SALES_CASH_RECIPIENT_ROLE_INVALID",
+                    "Cash Received By must be an Owner, Head or Manager."
+            );
+        }
+        return user;
     }
 
     private void requireManagement(AuthenticatedUser principal) {

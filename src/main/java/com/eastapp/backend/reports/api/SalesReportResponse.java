@@ -13,6 +13,7 @@ public record SalesReportResponse(
         LocalDate reportDate,
         ReportWorkflowStatus workflowStatus,
         BigDecimal cashTotalRm,
+        UUID cashReceivedByUserId,
         String cashReceivedBy,
         BigDecimal foodDeliverySalesRm,
         BigDecimal netFoodDeliverySalesRm,

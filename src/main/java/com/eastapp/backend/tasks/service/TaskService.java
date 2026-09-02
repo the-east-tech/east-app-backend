@@ -131,7 +131,7 @@ public class TaskService {
                 .map(template -> toTemplateResponse(
                         principal.tenantId(),
                         template,
-                        linkedSopTitles.get(template.getLinkedSopId())
+                        linkedSopTitle(linkedSopTitles, template.getLinkedSopId())
                 ))
                 .toList();
     }
@@ -695,7 +695,7 @@ public class TaskService {
                     storageKeyByMediaId,
                     usersById,
                     assignedTagIds,
-                    linkedSopTitles.get(record.getLinkedSopId())
+                    linkedSopTitle(linkedSopTitles, record.getLinkedSopId())
             ));
         }
         return List.copyOf(responses);
@@ -905,6 +905,10 @@ public class TaskService {
         return knowledgeSopRepository.findAllByTenant_IdAndIdIn(tenantId, linkedSopIds)
                 .stream()
                 .collect(Collectors.toMap(KnowledgeSop::getId, KnowledgeSop::getTitle));
+    }
+
+    static String linkedSopTitle(Map<UUID, String> titlesById, UUID linkedSopId) {
+        return linkedSopId == null ? null : titlesById.get(linkedSopId);
     }
 
     private UserAccount requireUser(UUID tenantId, UUID userId) {

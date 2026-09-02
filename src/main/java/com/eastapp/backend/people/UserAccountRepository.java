@@ -23,6 +23,12 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     List<UserAccount> findAllByTenant_IdAndActiveTrueOrderByIdentity_FullNameAsc(UUID tenantId);
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
+    List<UserAccount> findAllByTenant_IdAndActiveTrueAndRole_SystemKeyInOrderByIdentity_FullNameAsc(
+            UUID tenantId,
+            Collection<SystemRole> roles
+    );
+
+    @EntityGraph(attributePaths = {"identity", "tenant", "role"})
     List<UserAccount> findAllByTenant_IdAndIdIn(UUID tenantId, Collection<UUID> userIds);
 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})

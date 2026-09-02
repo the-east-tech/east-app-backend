@@ -93,6 +93,14 @@ public class BusinessReportsController {
         return reportService.salesForDate(principal, date);
     }
 
+    @GetMapping("/sales/cash-recipients")
+    @PreAuthorize("hasAuthority('PERMISSION_SALES_REPORT_ACCESS')")
+    List<SalesCashRecipientResponse> salesCashRecipients(
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return reportService.salesCashRecipients(principal);
+    }
+
     @ActivityTracked(module = "Sales", action = "saved", entity = "sales report")
     @PutMapping("/sales")
     @PreAuthorize("hasAuthority('PERMISSION_SALES_REPORT_ACCESS')")

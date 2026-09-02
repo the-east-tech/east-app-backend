@@ -1,7 +1,5 @@
 package com.eastapp.backend.config;
 
-import
-        org.flywaydb.core.Flyway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,7 +17,7 @@ public class DevelopmentDatabaseResetConfiguration {
      * A destructive reset is allowed only when BOTH this code gate and
      * EASTAPP_DATABASE_RESET_ON_START are true. If either is false, data is preserved.
      */
-    private static final boolean DATABASE_RESET_ALLOWED_BY_CODE = true;
+    private static final boolean DATABASE_RESET_ALLOWED_BY_CODE = false;
 
     @Bean
     FlywayConfigurationCustomizer eastAppFlywayConfigurationCustomizer(

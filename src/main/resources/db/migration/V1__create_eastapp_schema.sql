@@ -864,6 +864,7 @@ CREATE TABLE sales_report_details (
     tenant_id UUID NOT NULL,
     sales_rm NUMERIC(14, 2) NOT NULL DEFAULT 0,
     sub_total_rm NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    cash_received_by_user_id UUID NOT NULL,
     cash_received_by VARCHAR(120) NOT NULL,
     panda_sales_rm NUMERIC(14, 2) NOT NULL DEFAULT 0,
     ewallet_total_rm NUMERIC(14, 2) NOT NULL DEFAULT 0,
@@ -871,6 +872,9 @@ CREATE TABLE sales_report_details (
     CONSTRAINT fk_sales_report_details_report_same_tenant
         FOREIGN KEY (tenant_id, report_id)
         REFERENCES business_reports (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT fk_sales_report_details_cash_receiver_same_tenant
+        FOREIGN KEY (tenant_id, cash_received_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT ck_sales_report_details_amounts_non_negative
         CHECK (
             sales_rm >= 0

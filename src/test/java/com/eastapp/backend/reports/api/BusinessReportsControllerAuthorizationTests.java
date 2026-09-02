@@ -24,6 +24,7 @@ class BusinessReportsControllerAuthorizationTests {
                 Integer.class
         ));
         assertSalesAccess(method("sales", AuthenticatedUser.class, LocalDate.class));
+        assertSalesAccess(method("salesCashRecipients", AuthenticatedUser.class));
         assertSalesAccess(method(
                 "upsertSales",
                 AuthenticatedUser.class,

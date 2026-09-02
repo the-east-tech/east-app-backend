@@ -27,6 +27,9 @@ public class SalesReportDetail {
     @Column(name = "sub_total_rm", nullable = false, precision = 14, scale = 2)
     private BigDecimal subTotalRm;
 
+    @Column(name = "cash_received_by_user_id", nullable = false)
+    private UUID cashReceivedByUserId;
+
     @Column(name = "cash_received_by", nullable = false, length = 120)
     private String cashReceivedBy;
 
@@ -46,6 +49,7 @@ public class SalesReportDetail {
             UUID reportId,
             UUID tenantId,
             BigDecimal subTotalRm,
+            UUID cashReceivedByUserId,
             String cashReceivedBy,
             BigDecimal pandaSalesRm,
             BigDecimal ewalletTotalRm,
@@ -53,17 +57,29 @@ public class SalesReportDetail {
     ) {
         this.reportId = Objects.requireNonNull(reportId, "reportId must not be null");
         this.tenantId = Objects.requireNonNull(tenantId, "tenantId must not be null");
-        update(subTotalRm, cashReceivedBy, pandaSalesRm, ewalletTotalRm, staffCount);
+        update(
+                subTotalRm,
+                cashReceivedByUserId,
+                cashReceivedBy,
+                pandaSalesRm,
+                ewalletTotalRm,
+                staffCount
+        );
     }
 
     public void update(
             BigDecimal subTotalRm,
+            UUID cashReceivedByUserId,
             String cashReceivedBy,
             BigDecimal pandaSalesRm,
             BigDecimal ewalletTotalRm,
             int staffCount
     ) {
         this.subTotalRm = nonNegative(subTotalRm, "subTotalRm");
+        this.cashReceivedByUserId = Objects.requireNonNull(
+                cashReceivedByUserId,
+                "cashReceivedByUserId must not be null"
+        );
         this.cashReceivedBy = requiredText(cashReceivedBy, "cashReceivedBy");
         this.pandaSalesRm = nonNegative(pandaSalesRm, "pandaSalesRm");
         this.ewalletTotalRm = nonNegative(ewalletTotalRm, "ewalletTotalRm");
@@ -113,6 +129,7 @@ public class SalesReportDetail {
     public UUID getTenantId() { return tenantId; }
     public BigDecimal getSalesRm() { return salesRm; }
     public BigDecimal getSubTotalRm() { return subTotalRm; }
+    public UUID getCashReceivedByUserId() { return cashReceivedByUserId; }
     public String getCashReceivedBy() { return cashReceivedBy; }
     public BigDecimal getPandaSalesRm() { return pandaSalesRm; }
     public BigDecimal getEwalletTotalRm() { return ewalletTotalRm; }
