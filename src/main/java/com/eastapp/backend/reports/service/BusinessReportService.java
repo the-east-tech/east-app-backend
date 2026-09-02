@@ -174,6 +174,8 @@ public class BusinessReportService {
                     taskOverview,
                     null,
                     0,
+                    0,
+                    0,
                     List.of()
             );
         }
@@ -247,6 +249,15 @@ public class BusinessReportService {
                 .countByTenantIdAndWorkflowStatus(
                         principal.tenantId(), ReportWorkflowStatus.SUBMITTED
                 ));
+        int pendingSalesApprovals = Math.toIntExact(reportRepository
+                .countByTenantIdAndReportTypeAndWorkflowStatus(
+                        principal.tenantId(),
+                        BusinessReportType.SALES,
+                        ReportWorkflowStatus.SUBMITTED
+                ));
+        int pendingTaskApprovals = principal.hasPermission(SystemPermission.TASK_RATE)
+                ? taskService.pendingApprovalCount(principal)
+                : 0;
 
         List<ReportTrendPointResponse> trend = buildTrend(
                 from,
@@ -271,6 +282,8 @@ public class BusinessReportService {
                 taskOverview,
                 complaints,
                 pendingApprovals,
+                pendingSalesApprovals,
+                pendingTaskApprovals,
                 trend
         );
     }
@@ -681,12 +694,21 @@ public class BusinessReportService {
     }
 
     @Transactional(readOnly = true)
-    public List<ApprovalReportResponse> approvals(AuthenticatedUser principal) {
+    public List<ApprovalReportResponse> approvals(
+            AuthenticatedUser principal,
+            BusinessReportType reportType
+    ) {
         requireReviewer(principal);
-        List<BusinessReport> reports = reportRepository
-                .findAllByTenantIdAndWorkflowStatusOrderBySubmittedAtAsc(
+        List<BusinessReport> reports = reportType == null
+                ? reportRepository.findAllByTenantIdAndWorkflowStatusOrderBySubmittedAtAsc(
                         principal.tenantId(), ReportWorkflowStatus.SUBMITTED
-                );
+                )
+                : reportRepository
+                        .findAllByTenantIdAndReportTypeAndWorkflowStatusOrderBySubmittedAtAsc(
+                                principal.tenantId(),
+                                reportType,
+                                ReportWorkflowStatus.SUBMITTED
+                        );
         Map<UUID, String> names = userNames(principal.tenantId());
         List<BusinessReport> salesReports = reports.stream()
                 .filter(report -> report.getReportType() == BusinessReportType.SALES)

@@ -55,46 +55,29 @@ public class TaskController {
         return service.templates(principal);
     }
 
-    @ActivityTracked(module = "Task", action = "created", entity = "task template")
     @PostMapping("/templates")
     @PreAuthorize("hasAuthority('PERMISSION_TASK_MANAGE')")
     ResponseEntity<TaskTemplateResponse> createTemplate(
             @AuthenticationPrincipal AuthenticatedUser principal,
-            @Valid @RequestBody UpsertTaskTemplateRequest request,
-            HttpServletRequest httpRequest
+            @Valid @RequestBody UpsertTaskTemplateRequest request
     ) {
         TaskTemplateResponse created = service.createTemplate(principal, request);
-        ActivityEventContext.attach(
-                httpRequest,
-                created.id(),
-                created.title(),
-                templateDetail(created)
-        );
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(created);
     }
 
-    @ActivityTracked(module = "Task", action = "updated", entity = "task template", targetPathVariable = "templateId")
     @PatchMapping("/templates/{templateId}")
     @PreAuthorize("hasAuthority('PERMISSION_TASK_MANAGE')")
     TaskTemplateResponse updateTemplate(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID templateId,
-            @Valid @RequestBody UpsertTaskTemplateRequest request,
-            HttpServletRequest httpRequest
+            @Valid @RequestBody UpsertTaskTemplateRequest request
     ) {
-        TaskTemplateResponse updated = service.updateTemplate(
+        return service.updateTemplate(
                 principal,
                 templateId,
                 request
         );
-        ActivityEventContext.attach(
-                httpRequest,
-                updated.id(),
-                updated.title(),
-                templateDetail(updated)
-        );
-        return updated;
     }
 
     @GetMapping("/records")
@@ -109,11 +92,25 @@ public class TaskController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
             @RequestParam(required = false) UUID tagId,
             @RequestParam(required = false) TaskStatus status,
-            @RequestParam(defaultValue = "false") boolean submittedByMe
+            @RequestParam(required = false) List<TaskStatus> statuses,
+            @RequestParam(defaultValue = "false") boolean submittedByMe,
+            @RequestParam(defaultValue = "false") boolean upcoming,
+            @RequestParam(defaultValue = "3") int limit
     ) {
+        if (upcoming) {
+            return service.upcomingRecords(principal, tagId, limit);
+        }
         return service.records(
-                principal, date, dateFrom, dateTo, tagId, status, submittedByMe
+                principal, date, dateFrom, dateTo, tagId, status, statuses, submittedByMe
         );
+    }
+
+    @GetMapping("/approvals")
+    @PreAuthorize("hasAuthority('PERMISSION_TASK_RATE')")
+    TaskListResponse approvals(
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return service.approvals(principal);
     }
 
     @GetMapping("/records/{recordId}")
@@ -170,18 +167,6 @@ public class TaskController {
                 ratingDetail(rated)
         );
         return rated;
-    }
-
-    private static String templateDetail(TaskTemplateResponse template) {
-        return "Tag: " + template.tagName()
-                + "\nSchedule: " + template.scheduleType()
-                + "\nFirst task date: " + template.firstTaskDate()
-                + "\nEnd date: " + (template.endDate() == null ? "None" : template.endDate())
-                + "\nRequired photos: " + template.requiredPhotoCount()
-                + "\nChecklist items: " + template.checklistItems().size()
-                + "\nLinked SOP: "
-                + (template.linkedSopTitle() == null ? "None" : template.linkedSopTitle())
-                + "\nActive: " + (template.active() ? "Yes" : "No");
     }
 
     private static String submissionDetail(TaskRecordResponse record) {

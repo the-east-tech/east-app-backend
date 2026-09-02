@@ -18,6 +18,8 @@ public record ReportDashboardResponse(
         TaskOverviewResponse tasks,
         ComplaintOverviewResponse complaints,
         int pendingApprovals,
+        int pendingSalesApprovals,
+        int pendingTaskApprovals,
         List<ReportTrendPointResponse> trend
 ) {
 }

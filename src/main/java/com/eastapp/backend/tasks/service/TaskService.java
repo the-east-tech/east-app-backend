@@ -147,7 +147,6 @@ public class TaskService {
         KnowledgeSop linkedSop = requireLinkedSopOrNull(
                 principal.tenantId(), request.linkedSopId()
         );
-        UserAccount actor = requireUser(principal.tenantId(), principal.userId());
         TaskTemplate template = templateRepository.saveAndFlush(new TaskTemplate(
                 principal.tenantId(),
                 tag.getId(),
@@ -159,22 +158,9 @@ public class TaskService {
                 request.firstTaskDate(),
                 request.endDate(),
                 request.active(),
-                actor.getId()
+                principal.userId()
         ));
         saveTemplateChecklist(principal.tenantId(), template.getId(), request.checklistItems());
-        auditRepository.save(new TaskAuditEntry(
-                principal.tenantId(), template.getId(), null, actor.getId(),
-                "TEMPLATE_CREATED",
-                "Tag: " + tag.getTag()
-                        + "; title: " + template.getTitle()
-                        + "; schedule: " + template.getScheduleType()
-                        + "; first task date: " + template.getFirstTaskDate()
-                        + "; end date: " + (template.getEndDate() == null ? "none" : template.getEndDate())
-                        + "; required photos: " + template.getRequiredPhotoCount()
-                        + "; checklist items: " + request.checklistItems().size()
-                        + "; linked SOP: " + (linkedSop == null ? "none" : linkedSop.getTitle())
-                        + "; active: " + template.isActive()
-        ));
         if (template.isActive() && template.isScheduledFor(today())) {
             lockTenant(principal.tenantId());
             materialiseTemplate(template, today(), tag);
@@ -196,21 +182,6 @@ public class TaskService {
         validateTemplateSchedule(request);
         TaskTemplate template = requireTemplate(principal.tenantId(), templateId);
         StockTag previousTag = requireTag(principal.tenantId(), template.getTagId());
-        String previousTitle = template.getTitle();
-        String previousInstruction = template.getInstruction();
-        UUID previousLinkedSopId = template.getLinkedSopId();
-        int previousPhotoCount = template.getRequiredPhotoCount();
-        String previousSchedule = template.getScheduleType().name();
-        LocalDate previousFirstTaskDate = template.getFirstTaskDate();
-        LocalDate previousEndDate = template.getEndDate();
-        boolean previousActive = template.isActive();
-        List<String> previousChecklist = templateChecklistRepository
-                .findAllByTenantIdAndTemplateIdOrderByPositionAsc(
-                        principal.tenantId(), templateId
-                )
-                .stream()
-                .map(TaskTemplateChecklistItem::getDescription)
-                .toList();
         // Freeze today's version before changing the template. Edits affect the
         // next business date, while a newly-created template starts today.
         if (template.isActive() && template.isScheduledFor(today())) {
@@ -239,28 +210,6 @@ public class TaskService {
         );
         templateChecklistRepository.flush();
         saveTemplateChecklist(principal.tenantId(), templateId, request.checklistItems());
-        auditRepository.save(new TaskAuditEntry(
-                principal.tenantId(), templateId, null, principal.userId(),
-                "TEMPLATE_UPDATED",
-                "Tag: " + previousTag.getTag() + " -> " + nextTag.getTag()
-                        + "; title: " + previousTitle + " -> " + template.getTitle()
-                        + "; instruction changed: "
-                        + !previousInstruction.equals(template.getInstruction())
-                        + "; required photos: " + previousPhotoCount
-                        + " -> " + template.getRequiredPhotoCount()
-                        + "; schedule: " + previousSchedule
-                        + " -> " + template.getScheduleType()
-                        + "; first task date: " + previousFirstTaskDate
-                        + " -> " + template.getFirstTaskDate()
-                        + "; end date: " + (previousEndDate == null ? "none" : previousEndDate)
-                        + " -> " + (template.getEndDate() == null ? "none" : template.getEndDate())
-                        + "; checklist changed: "
-                        + !previousChecklist.equals(request.checklistItems().stream()
-                                .map(String::trim).toList())
-                        + "; linked SOP changed: "
-                        + !Objects.equals(previousLinkedSopId, template.getLinkedSopId())
-                        + "; active: " + previousActive + " -> " + template.isActive()
-        ));
         return toTemplateResponse(
                 principal.tenantId(),
                 template,
@@ -276,6 +225,7 @@ public class TaskService {
             LocalDate requestedTo,
             UUID tagId,
             TaskStatus status,
+            List<TaskStatus> statuses,
             boolean submittedByMe
     ) {
         requireTaskView(principal);
@@ -298,10 +248,18 @@ public class TaskService {
             materialisationDate = materialisationDate.plusDays(1);
         }
 
-        List<TaskRecord> records = recordRepository
-                .findAllByTenantIdAndTaskDateBetweenOrderByTaskDateDescTagNameAscTitleAsc(
-                        principal.tenantId(), dateFrom, dateTo
-                );
+        Set<TaskStatus> statusFilter = statuses == null || statuses.isEmpty()
+                ? status == null ? Set.of() : Set.of(status)
+                : new LinkedHashSet<>(statuses);
+        List<TaskRecord> records = statusFilter.isEmpty()
+                ? recordRepository
+                        .findAllByTenantIdAndTaskDateBetweenOrderByTaskDateDescTagNameAscTitleAsc(
+                                principal.tenantId(), dateFrom, dateTo
+                        )
+                : recordRepository
+                        .findAllByTenantIdAndTaskDateBetweenAndStatusInOrderByTaskDateDescTagNameAscTitleAsc(
+                                principal.tenantId(), dateFrom, dateTo, statusFilter
+                        );
         Set<UUID> assignedTagIds = principal.isOwner()
                 ? Set.of()
                 : assignedTagIds(principal);
@@ -309,7 +267,7 @@ public class TaskService {
 
         List<TaskRecord> visible = new ArrayList<>(records.stream()
                 .filter(record -> tagId == null || tagId.equals(record.getTagId()))
-                .filter(record -> status == null || status == record.getStatus())
+                .filter(record -> statusFilter.isEmpty() || statusFilter.contains(record.getStatus()))
                 .filter(record -> !submittedByMe
                         || principal.userId().equals(record.getSubmittedByUserId()))
                 .filter(record -> oversight
@@ -330,6 +288,100 @@ public class TaskService {
                 dateTo,
                 overviewOf(visible),
                 toRecordResponses(principal, visible, assignedTagIds)
+        );
+    }
+
+    @Transactional
+    public TaskListResponse upcomingRecords(
+            AuthenticatedUser principal,
+            UUID tagId,
+            int requestedLimit
+    ) {
+        requireTaskView(principal);
+        if (requestedLimit < 1 || requestedLimit > 20) {
+            throw badRequest(
+                    "TASK_LIMIT_INVALID",
+                    "Upcoming Task limit must be between 1 and 20."
+            );
+        }
+
+        LocalDate today = today();
+        LocalDate lastActiveDate = today.plusDays(ACTIVE_TASK_FUTURE_DAYS);
+        Set<UUID> assignedTagIds = principal.isOwner()
+                ? Set.of()
+                : assignedTagIds(principal);
+        boolean oversight = accessPolicy.canOversee(principal.systemRole());
+        List<TaskRecord> visible = new ArrayList<>(requestedLimit);
+
+        LocalDate taskDate = today;
+        while (!taskDate.isAfter(lastActiveDate) && visible.size() < requestedLimit) {
+            materialiseActiveTemplates(principal.tenantId(), taskDate);
+            List<TaskRecord> records = recordRepository
+                    .findAllByTenantIdAndTaskDateAndStatusOrderByTagNameAscTitleAsc(
+                            principal.tenantId(), taskDate, TaskStatus.PENDING
+                    );
+            for (TaskRecord record : records) {
+                if (record.getStatus() != TaskStatus.PENDING
+                        || tagId != null && !tagId.equals(record.getTagId())
+                        || !oversight && !principal.isOwner()
+                            && !assignedTagIds.contains(record.getTagId())) {
+                    continue;
+                }
+                visible.add(record);
+                if (visible.size() == requestedLimit) break;
+            }
+            taskDate = taskDate.plusDays(1);
+        }
+
+        return new TaskListResponse(
+                today,
+                today,
+                lastActiveDate,
+                overviewOf(visible),
+                toRecordResponses(principal, visible, assignedTagIds)
+        );
+    }
+
+    public TaskListResponse approvals(AuthenticatedUser principal) {
+        requireTaskRating(principal);
+        Set<SystemRole> submitterRoles = rateableSubmitterRoles(principal);
+        List<TaskRecord> records = submitterRoles.isEmpty()
+                ? List.of()
+                : recordRepository
+                        .findAllByTenantIdAndStatusAndSubmittedByRoleInOrderBySubmittedAtAsc(
+                                principal.tenantId(),
+                                TaskStatus.SUBMITTED,
+                                submitterRoles
+                        );
+        LocalDate today = today();
+        LocalDate dateFrom = records.stream()
+                .map(TaskRecord::getTaskDate)
+                .min(LocalDate::compareTo)
+                .orElse(today);
+        LocalDate dateTo = records.stream()
+                .map(TaskRecord::getTaskDate)
+                .max(LocalDate::compareTo)
+                .orElse(today);
+        Set<UUID> assignedTagIds = Set.of();
+        return new TaskListResponse(
+                today,
+                dateFrom,
+                dateTo,
+                overviewOf(records),
+                toRecordResponses(principal, records, assignedTagIds)
+        );
+    }
+
+    public int pendingApprovalCount(AuthenticatedUser principal) {
+        requireTaskRating(principal);
+        Set<SystemRole> submitterRoles = rateableSubmitterRoles(principal);
+        if (submitterRoles.isEmpty()) return 0;
+        return Math.toIntExact(
+                recordRepository.countByTenantIdAndStatusAndSubmittedByRoleIn(
+                        principal.tenantId(),
+                        TaskStatus.SUBMITTED,
+                        submitterRoles
+                )
         );
     }
 
@@ -564,13 +616,7 @@ public class TaskService {
                 person(tenantId, template.getUpdatedByUserId()),
                 template.getCreatedAt(),
                 template.getUpdatedAt(),
-                auditRepository
-                        .findAllByTenantIdAndTemplateIdAndRecordIdIsNullOrderByOccurredAtAscIdAsc(
-                                tenantId, template.getId()
-                        )
-                        .stream()
-                        .map(entry -> toAuditResponse(tenantId, entry))
-                        .toList()
+                List.of()
         );
     }
 
@@ -801,6 +847,16 @@ public class TaskService {
                 .stream()
                 .map(assignment -> assignment.getTagId())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private Set<SystemRole> rateableSubmitterRoles(AuthenticatedUser principal) {
+        Set<SystemRole> roles = new LinkedHashSet<>();
+        for (SystemRole role : SystemRole.values()) {
+            if (accessPolicy.canRate(principal.systemRole(), role)) {
+                roles.add(role);
+            }
+        }
+        return roles;
     }
 
     private boolean canContribute(AuthenticatedUser principal, TaskRecord record) {

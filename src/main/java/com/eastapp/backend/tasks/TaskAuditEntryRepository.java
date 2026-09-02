@@ -7,11 +7,6 @@ import java.util.List;
 import java.util.UUID;
 
 public interface TaskAuditEntryRepository extends JpaRepository<TaskAuditEntry, UUID> {
-    List<TaskAuditEntry> findAllByTenantIdAndTemplateIdAndRecordIdIsNullOrderByOccurredAtAscIdAsc(
-            UUID tenantId,
-            UUID templateId
-    );
-
     List<TaskAuditEntry> findAllByTenantIdAndRecordIdOrderByOccurredAtAscIdAsc(
             UUID tenantId,
             UUID recordId

@@ -2,6 +2,7 @@ package com.eastapp.backend.reports.api;
 
 import com.eastapp.backend.activity.tracking.ActivityTracked;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.reports.BusinessReportType;
 import com.eastapp.backend.reports.service.BusinessReportService;
 import com.eastapp.backend.reports.service.ReportMediaService;
 import jakarta.validation.Valid;
@@ -226,9 +227,10 @@ public class BusinessReportsController {
     @GetMapping("/approvals")
     @PreAuthorize("hasAuthority('PERMISSION_REPORT_REVIEW')")
     List<ApprovalReportResponse> approvals(
-            @AuthenticationPrincipal AuthenticatedUser principal
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam(required = false) BusinessReportType reportType
     ) {
-        return reportService.approvals(principal);
+        return reportService.approvals(principal, reportType);
     }
 
     @ActivityTracked(module = "Report", action = "reviewed", entity = "business report", targetPathVariable = "reportId")
