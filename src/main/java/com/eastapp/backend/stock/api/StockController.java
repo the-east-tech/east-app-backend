@@ -5,6 +5,7 @@ import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.stock.service.StockMediaService;
 import com.eastapp.backend.stock.service.StockService;
+import com.eastapp.backend.stock.service.StockSkuCsvService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.core.io.Resource;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 @RestController
@@ -33,10 +35,16 @@ import java.util.UUID;
 public class StockController {
     private final StockService stockService;
     private final StockMediaService stockMediaService;
+    private final StockSkuCsvService stockSkuCsvService;
 
-    public StockController(StockService stockService, StockMediaService stockMediaService) {
+    public StockController(
+            StockService stockService,
+            StockMediaService stockMediaService,
+            StockSkuCsvService stockSkuCsvService
+    ) {
         this.stockService = stockService;
         this.stockMediaService = stockMediaService;
+        this.stockSkuCsvService = stockSkuCsvService;
     }
 
 
@@ -122,30 +130,45 @@ public class StockController {
         return stockService.listSkus(principal, search, active, assigned, page, size);
     }
 
-    @GetMapping("/skus/copy-source")
+    @GetMapping(value = "/skus/export", produces = "text/csv")
     @PreAuthorize("hasRole('OWNER')")
-    PageResponse<StockSkuResponse> copySourceSkus(
-            @AuthenticationPrincipal AuthenticatedUser principal,
-            @RequestParam UUID tenantId,
-            @RequestParam(defaultValue = "") String search,
-            @RequestParam(required = false) Boolean active,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size
+    ResponseEntity<byte[]> exportSkus(
+            @AuthenticationPrincipal AuthenticatedUser principal
     ) {
-        return stockService.listCopySourceSkus(
-                principal, tenantId, search, active, page, size
-        );
+        StockSkuCsvService.CsvExport export = stockSkuCsvService.exportSkus(principal);
+        return ResponseEntity.ok()
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + export.fileName() + "\""
+                )
+                .body(export.bytes());
     }
 
-    @ActivityTracked(module = "Stock", action = "copied", entity = "stock setup")
-    @PostMapping("/skus/copy")
+    @PostMapping(
+            value = "/skus/import/preview",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
     @PreAuthorize("hasRole('OWNER')")
-    ResponseEntity<CopyStockSkusResponse> copySkus(
+    StockSkuCsvPreviewResponse previewSkuImport(
             @AuthenticationPrincipal AuthenticatedUser principal,
-            @Valid @RequestBody CopyStockSkusRequest request
+            @RequestParam("file") MultipartFile file
+    ) {
+        return stockSkuCsvService.preview(principal, file);
+    }
+
+    @ActivityTracked(module = "Stock", action = "imported", entity = "SKU CSV")
+    @PostMapping(
+            value = "/skus/import",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    @PreAuthorize("hasRole('OWNER')")
+    ResponseEntity<StockSkuCsvImportResponse> importSkus(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam("file") MultipartFile file
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(stockService.copySkus(principal, request));
+                .body(stockSkuCsvService.importSkus(principal, file));
     }
 
     @GetMapping("/counts")

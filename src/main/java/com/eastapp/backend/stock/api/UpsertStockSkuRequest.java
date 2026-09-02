@@ -23,7 +23,7 @@ public record UpsertStockSkuRequest(
         @NotNull @DecimalMin("0") BigDecimal minimumPriceRm,
         @NotNull @DecimalMin("0") BigDecimal maximumPriceRm,
         List<UUID> supplierIds,
-        @NotBlank @Size(max = 500) String photoPath,
+        @Size(max = 500) String photoPath,
         List<@Size(max = 120) String> assignedStaffNames,
         List<@Size(max = 300) String> receivingChecklist,
         @Min(1) int stockCheckFrequencyDays,

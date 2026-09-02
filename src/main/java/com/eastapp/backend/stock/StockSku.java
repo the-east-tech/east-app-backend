@@ -331,7 +331,9 @@ public class StockSku {
     }
 
     public String getPhotoPath() {
-        return thumbnailMedia.getStorageKey();
+        return thumbnailMedia.isSkuImportPlaceholder()
+                ? ""
+                : thumbnailMedia.getStorageKey();
     }
 
     public StockMedia getThumbnailMedia() {

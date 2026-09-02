@@ -19,6 +19,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "stock_media")
 public class StockMedia {
+    public static final String SKU_IMPORT_PLACEHOLDER_PREFIX = "sku-import-placeholder-";
+
     @Id @Generated @ColumnDefault("uuidv7()")
     @Column(nullable = false, updatable = false)
     private UUID id;
@@ -64,4 +66,7 @@ public class StockMedia {
     public String getContentType() { return contentType; }
     public long getSizeBytes() { return sizeBytes; }
     public byte[] getContentBytes() { return Arrays.copyOf(contentBytes, contentBytes.length); }
+    public boolean isSkuImportPlaceholder() {
+        return storageKey.startsWith(SKU_IMPORT_PLACEHOLDER_PREFIX);
+    }
 }
