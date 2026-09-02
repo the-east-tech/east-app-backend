@@ -1,27 +1,14 @@
--- EastApp clean reset-per-release schema (v101).
+-- EastApp clean reset-per-release schema (v106).
 -- This V1 contains the complete schema for a brand-new EastApp database.
 -- While the reset-per-release policy is active, merge every schema change into
 -- this file, keep V1 as the only migration, and reset the database each release.
+-- PostgreSQL owns only structural integrity: keys, relationships and essential
+-- uniqueness. Business validation remains in the Java application.
 
 CREATE TABLE application_setup (
     id SMALLINT PRIMARY KEY,
     setup_code VARCHAR(10),
-    setup_code_hash BYTEA,
-    setup_code_expires_at TIMESTAMPTZ,
-    completed_at TIMESTAMPTZ,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT ck_application_setup_singleton CHECK (id = 1),
-    CONSTRAINT ck_application_setup_code_hash_length CHECK (
-        setup_code_hash IS NULL OR octet_length(setup_code_hash) = 32
-    ),
-    CONSTRAINT ck_application_setup_code_format CHECK (
-        setup_code IS NULL OR setup_code ~ '^[A-HJ-NP-Z2-9]{10}$'
-    ),
-    CONSTRAINT ck_application_setup_code_pair CHECK (
-        (setup_code IS NULL AND setup_code_hash IS NULL AND setup_code_expires_at IS NULL)
-        OR
-        (setup_code IS NOT NULL AND setup_code_hash IS NOT NULL AND setup_code_expires_at IS NOT NULL)
-    )
+    setup_code_expires_at TIMESTAMPTZ
 );
 
 INSERT INTO application_setup (id) VALUES (1);
@@ -42,19 +29,7 @@ CREATE TABLE tenants (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_tenants_company_code UNIQUE (company_code),
-    CONSTRAINT uq_tenants_employee_id_prefix UNIQUE (employee_id_prefix),
-    CONSTRAINT ck_tenants_company_code_uppercase CHECK (company_code = upper(company_code)),
-    CONSTRAINT ck_tenants_company_code_format CHECK (company_code ~ '^[A-Z0-9][A-Z0-9_-]{1,31}$'),
-    CONSTRAINT ck_tenants_business_name_not_blank CHECK (btrim(business_name) <> ''),
-    CONSTRAINT ck_tenants_employee_id_prefix_uppercase CHECK (employee_id_prefix = upper(employee_id_prefix)),
-    CONSTRAINT ck_tenants_employee_id_prefix_format CHECK (employee_id_prefix ~ '^[A-Z]{1,3}$'),
-    CONSTRAINT ck_tenants_next_employee_number CHECK (next_employee_number >= 1),
-    CONSTRAINT ck_tenants_google_place_id_not_blank CHECK (btrim(google_place_id) <> ''),
-    CONSTRAINT ck_tenants_google_place_name_not_blank CHECK (btrim(google_place_name) <> ''),
-    CONSTRAINT ck_tenants_formatted_address_not_blank CHECK (btrim(formatted_address) <> ''),
-    CONSTRAINT ck_tenants_latitude CHECK (latitude BETWEEN -90 AND 90),
-    CONSTRAINT ck_tenants_longitude CHECK (longitude BETWEEN -180 AND 180),
-    CONSTRAINT ck_tenants_google_maps_uri_not_blank CHECK (google_maps_uri IS NULL OR btrim(google_maps_uri) <> '')
+    CONSTRAINT uq_tenants_employee_id_prefix UNIQUE (employee_id_prefix)
 );
 
 CREATE TABLE roles (
@@ -67,11 +42,7 @@ CREATE TABLE roles (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_roles_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT,
     CONSTRAINT uq_roles_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT uq_roles_tenant_system_key UNIQUE (tenant_id, system_key),
-    CONSTRAINT ck_roles_system_key CHECK (
-        system_key IN ('OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR', 'STAFF_1', 'STAFF_2')
-    ),
-    CONSTRAINT ck_roles_name_not_blank CHECK (btrim(name) <> '')
+    CONSTRAINT uq_roles_tenant_system_key UNIQUE (tenant_id, system_key)
 );
 CREATE UNIQUE INDEX uq_roles_tenant_name_ci ON roles (tenant_id, lower(name));
 
@@ -85,13 +56,7 @@ CREATE TABLE login_identities (
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_login_identities_phone_e164 UNIQUE (phone_e164),
-    CONSTRAINT ck_login_identities_password_hash_not_blank CHECK (btrim(password_hash) <> ''),
-    CONSTRAINT ck_login_identities_full_name_not_blank CHECK (btrim(full_name) <> ''),
-    CONSTRAINT ck_login_identities_phone_e164_format CHECK (phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
-    CONSTRAINT ck_login_identities_profile_photo_key_not_blank CHECK (
-        profile_photo_key IS NULL OR btrim(profile_photo_key) <> ''
-    )
+    CONSTRAINT uq_login_identities_phone_e164 UNIQUE (phone_e164)
 );
 
 CREATE TABLE users (
@@ -111,12 +76,8 @@ CREATE TABLE users (
     CONSTRAINT uq_users_tenant_id_id UNIQUE (tenant_id, id),
     CONSTRAINT uq_users_identity_id UNIQUE (identity_id, id),
     CONSTRAINT uq_users_tenant_employee_id UNIQUE (tenant_id, employee_id),
-    CONSTRAINT uq_users_identity_tenant UNIQUE (identity_id, tenant_id),
-    CONSTRAINT ck_users_employee_id_uppercase CHECK (employee_id = upper(employee_id)),
-    CONSTRAINT ck_users_employee_id_format CHECK (employee_id ~ '^[A-Z0-9][A-Z0-9_-]{1,31}$'),
-    CONSTRAINT ck_users_employment_dates CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date)
+    CONSTRAINT uq_users_identity_tenant UNIQUE (identity_id, tenant_id)
 );
-CREATE INDEX ix_users_identity_id ON users (identity_id);
 CREATE INDEX ix_users_tenant_active ON users (tenant_id, active);
 
 CREATE TABLE user_sessions (
@@ -130,9 +91,7 @@ CREATE TABLE user_sessions (
     CONSTRAINT fk_user_sessions_identity FOREIGN KEY (identity_id) REFERENCES login_identities (id) ON DELETE CASCADE,
     CONSTRAINT fk_user_sessions_active_user_identity FOREIGN KEY (identity_id, active_user_id)
         REFERENCES users (identity_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_user_sessions_token_hash UNIQUE (token_hash),
-    CONSTRAINT ck_user_sessions_token_hash_length CHECK (octet_length(token_hash) = 32),
-    CONSTRAINT ck_user_sessions_revoked_at CHECK (revoked_at IS NULL OR revoked_at >= created_at)
+    CONSTRAINT uq_user_sessions_token_hash UNIQUE (token_hash)
 );
 CREATE INDEX ix_user_sessions_identity_id ON user_sessions (identity_id);
 
@@ -157,12 +116,7 @@ CREATE TABLE activity_events (
         REFERENCES tenants (id) ON DELETE RESTRICT,
     CONSTRAINT fk_activity_events_actor_same_tenant FOREIGN KEY (tenant_id, actor_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_activity_events_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT ck_activity_events_actor_name_not_blank CHECK (btrim(actor_name) <> ''),
-    CONSTRAINT ck_activity_events_module_not_blank CHECK (btrim(module) <> ''),
-    CONSTRAINT ck_activity_events_action_not_blank CHECK (btrim(action) <> ''),
-    CONSTRAINT ck_activity_events_entity_not_blank CHECK (btrim(entity_type) <> ''),
-    CONSTRAINT ck_activity_events_route_not_blank CHECK (btrim(route) <> '')
+    CONSTRAINT uq_activity_events_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE INDEX ix_activity_events_tenant_time
     ON activity_events (tenant_id, occurred_at DESC, id DESC);
@@ -181,9 +135,7 @@ CREATE TABLE user_notifications (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_user_notifications_event_same_tenant FOREIGN KEY (tenant_id, activity_event_id)
         REFERENCES activity_events (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_user_notifications_event_recipient UNIQUE (activity_event_id, recipient_user_id),
-    CONSTRAINT ck_user_notifications_read_time CHECK (read_at IS NULL OR read_at >= created_at),
-    CONSTRAINT ck_user_notifications_dismiss_time CHECK (dismissed_at IS NULL OR dismissed_at >= created_at)
+    CONSTRAINT uq_user_notifications_event_recipient UNIQUE (activity_event_id, recipient_user_id)
 );
 CREATE INDEX ix_user_notifications_inbox
     ON user_notifications (tenant_id, recipient_user_id, created_at DESC, id DESC)
@@ -207,10 +159,7 @@ CREATE TABLE push_devices (
         REFERENCES users (tenant_id, id) ON DELETE CASCADE,
     CONSTRAINT fk_push_devices_session FOREIGN KEY (session_id)
         REFERENCES user_sessions (id) ON DELETE CASCADE,
-    CONSTRAINT uq_push_devices_token UNIQUE (token),
-    CONSTRAINT uq_push_devices_id UNIQUE (id),
-    CONSTRAINT ck_push_devices_token_not_blank CHECK (btrim(token) <> ''),
-    CONSTRAINT ck_push_devices_platform CHECK (platform IN ('ANDROID', 'IOS'))
+    CONSTRAINT uq_push_devices_token UNIQUE (token)
 );
 CREATE INDEX ix_push_devices_user_active
     ON push_devices (tenant_id, user_id, active);
@@ -229,10 +178,7 @@ CREATE TABLE push_outbox (
         REFERENCES user_notifications (id) ON DELETE CASCADE,
     CONSTRAINT fk_push_outbox_device FOREIGN KEY (device_id)
         REFERENCES push_devices (id) ON DELETE CASCADE,
-    CONSTRAINT uq_push_outbox_notification_device UNIQUE (notification_id, device_id),
-    CONSTRAINT ck_push_outbox_attempts CHECK (attempts >= 0),
-    CONSTRAINT ck_push_outbox_expiry CHECK (expires_at > created_at),
-    CONSTRAINT ck_push_outbox_sent_time CHECK (sent_at IS NULL OR sent_at >= created_at)
+    CONSTRAINT uq_push_outbox_notification_device UNIQUE (notification_id, device_id)
 );
 CREATE INDEX ix_push_outbox_due
     ON push_outbox (next_attempt_at, created_at, id)
@@ -251,11 +197,7 @@ CREATE TABLE attendance_qr_codes (
     CONSTRAINT fk_attendance_qr_codes_generator_same_tenant FOREIGN KEY (tenant_id, generated_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_attendance_qr_codes_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT uq_attendance_qr_codes_secret_hash UNIQUE (secret_hash),
-    CONSTRAINT ck_attendance_qr_codes_event_type CHECK (event_type IN ('CLOCK_IN', 'CLOCK_OUT')),
-    CONSTRAINT ck_attendance_qr_codes_secret_hash_length CHECK (octet_length(secret_hash) = 32),
-    CONSTRAINT ck_attendance_qr_codes_expiry CHECK (expires_at > created_at),
-    CONSTRAINT ck_attendance_qr_codes_revoked_at CHECK (revoked_at IS NULL OR revoked_at >= created_at)
+    CONSTRAINT uq_attendance_qr_codes_secret_hash UNIQUE (secret_hash)
 );
 CREATE INDEX ix_attendance_qr_codes_active_fifo
     ON attendance_qr_codes (tenant_id, event_type, created_at ASC, id ASC)
@@ -293,21 +235,7 @@ CREATE TABLE attendance_events (
         REFERENCES user_sessions (id) ON DELETE RESTRICT,
     CONSTRAINT fk_attendance_events_qr_code_same_tenant FOREIGN KEY (tenant_id, qr_code_id)
         REFERENCES attendance_qr_codes (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_attendance_events_tenant_client_event UNIQUE (tenant_id, client_event_id),
-    CONSTRAINT ck_attendance_events_type CHECK (event_type IN ('CLOCK_IN', 'CLOCK_OUT')),
-    CONSTRAINT ck_attendance_events_client_event_not_blank CHECK (btrim(client_event_id) <> ''),
-    CONSTRAINT ck_attendance_events_latitude CHECK (latitude BETWEEN -90 AND 90),
-    CONSTRAINT ck_attendance_events_longitude CHECK (longitude BETWEEN -180 AND 180),
-    CONSTRAINT ck_attendance_events_accuracy CHECK (accuracy_meters >= 0),
-    CONSTRAINT ck_attendance_events_captured_address_not_blank CHECK (btrim(captured_address) <> ''),
-    CONSTRAINT ck_attendance_events_work_location_name_not_blank CHECK (btrim(work_location_name) <> ''),
-    CONSTRAINT ck_attendance_events_work_location_address_not_blank CHECK (btrim(work_location_address) <> ''),
-    CONSTRAINT ck_attendance_events_work_location_latitude CHECK (work_location_latitude BETWEEN -90 AND 90),
-    CONSTRAINT ck_attendance_events_work_location_longitude CHECK (work_location_longitude BETWEEN -180 AND 180),
-    CONSTRAINT ck_attendance_events_distance CHECK (distance_meters >= 0),
-    CONSTRAINT ck_attendance_events_device_platform_not_blank CHECK (btrim(device_platform) <> ''),
-    CONSTRAINT ck_attendance_events_app_version_not_blank CHECK (btrim(app_version) <> ''),
-    CONSTRAINT ck_attendance_events_validation_method_not_blank CHECK (btrim(validation_method) <> '')
+    CONSTRAINT uq_attendance_events_tenant_client_event UNIQUE (tenant_id, client_event_id)
 );
 CREATE INDEX ix_attendance_events_tenant_occurred_at ON attendance_events (tenant_id, occurred_at DESC);
 CREATE INDEX ix_attendance_events_user_occurred_at ON attendance_events (user_id, occurred_at DESC);
@@ -322,9 +250,7 @@ CREATE TABLE stock_media (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_stock_media_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT,
     CONSTRAINT uq_stock_media_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT uq_stock_media_tenant_key UNIQUE (tenant_id, storage_key),
-    CONSTRAINT ck_stock_media_size_positive CHECK (size_bytes > 0),
-    CONSTRAINT ck_stock_media_size_limit CHECK (size_bytes <= 5242880)
+    CONSTRAINT uq_stock_media_tenant_key UNIQUE (tenant_id, storage_key)
 );
 CREATE INDEX ix_stock_media_tenant_created_at ON stock_media (tenant_id, created_at DESC);
 
@@ -341,8 +267,7 @@ CREATE TABLE stock_tags (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_tags_updated_by FOREIGN KEY (tenant_id, updated_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_tags_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT ck_stock_tags_tag_not_blank CHECK (btrim(tag) <> '')
+    CONSTRAINT uq_stock_tags_tenant_id_id UNIQUE (tenant_id, id)
 );
 
 CREATE TABLE stock_suppliers (
@@ -371,13 +296,7 @@ CREATE TABLE stock_suppliers (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_suppliers_created_by FOREIGN KEY (tenant_id, created_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_suppliers_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT ck_stock_suppliers_name_not_blank CHECK (btrim(supplier_name) <> ''),
-    CONSTRAINT ck_stock_suppliers_item_not_blank CHECK (btrim(supplier_item) <> ''),
-    CONSTRAINT ck_stock_suppliers_unit_not_blank CHECK (btrim(unit) <> ''),
-    CONSTRAINT ck_stock_suppliers_balances CHECK (
-        minimum_balance_value >= 0 AND maximum_balance_value >= minimum_balance_value AND current_balance_value >= 0
-    )
+    CONSTRAINT uq_stock_suppliers_tenant_id_id UNIQUE (tenant_id, id)
 );
 
 CREATE TABLE stock_skus (
@@ -413,56 +332,27 @@ CREATE TABLE stock_skus (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_skus_created_by FOREIGN KEY (tenant_id, created_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_skus_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT ck_stock_skus_name_not_blank CHECK (btrim(name) <> ''),
-    CONSTRAINT ck_stock_skus_unit_not_blank CHECK (btrim(unit) <> ''),
-    CONSTRAINT ck_stock_skus_balances CHECK (
-        minimum_balance_value >= 0 AND maximum_balance_value >= minimum_balance_value AND current_balance_value >= 0
-    ),
-    CONSTRAINT ck_stock_skus_recovery CHECK (recovery_percent BETWEEN 1 AND 100),
-    CONSTRAINT ck_stock_skus_prices CHECK (minimum_price_rm >= 0 AND maximum_price_rm >= minimum_price_rm),
-    CONSTRAINT ck_stock_skus_frequency CHECK (stock_check_frequency_days > 0)
+    CONSTRAINT uq_stock_skus_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE INDEX ix_stock_skus_tenant_tag1 ON stock_skus (tenant_id, tag1_id);
 CREATE INDEX ix_stock_skus_tenant_tag2 ON stock_skus (tenant_id, tag2_id);
 
 CREATE TABLE stock_sku_suppliers (
-    tenant_id UUID NOT NULL,
     sku_id UUID NOT NULL,
     supplier_id UUID NOT NULL,
     PRIMARY KEY (sku_id, supplier_id),
-    CONSTRAINT fk_stock_sku_suppliers_sku_same_tenant FOREIGN KEY (tenant_id, sku_id)
-        REFERENCES stock_skus (tenant_id, id) ON DELETE CASCADE,
-    CONSTRAINT fk_stock_sku_suppliers_supplier_same_tenant FOREIGN KEY (tenant_id, supplier_id)
-        REFERENCES stock_suppliers (tenant_id, id) ON DELETE RESTRICT
+    CONSTRAINT fk_stock_sku_suppliers_sku FOREIGN KEY (sku_id)
+        REFERENCES stock_skus (id) ON DELETE CASCADE,
+    CONSTRAINT fk_stock_sku_suppliers_supplier FOREIGN KEY (supplier_id)
+        REFERENCES stock_suppliers (id) ON DELETE RESTRICT
 );
-
-CREATE OR REPLACE FUNCTION eastapp_set_stock_sku_supplier_tenant()
-RETURNS TRIGGER AS $function$
-BEGIN
-    SELECT tenant_id INTO NEW.tenant_id
-    FROM stock_skus
-    WHERE id = NEW.sku_id;
-
-    IF NEW.tenant_id IS NULL THEN
-        RAISE EXCEPTION 'Stock SKU % does not exist', NEW.sku_id;
-    END IF;
-    RETURN NEW;
-END;
-$function$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_stock_sku_suppliers_set_tenant
-BEFORE INSERT OR UPDATE OF sku_id ON stock_sku_suppliers
-FOR EACH ROW EXECUTE FUNCTION eastapp_set_stock_sku_supplier_tenant();
 
 CREATE TABLE stock_sku_assignees (
     sku_id UUID NOT NULL,
     position INTEGER NOT NULL,
     assigned_staff_name VARCHAR(120) NOT NULL,
     PRIMARY KEY (sku_id, position),
-    CONSTRAINT fk_stock_sku_assignees_sku FOREIGN KEY (sku_id) REFERENCES stock_skus (id) ON DELETE CASCADE,
-    CONSTRAINT ck_stock_sku_assignees_position CHECK (position >= 0),
-    CONSTRAINT ck_stock_sku_assignee_not_blank CHECK (btrim(assigned_staff_name) <> '')
+    CONSTRAINT fk_stock_sku_assignees_sku FOREIGN KEY (sku_id) REFERENCES stock_skus (id) ON DELETE CASCADE
 );
 
 CREATE TABLE stock_sku_receiving_checklist (
@@ -470,9 +360,7 @@ CREATE TABLE stock_sku_receiving_checklist (
     position INTEGER NOT NULL,
     checklist_item VARCHAR(300) NOT NULL,
     PRIMARY KEY (sku_id, position),
-    CONSTRAINT fk_stock_sku_checklist_sku FOREIGN KEY (sku_id) REFERENCES stock_skus (id) ON DELETE CASCADE,
-    CONSTRAINT ck_stock_sku_checklist_position CHECK (position >= 0),
-    CONSTRAINT ck_stock_sku_checklist_not_blank CHECK (btrim(checklist_item) <> '')
+    CONSTRAINT fk_stock_sku_checklist_sku FOREIGN KEY (sku_id) REFERENCES stock_skus (id) ON DELETE CASCADE
 );
 
 CREATE TABLE stock_count_submissions (
@@ -501,9 +389,7 @@ CREATE TABLE stock_count_submissions (
     CONSTRAINT fk_stock_counts_reviewed_by FOREIGN KEY (tenant_id, reviewed_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_stock_counts_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT uq_stock_counts_tenant_sku_cycle UNIQUE (tenant_id, sku_id, count_cycle_started_at),
-    CONSTRAINT ck_stock_counts_balances CHECK (previous_balance_value >= 0 AND current_balance_value >= 0),
-    CONSTRAINT ck_stock_counts_review_status CHECK (review_status IN ('Pending Review', 'Approved', 'Rejected'))
+    CONSTRAINT uq_stock_counts_tenant_sku_cycle UNIQUE (tenant_id, sku_id, count_cycle_started_at)
 );
 CREATE INDEX ix_stock_counts_tenant_captured_at ON stock_count_submissions (tenant_id, captured_at DESC);
 CREATE INDEX ix_stock_counts_tenant_review_captured_at ON stock_count_submissions (tenant_id, review_status, captured_at DESC);
@@ -547,15 +433,13 @@ CREATE TABLE stock_receivings (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_receivings_reviewed_by FOREIGN KEY (tenant_id, reviewed_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_receivings_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT ck_stock_receivings_review_status CHECK (review_status IN ('Pending Review', 'Approved', 'Rejected'))
+    CONSTRAINT uq_stock_receivings_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE INDEX ix_stock_receivings_tenant_captured_at ON stock_receivings (tenant_id, captured_at DESC);
 CREATE INDEX ix_stock_receivings_tenant_review_captured_at ON stock_receivings (tenant_id, review_status, captured_at DESC);
 
 CREATE TABLE stock_receiving_items (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
-    tenant_id UUID NOT NULL,
     receiving_id UUID NOT NULL,
     sku_id UUID NOT NULL,
     position INTEGER NOT NULL,
@@ -565,32 +449,12 @@ CREATE TABLE stock_receiving_items (
     unit VARCHAR(32) NOT NULL,
     condition VARCHAR(80) NOT NULL,
     note VARCHAR(1000) NOT NULL DEFAULT '',
-    CONSTRAINT fk_stock_receiving_items_receiving_same_tenant FOREIGN KEY (tenant_id, receiving_id)
-        REFERENCES stock_receivings (tenant_id, id) ON DELETE CASCADE,
-    CONSTRAINT fk_stock_receiving_items_sku_same_tenant FOREIGN KEY (tenant_id, sku_id)
-        REFERENCES stock_skus (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_receiving_items_position UNIQUE (receiving_id, position),
-    CONSTRAINT ck_stock_receiving_items_position CHECK (position >= 0),
-    CONSTRAINT ck_stock_receiving_items_quantities CHECK (invoice_quantity >= 0 AND received_quantity >= 0)
+    CONSTRAINT fk_stock_receiving_items_receiving FOREIGN KEY (receiving_id)
+        REFERENCES stock_receivings (id) ON DELETE CASCADE,
+    CONSTRAINT fk_stock_receiving_items_sku FOREIGN KEY (sku_id)
+        REFERENCES stock_skus (id) ON DELETE RESTRICT,
+    CONSTRAINT uq_stock_receiving_items_position UNIQUE (receiving_id, position)
 );
-
-CREATE OR REPLACE FUNCTION eastapp_set_stock_receiving_item_tenant()
-RETURNS TRIGGER AS $function$
-BEGIN
-    SELECT tenant_id INTO NEW.tenant_id
-    FROM stock_receivings
-    WHERE id = NEW.receiving_id;
-
-    IF NEW.tenant_id IS NULL THEN
-        RAISE EXCEPTION 'Stock receiving % does not exist', NEW.receiving_id;
-    END IF;
-    RETURN NEW;
-END;
-$function$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_stock_receiving_items_set_tenant
-BEFORE INSERT OR UPDATE OF receiving_id ON stock_receiving_items
-FOR EACH ROW EXECUTE FUNCTION eastapp_set_stock_receiving_item_tenant();
 
 CREATE TABLE stock_audit_entries (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -618,8 +482,7 @@ CREATE TABLE stock_audit_entry_changes (
     new_value VARCHAR(1000) NOT NULL,
     CONSTRAINT fk_stock_audit_entry_changes_entry FOREIGN KEY (stock_audit_entry_id)
         REFERENCES stock_audit_entries (id) ON DELETE CASCADE,
-    CONSTRAINT uq_stock_audit_entry_changes_position UNIQUE (stock_audit_entry_id, position),
-    CONSTRAINT ck_stock_audit_entry_changes_position CHECK (position >= 0)
+    CONSTRAINT uq_stock_audit_entry_changes_position UNIQUE (stock_audit_entry_id, position)
 );
 
 CREATE TABLE knowledge_sops (
@@ -643,21 +506,12 @@ CREATE TABLE knowledge_sops (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_knowledge_sops_tenant_id_id UNIQUE (tenant_id, id),
     CONSTRAINT uq_knowledge_sops_group_language
-        UNIQUE (tenant_id, link_group_id, language),
-    CONSTRAINT ck_knowledge_sops_language
-        CHECK (language IN ('ENGLISH', 'MYANMAR')),
-    CONSTRAINT ck_knowledge_sops_youtube_url_not_blank CHECK (btrim(youtube_url) <> ''),
-    CONSTRAINT ck_knowledge_sops_title_not_blank CHECK (btrim(title) <> ''),
-    CONSTRAINT ck_knowledge_sops_outcome_not_blank CHECK (btrim(expected_outcome) <> ''),
-    CONSTRAINT ck_knowledge_sops_description_not_blank CHECK (btrim(description) <> '')
+        UNIQUE (tenant_id, link_group_id, language)
 );
 CREATE INDEX ix_knowledge_sops_tenant_created_at
     ON knowledge_sops (tenant_id, created_at DESC);
 CREATE INDEX ix_knowledge_sops_tenant_tag
     ON knowledge_sops (tenant_id, tag_id);
-CREATE INDEX ix_knowledge_sops_tenant_link_group
-    ON knowledge_sops (tenant_id, link_group_id);
-
 CREATE TABLE knowledge_sop_watch_sessions (
     id UUID PRIMARY KEY,
     tenant_id UUID NOT NULL,
@@ -673,8 +527,7 @@ CREATE TABLE knowledge_sop_watch_sessions (
     CONSTRAINT fk_sop_watch_session_sop_same_tenant
         FOREIGN KEY (tenant_id, sop_id)
         REFERENCES knowledge_sops (tenant_id, id) ON DELETE CASCADE,
-    CONSTRAINT uq_sop_watch_session_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT ck_sop_watch_session_played_seconds CHECK (played_seconds >= 0)
+    CONSTRAINT uq_sop_watch_session_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE INDEX ix_sop_watch_session_tenant_user_time
     ON knowledge_sop_watch_sessions (tenant_id, user_id, last_heartbeat_at DESC);
@@ -695,25 +548,8 @@ CREATE TABLE translation_cache (
     CONSTRAINT fk_translation_cache_tenant
         FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE,
     CONSTRAINT uq_translation_cache_lookup
-        UNIQUE (tenant_id, source_language, target_language, source_hash),
-    CONSTRAINT ck_translation_cache_source_language
-        CHECK (source_language IN ('ENGLISH', 'CHINESE', 'MYANMAR')),
-    CONSTRAINT ck_translation_cache_target_language
-        CHECK (target_language IN ('ENGLISH', 'CHINESE', 'MYANMAR')),
-    CONSTRAINT ck_translation_cache_direction
-        CHECK (source_language <> target_language),
-    CONSTRAINT ck_translation_cache_source_hash
-        CHECK (source_hash ~ '^[0-9a-f]{64}$'),
-    CONSTRAINT ck_translation_cache_source_text
-        CHECK (btrim(source_text) <> ''),
-    CONSTRAINT ck_translation_cache_translated_text
-        CHECK (btrim(translated_text) <> ''),
-    CONSTRAINT ck_translation_cache_provider
-        CHECK (btrim(provider) <> '')
+        UNIQUE (tenant_id, source_language, target_language, source_hash)
 );
-
-CREATE INDEX ix_translation_cache_tenant_pair
-    ON translation_cache (tenant_id, source_language, target_language);
 
 -- The first tenant, its default roles and the first Owner account are created
 -- through the one-time Initial Setup API. Later tenants are created through
@@ -741,11 +577,7 @@ CREATE TABLE user_point_adjustments (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_user_point_adjustments_actor_same_tenant
         FOREIGN KEY (tenant_id, adjusted_by_user_id)
-        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT ck_user_point_adjustments_delta
-        CHECK (points_delta BETWEEN -10 AND 10 AND points_delta <> 0),
-    CONSTRAINT ck_user_point_adjustments_reason_not_blank
-        CHECK (btrim(reason) <> '')
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT
 );
 
 CREATE INDEX ix_user_point_adjustments_tenant_recipient_created
@@ -759,7 +591,7 @@ CREATE INDEX ix_user_point_adjustments_tenant_created
 -- ============================================================================
 
 -- Tenant-scoped business reporting schema.
--- Reports share one workflow header while type-specific tables keep each domain strict.
+-- Reports share one workflow header while type-specific data remains separate.
 
 CREATE TABLE report_media (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -776,11 +608,7 @@ CREATE TABLE report_media (
         FOREIGN KEY (tenant_id, uploaded_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_report_media_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT uq_report_media_tenant_key UNIQUE (tenant_id, storage_key),
-    CONSTRAINT ck_report_media_size_positive CHECK (size_bytes > 0),
-    CONSTRAINT ck_report_media_size_limit CHECK (size_bytes <= 5242880),
-    CONSTRAINT ck_report_media_content_type
-        CHECK (content_type IN ('image/jpeg', 'image/png'))
+    CONSTRAINT uq_report_media_tenant_key UNIQUE (tenant_id, storage_key)
 );
 CREATE INDEX ix_report_media_tenant_created_at
     ON report_media (tenant_id, created_at DESC);
@@ -804,9 +632,7 @@ CREATE TABLE advertisements (
         REFERENCES report_media (tenant_id, storage_key) ON DELETE RESTRICT,
     CONSTRAINT fk_advertisements_creator_same_tenant
         FOREIGN KEY (tenant_id, created_by_user_id)
-        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT ck_advertisement_period CHECK (ends_at > starts_at),
-    CONSTRAINT ck_advertisement_order CHECK (display_order BETWEEN 0 AND 3)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT
 );
 
 CREATE INDEX ix_advertisements_tenant_schedule
@@ -833,20 +659,7 @@ CREATE TABLE business_reports (
     CONSTRAINT fk_business_reports_reviewer_same_tenant
         FOREIGN KEY (tenant_id, reviewed_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_business_reports_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT ck_business_reports_type
-        CHECK (report_type IN ('SALES', 'WASTE', 'DAILY_PHOTO', 'COMPLAINT')),
-    CONSTRAINT ck_business_reports_workflow_status
-        CHECK (workflow_status IN ('DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED')),
-    CONSTRAINT ck_business_reports_submission_time
-        CHECK ((workflow_status = 'DRAFT' AND submitted_at IS NULL)
-            OR (workflow_status <> 'DRAFT' AND submitted_at IS NOT NULL)),
-    CONSTRAINT ck_business_reports_review_time
-        CHECK ((workflow_status IN ('APPROVED', 'REJECTED') AND reviewed_at IS NOT NULL)
-            OR (workflow_status NOT IN ('APPROVED', 'REJECTED') AND reviewed_at IS NULL)),
-    CONSTRAINT ck_business_reports_review_actor
-        CHECK ((reviewed_at IS NULL AND reviewed_by_user_id IS NULL)
-            OR (reviewed_at IS NOT NULL AND reviewed_by_user_id IS NOT NULL))
+    CONSTRAINT uq_business_reports_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE UNIQUE INDEX uq_business_reports_sales_tenant_date
     ON business_reports (tenant_id, report_date)
@@ -874,24 +687,8 @@ CREATE TABLE sales_report_details (
         REFERENCES business_reports (tenant_id, id) ON DELETE CASCADE,
     CONSTRAINT fk_sales_report_details_cash_receiver_same_tenant
         FOREIGN KEY (tenant_id, cash_received_by_user_id)
-        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT ck_sales_report_details_amounts_non_negative
-        CHECK (
-            sales_rm >= 0
-            AND sub_total_rm >= 0
-            AND panda_sales_rm >= 0
-            AND ewallet_total_rm >= 0
-        ),
-    CONSTRAINT ck_sales_report_details_total_reconciles
-        CHECK (sales_rm = round(sub_total_rm + (panda_sales_rm * 0.60) + ewallet_total_rm, 2)),
-    CONSTRAINT ck_sales_report_details_cash_receiver_not_blank
-        CHECK (btrim(cash_received_by) <> ''),
-    CONSTRAINT ck_sales_report_details_staff_count_positive
-        CHECK (staff_count BETWEEN 1 AND 500)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT
 );
-CREATE INDEX ix_sales_report_details_tenant_report
-    ON sales_report_details (tenant_id, report_id);
-
 CREATE TABLE sales_void_bills (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     tenant_id UUID NOT NULL,
@@ -910,10 +707,7 @@ CREATE TABLE sales_void_bills (
         REFERENCES report_media (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_sales_void_bills_creator_same_tenant
         FOREIGN KEY (tenant_id, created_by_user_id)
-        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT ck_sales_void_bills_bill_number_not_blank CHECK (btrim(bill_number) <> ''),
-    CONSTRAINT ck_sales_void_bills_reason_not_blank CHECK (btrim(reason) <> ''),
-    CONSTRAINT ck_sales_void_bills_amount_positive CHECK (amount_rm > 0)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT
 );
 CREATE UNIQUE INDEX uq_sales_void_bills_report_bill_number_ci
     ON sales_void_bills (tenant_id, sales_report_id, lower(bill_number));
@@ -938,12 +732,7 @@ CREATE TABLE waste_report_details (
         REFERENCES stock_skus (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_waste_report_details_media_same_tenant
         FOREIGN KEY (tenant_id, photo_media_id)
-        REFERENCES report_media (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT ck_waste_report_details_item_not_blank CHECK (btrim(item_name) <> ''),
-    CONSTRAINT ck_waste_report_details_unit_not_blank CHECK (btrim(unit) <> ''),
-    CONSTRAINT ck_waste_report_details_reason_not_blank CHECK (btrim(reason) <> ''),
-    CONSTRAINT ck_waste_report_details_quantity_positive CHECK (quantity > 0),
-    CONSTRAINT ck_waste_report_details_cost_non_negative CHECK (estimated_unit_cost_rm >= 0)
+        REFERENCES report_media (tenant_id, id) ON DELETE RESTRICT
 );
 CREATE INDEX ix_waste_report_details_tenant_sku
     ON waste_report_details (tenant_id, sku_id);
@@ -987,20 +776,7 @@ CREATE TABLE complaint_report_details (
         REFERENCES business_reports (tenant_id, id) ON DELETE CASCADE,
     CONSTRAINT fk_complaint_report_details_media_same_tenant
         FOREIGN KEY (tenant_id, photo_media_id)
-        REFERENCES report_media (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT ck_complaint_report_details_gender
-        CHECK (customer_gender IN ('MALE', 'FEMALE', 'OTHER', 'UNKNOWN')),
-    CONSTRAINT ck_complaint_report_details_age
-        CHECK (estimated_age BETWEEN 1 AND 120),
-    CONSTRAINT ck_complaint_report_details_info_not_blank CHECK (btrim(complaint_info) <> ''),
-    CONSTRAINT ck_complaint_report_details_action_not_blank CHECK (btrim(action_taken) <> ''),
-    CONSTRAINT ck_complaint_report_details_compensation_non_negative
-        CHECK (compensation_amount_rm IS NULL OR compensation_amount_rm >= 0),
-    CONSTRAINT ck_complaint_report_details_status
-        CHECK (complaint_status IN ('OPEN', 'RESOLVED')),
-    CONSTRAINT ck_complaint_report_details_resolved_time
-        CHECK ((complaint_status = 'RESOLVED' AND resolved_at IS NOT NULL)
-            OR (complaint_status = 'OPEN' AND resolved_at IS NULL))
+        REFERENCES report_media (tenant_id, id) ON DELETE RESTRICT
 );
 CREATE INDEX ix_complaint_report_details_tenant_status
     ON complaint_report_details (tenant_id, complaint_status);
@@ -1059,13 +835,7 @@ CREATE TABLE task_templates (
     CONSTRAINT fk_task_templates_updater_same_tenant
         FOREIGN KEY (tenant_id, updated_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_task_templates_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT ck_task_templates_title_not_blank CHECK (btrim(title) <> ''),
-    CONSTRAINT ck_task_templates_photo_count CHECK (required_photo_count BETWEEN 1 AND 40),
-    CONSTRAINT ck_task_templates_schedule_type CHECK (
-        schedule_type IN ('AD_HOC', 'DAILY', 'WEEKLY', 'BIWEEKLY', 'MONTHLY')
-    ),
-    CONSTRAINT ck_task_templates_end_date CHECK (end_date IS NULL OR end_date >= first_task_date)
+    CONSTRAINT uq_task_templates_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE INDEX ix_task_templates_tenant_active_tag
     ON task_templates (tenant_id, active, first_task_date, end_date, tag_id, lower(title));
@@ -1083,9 +853,7 @@ CREATE TABLE task_template_checklist_items (
         FOREIGN KEY (tenant_id, template_id)
         REFERENCES task_templates (tenant_id, id) ON DELETE CASCADE,
     CONSTRAINT uq_task_template_checks_position
-        UNIQUE (tenant_id, template_id, position),
-    CONSTRAINT ck_task_template_checks_position CHECK (position BETWEEN 0 AND 4),
-    CONSTRAINT ck_task_template_checks_description CHECK (btrim(description) <> '')
+        UNIQUE (tenant_id, template_id, position)
 );
 
 CREATE TABLE task_records (
@@ -1127,33 +895,7 @@ CREATE TABLE task_records (
         FOREIGN KEY (tenant_id, rated_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_task_records_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT uq_task_records_template_date UNIQUE (tenant_id, template_id, task_date),
-    CONSTRAINT ck_task_records_title_not_blank CHECK (btrim(title) <> ''),
-    CONSTRAINT ck_task_records_tag_not_blank CHECK (btrim(tag_name) <> ''),
-    CONSTRAINT ck_task_records_photo_count CHECK (required_photo_count BETWEEN 1 AND 40),
-    CONSTRAINT ck_task_records_schedule_type CHECK (
-        schedule_type IN ('AD_HOC', 'DAILY', 'WEEKLY', 'BIWEEKLY', 'MONTHLY')
-    ),
-    CONSTRAINT ck_task_records_status CHECK (status IN ('PENDING', 'SUBMITTED', 'DONE')),
-    CONSTRAINT ck_task_records_submitter_role CHECK (
-        submitted_by_role IS NULL OR submitted_by_role IN (
-            'OWNER', 'HEAD', 'MANAGER', 'SUPERVISOR', 'STAFF_1', 'STAFF_2'
-        )
-    ),
-    CONSTRAINT ck_task_records_submission CHECK (
-        (status = 'PENDING' AND submitted_by_user_id IS NULL AND submitted_by_role IS NULL AND submitted_at IS NULL)
-        OR
-        (status IN ('SUBMITTED', 'DONE') AND submitted_by_user_id IS NOT NULL
-            AND submitted_by_role IS NOT NULL AND submitted_at IS NOT NULL)
-    ),
-    CONSTRAINT ck_task_records_rating CHECK (
-        (status <> 'DONE' AND rating IS NULL AND rating_comment IS NULL
-            AND rated_by_user_id IS NULL AND rated_at IS NULL)
-        OR
-        (status = 'DONE' AND rating IS NOT NULL AND rating BETWEEN 1 AND 5
-            AND rating_comment IS NOT NULL AND btrim(rating_comment) <> ''
-            AND rated_by_user_id IS NOT NULL AND rated_at IS NOT NULL)
-    )
+    CONSTRAINT uq_task_records_template_date UNIQUE (tenant_id, template_id, task_date)
 );
 CREATE INDEX ix_task_records_tenant_date_status
     ON task_records (tenant_id, task_date DESC, status, tag_id);
@@ -1177,13 +919,7 @@ CREATE TABLE task_record_checklist_items (
     CONSTRAINT fk_task_record_checks_user_same_tenant
         FOREIGN KEY (tenant_id, completed_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_task_record_checks_position UNIQUE (tenant_id, record_id, position),
-    CONSTRAINT ck_task_record_checks_position CHECK (position BETWEEN 0 AND 4),
-    CONSTRAINT ck_task_record_checks_description CHECK (btrim(description) <> ''),
-    CONSTRAINT ck_task_record_checks_completion CHECK (
-        (completed_by_user_id IS NULL AND completed_at IS NULL)
-        OR (completed_by_user_id IS NOT NULL AND completed_at IS NOT NULL)
-    )
+    CONSTRAINT uq_task_record_checks_position UNIQUE (tenant_id, record_id, position)
 );
 
 CREATE TABLE task_photos (
@@ -1224,9 +960,7 @@ CREATE TABLE task_audit_entries (
         REFERENCES task_records (tenant_id, id) ON DELETE CASCADE,
     CONSTRAINT fk_task_audit_actor_same_tenant
         FOREIGN KEY (tenant_id, actor_user_id)
-        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT ck_task_audit_target CHECK (template_id IS NOT NULL OR record_id IS NOT NULL),
-    CONSTRAINT ck_task_audit_action CHECK (btrim(action) <> '')
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT
 );
 CREATE INDEX ix_task_audit_tenant_record_time
     ON task_audit_entries (tenant_id, record_id, occurred_at, id);

@@ -4,8 +4,9 @@ Backend API for **EastApp**, a multi-business operations application covering id
 
 ## Current development model
 
-- `v098` returns the one-time Initial Setup Code to the uninitialised Flutter app so it can be copied without reading backend logs
+- `v106` returns the one-time Initial Setup Code to the uninitialised Flutter app so it can be copied without reading backend logs
 - While the disposable-development policy remains active, every schema change is merged into the single clean `V1__create_eastapp_schema.sql`; startup resets only when both reset gates are `true`
+- V1 contains no database business-rule checks, PL/pgSQL functions or triggers; Java owns business validation while PostgreSQL keeps keys, relationships and essential uniqueness
 - No seeded tenants or users
 - Initial Setup creates the first tenant and first `OWNER`
 - Each tenant represents one independent business location
@@ -323,7 +324,7 @@ No Redis or general backend data cache is added at this stage.
 
 ## Database and Flyway
 
-EastApp `v098` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
+EastApp `v106` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
 
 1. Code gate: `DATABASE_RESET_ALLOWED_BY_CODE`
 2. Environment gate: `EASTAPP_DATABASE_RESET_ON_START`

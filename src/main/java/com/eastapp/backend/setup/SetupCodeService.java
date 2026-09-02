@@ -6,8 +6,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -34,7 +32,6 @@ public class SetupCodeService {
         SetupCodeRow row = lockSetupRow();
         Instant now = Instant.now();
         if (row.code() != null
-                && row.codeHash() != null
                 && row.expiresAt() != null
                 && now.isBefore(row.expiresAt())) {
             return new ActiveSetupCode(row.code(), row.expiresAt());
@@ -45,12 +42,10 @@ public class SetupCodeService {
         jdbcTemplate.update(
                 """
                 update application_setup
-                set setup_code = ?, setup_code_hash = ?, setup_code_expires_at = ?,
-                    updated_at = current_timestamp
+                set setup_code = ?, setup_code_expires_at = ?
                 where id = 1
                 """,
                 code,
-                hash(code),
                 Timestamp.from(expiresAt)
         );
         log.warn("EastApp initial setup code: {} (valid for 1 hour)", code);
@@ -60,7 +55,7 @@ public class SetupCodeService {
     @Transactional
     public boolean matches(String candidate) {
         SetupCodeRow row = lockSetupRow();
-        if (row.codeHash() == null
+        if (row.code() == null
                 || row.expiresAt() == null
                 || Instant.now().isAfter(row.expiresAt())) {
             return false;
@@ -68,7 +63,7 @@ public class SetupCodeService {
         String normalised = candidate == null
                 ? ""
                 : candidate.trim().toUpperCase(Locale.ROOT);
-        return MessageDigest.isEqual(row.codeHash(), hash(normalised));
+        return row.code().equals(normalised);
     }
 
     @Transactional
@@ -77,10 +72,7 @@ public class SetupCodeService {
                 """
                 update application_setup
                 set setup_code = null,
-                    setup_code_hash = null,
-                    setup_code_expires_at = null,
-                    completed_at = current_timestamp,
-                    updated_at = current_timestamp
+                    setup_code_expires_at = null
                 where id = 1
                 """
         );
@@ -89,7 +81,7 @@ public class SetupCodeService {
     private SetupCodeRow lockSetupRow() {
         return jdbcTemplate.queryForObject(
                 """
-                select setup_code, setup_code_hash, setup_code_expires_at
+                select setup_code, setup_code_expires_at
                 from application_setup
                 where id = 1
                 for update
@@ -98,7 +90,6 @@ public class SetupCodeService {
                     Timestamp expiresAt = resultSet.getTimestamp("setup_code_expires_at");
                     return new SetupCodeRow(
                             resultSet.getString("setup_code"),
-                            resultSet.getBytes("setup_code_hash"),
                             expiresAt == null ? null : expiresAt.toInstant()
                     );
                 }
@@ -113,18 +104,9 @@ public class SetupCodeService {
         return generated.toString();
     }
 
-    private static byte[] hash(String value) {
-        try {
-            return MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is unavailable", exception);
-        }
-    }
-
     public record ActiveSetupCode(String code, Instant expiresAt) {
     }
 
-    private record SetupCodeRow(String code, byte[] codeHash, Instant expiresAt) {
+    private record SetupCodeRow(String code, Instant expiresAt) {
     }
 }
