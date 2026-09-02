@@ -3,6 +3,8 @@ package com.eastapp.backend.tasks.service;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.auth.permission.SystemPermission;
 import com.eastapp.backend.common.error.ApiException;
+import com.eastapp.backend.knowledge.KnowledgeSop;
+import com.eastapp.backend.knowledge.KnowledgeSopRepository;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.UserAccount;
@@ -52,6 +54,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -69,6 +72,7 @@ public class TaskService {
     private final TaskRecordChecklistItemRepository recordChecklistRepository;
     private final TaskPhotoRepository photoRepository;
     private final TaskAuditEntryRepository auditRepository;
+    private final KnowledgeSopRepository knowledgeSopRepository;
     private final StockTagRepository tagRepository;
     private final StockTagAssigneeRepository tagAssigneeRepository;
     private final UserAccountRepository userRepository;
@@ -85,6 +89,7 @@ public class TaskService {
             TaskRecordChecklistItemRepository recordChecklistRepository,
             TaskPhotoRepository photoRepository,
             TaskAuditEntryRepository auditRepository,
+            KnowledgeSopRepository knowledgeSopRepository,
             StockTagRepository tagRepository,
             StockTagAssigneeRepository tagAssigneeRepository,
             UserAccountRepository userRepository,
@@ -100,6 +105,7 @@ public class TaskService {
         this.recordChecklistRepository = recordChecklistRepository;
         this.photoRepository = photoRepository;
         this.auditRepository = auditRepository;
+        this.knowledgeSopRepository = knowledgeSopRepository;
         this.tagRepository = tagRepository;
         this.tagAssigneeRepository = tagAssigneeRepository;
         this.userRepository = userRepository;
@@ -112,9 +118,21 @@ public class TaskService {
 
     public List<TaskTemplateResponse> templates(AuthenticatedUser principal) {
         requireManagement(principal);
-        return templateRepository.findAllByTenantIdOrderByActiveDescTitleAsc(principal.tenantId())
-                .stream()
-                .map(template -> toTemplateResponse(principal.tenantId(), template))
+        List<TaskTemplate> templates = templateRepository
+                .findAllByTenantIdOrderByActiveDescTitleAsc(principal.tenantId());
+        Map<UUID, String> linkedSopTitles = linkedSopTitles(
+                principal.tenantId(),
+                templates.stream()
+                        .map(TaskTemplate::getLinkedSopId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet())
+        );
+        return templates.stream()
+                .map(template -> toTemplateResponse(
+                        principal.tenantId(),
+                        template,
+                        linkedSopTitles.get(template.getLinkedSopId())
+                ))
                 .toList();
     }
 
@@ -126,10 +144,14 @@ public class TaskService {
         requireManagement(principal);
         validateTemplateSchedule(request);
         StockTag tag = requireTag(principal.tenantId(), request.tagId());
+        KnowledgeSop linkedSop = requireLinkedSopOrNull(
+                principal.tenantId(), request.linkedSopId()
+        );
         UserAccount actor = requireUser(principal.tenantId(), principal.userId());
         TaskTemplate template = templateRepository.saveAndFlush(new TaskTemplate(
                 principal.tenantId(),
                 tag.getId(),
+                linkedSop == null ? null : linkedSop.getId(),
                 request.title(),
                 request.instruction(),
                 request.requiredPhotoCount(),
@@ -150,13 +172,18 @@ public class TaskService {
                         + "; end date: " + (template.getEndDate() == null ? "none" : template.getEndDate())
                         + "; required photos: " + template.getRequiredPhotoCount()
                         + "; checklist items: " + request.checklistItems().size()
+                        + "; linked SOP: " + (linkedSop == null ? "none" : linkedSop.getTitle())
                         + "; active: " + template.isActive()
         ));
         if (template.isActive() && template.isScheduledFor(today())) {
             lockTenant(principal.tenantId());
             materialiseTemplate(template, today(), tag);
         }
-        return toTemplateResponse(principal.tenantId(), template);
+        return toTemplateResponse(
+                principal.tenantId(),
+                template,
+                linkedSop == null ? null : linkedSop.getTitle()
+        );
     }
 
     @Transactional
@@ -171,6 +198,7 @@ public class TaskService {
         StockTag previousTag = requireTag(principal.tenantId(), template.getTagId());
         String previousTitle = template.getTitle();
         String previousInstruction = template.getInstruction();
+        UUID previousLinkedSopId = template.getLinkedSopId();
         int previousPhotoCount = template.getRequiredPhotoCount();
         String previousSchedule = template.getScheduleType().name();
         LocalDate previousFirstTaskDate = template.getFirstTaskDate();
@@ -191,8 +219,12 @@ public class TaskService {
         }
 
         StockTag nextTag = requireTag(principal.tenantId(), request.tagId());
+        KnowledgeSop nextLinkedSop = requireLinkedSopOrNull(
+                principal.tenantId(), request.linkedSopId()
+        );
         template.update(
                 nextTag.getId(),
+                nextLinkedSop == null ? null : nextLinkedSop.getId(),
                 request.title(),
                 request.instruction(),
                 request.requiredPhotoCount(),
@@ -225,9 +257,15 @@ public class TaskService {
                         + "; checklist changed: "
                         + !previousChecklist.equals(request.checklistItems().stream()
                                 .map(String::trim).toList())
+                        + "; linked SOP changed: "
+                        + !Objects.equals(previousLinkedSopId, template.getLinkedSopId())
                         + "; active: " + previousActive + " -> " + template.isActive()
         ));
-        return toTemplateResponse(principal.tenantId(), template);
+        return toTemplateResponse(
+                principal.tenantId(),
+                template,
+                nextLinkedSop == null ? null : nextLinkedSop.getTitle()
+        );
     }
 
     @Transactional
@@ -497,7 +535,11 @@ public class TaskService {
         templateChecklistRepository.saveAll(entities);
     }
 
-    private TaskTemplateResponse toTemplateResponse(UUID tenantId, TaskTemplate template) {
+    private TaskTemplateResponse toTemplateResponse(
+            UUID tenantId,
+            TaskTemplate template,
+            String linkedSopTitle
+    ) {
         StockTag tag = requireTag(tenantId, template.getTagId());
         List<String> checks = templateChecklistRepository
                 .findAllByTenantIdAndTemplateIdOrderByPositionAsc(tenantId, template.getId())
@@ -510,6 +552,8 @@ public class TaskService {
                 tag.getTag(),
                 template.getTitle(),
                 template.getInstruction(),
+                template.getLinkedSopId(),
+                linkedSopTitle,
                 template.getRequiredPhotoCount(),
                 template.getScheduleType(),
                 template.getFirstTaskDate(),
@@ -628,6 +672,14 @@ public class TaskService {
                         .stream()
                         .collect(Collectors.toMap(UserAccount::getId, user -> user));
 
+        Map<UUID, String> linkedSopTitles = linkedSopTitles(
+                tenantId,
+                records.stream()
+                        .map(TaskRecord::getLinkedSopId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet())
+        );
+
         List<TaskRecordResponse> responses = new ArrayList<>(records.size());
         for (TaskRecord record : records) {
             List<TaskRecordChecklistItem> checks = checksByRecord
@@ -642,7 +694,8 @@ public class TaskService {
                     activityByRecord.getOrDefault(record.getId(), List.of()),
                     storageKeyByMediaId,
                     usersById,
-                    assignedTagIds
+                    assignedTagIds,
+                    linkedSopTitles.get(record.getLinkedSopId())
             ));
         }
         return List.copyOf(responses);
@@ -656,7 +709,8 @@ public class TaskService {
             List<TaskAuditEntry> activity,
             Map<UUID, String> storageKeyByMediaId,
             Map<UUID, UserAccount> usersById,
-            Set<UUID> assignedTagIds
+            Set<UUID> assignedTagIds,
+            String linkedSopTitle
     ) {
         boolean requirementsMet = photos.size() >= record.getRequiredPhotoCount()
                 && !checks.isEmpty()
@@ -705,6 +759,8 @@ public class TaskService {
                 record.getTaskDate(),
                 record.getTitle(),
                 record.getInstruction(),
+                record.getLinkedSopId(),
+                linkedSopTitle,
                 record.getRequiredPhotoCount(),
                 record.getScheduleType(),
                 photoResponses.size(),
@@ -833,6 +889,22 @@ public class TaskService {
     private StockTag requireTag(UUID tenantId, UUID tagId) {
         return tagRepository.findByIdAndTenant_Id(tagId, tenantId)
                 .orElseThrow(() -> notFound("STOCK_TAG_NOT_FOUND", "The selected tag was not found."));
+    }
+
+    private KnowledgeSop requireLinkedSopOrNull(UUID tenantId, UUID linkedSopId) {
+        if (linkedSopId == null) return null;
+        return knowledgeSopRepository.findByIdAndTenant_Id(linkedSopId, tenantId)
+                .orElseThrow(() -> notFound(
+                        "TASK_LINKED_SOP_NOT_FOUND",
+                        "The selected SOP video was not found in the active business."
+                ));
+    }
+
+    private Map<UUID, String> linkedSopTitles(UUID tenantId, Set<UUID> linkedSopIds) {
+        if (linkedSopIds.isEmpty()) return Map.of();
+        return knowledgeSopRepository.findAllByTenant_IdAndIdIn(tenantId, linkedSopIds)
+                .stream()
+                .collect(Collectors.toMap(KnowledgeSop::getId, KnowledgeSop::getTitle));
     }
 
     private UserAccount requireUser(UUID tenantId, UUID userId) {

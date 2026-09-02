@@ -16,6 +16,8 @@ public record TaskRecordResponse(
         LocalDate taskDate,
         String title,
         String instruction,
+        UUID linkedSopId,
+        String linkedSopTitle,
         int requiredPhotoCount,
         TaskScheduleType scheduleType,
         int photoCount,

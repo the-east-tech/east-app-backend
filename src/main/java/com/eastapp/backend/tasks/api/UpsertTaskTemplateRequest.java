@@ -15,6 +15,7 @@ public record UpsertTaskTemplateRequest(
         @NotBlank @Size(max = 160) String title,
         @Size(max = 1000) String instruction,
         @NotNull UUID tagId,
+        UUID linkedSopId,
         @Min(1) @Max(40) int requiredPhotoCount,
         @NotNull TaskScheduleType scheduleType,
         @NotNull LocalDate firstTaskDate,

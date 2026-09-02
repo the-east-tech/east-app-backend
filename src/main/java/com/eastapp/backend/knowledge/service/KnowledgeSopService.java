@@ -76,6 +76,21 @@ public class KnowledgeSopService {
         return KnowledgeSopResponse.from(sop, YouTubeUrlParser.parseVideoId(sop.getYoutubeUrl()));
     }
 
+    @Transactional(readOnly = true)
+    public List<KnowledgeSopResponse> versions(AuthenticatedUser principal, UUID sopId) {
+        KnowledgeSop selected = sopRepository.findByIdAndTenant_Id(sopId, principal.tenantId())
+                .orElseThrow(() -> notFound("SOP_NOT_FOUND", "SOP not found."));
+        return sopRepository.findAllByTenant_IdAndLinkGroupIdOrderByCreatedAtAscIdAsc(
+                        principal.tenantId(), selected.getLinkGroupId()
+                )
+                .stream()
+                .map(sop -> KnowledgeSopResponse.from(
+                        sop,
+                        YouTubeUrlParser.parseVideoId(sop.getYoutubeUrl())
+                ))
+                .toList();
+    }
+
     @Transactional
     public KnowledgeSopResponse create(
             AuthenticatedUser principal,

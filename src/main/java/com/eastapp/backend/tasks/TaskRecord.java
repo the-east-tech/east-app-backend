@@ -44,6 +44,9 @@ public class TaskRecord {
     @Column(nullable = false, length = 1000, updatable = false)
     private String instruction;
 
+    @Column(name = "linked_sop_id", updatable = false)
+    private UUID linkedSopId;
+
     @Column(name = "tag_name", nullable = false, length = 80, updatable = false)
     private String tagName;
 
@@ -102,6 +105,7 @@ public class TaskRecord {
         this.taskDate = Objects.requireNonNull(taskDate, "taskDate must not be null");
         this.title = template.getTitle();
         this.instruction = template.getInstruction();
+        this.linkedSopId = template.getLinkedSopId();
         this.tagName = requireText(tagName, "tagName");
         this.requiredPhotoCount = template.getRequiredPhotoCount();
         this.scheduleType = template.getScheduleType();
@@ -136,6 +140,7 @@ public class TaskRecord {
     public LocalDate getTaskDate() { return taskDate; }
     public String getTitle() { return title; }
     public String getInstruction() { return instruction; }
+    public UUID getLinkedSopId() { return linkedSopId; }
     public String getTagName() { return tagName; }
     public int getRequiredPhotoCount() { return requiredPhotoCount; }
     public TaskScheduleType getScheduleType() { return scheduleType; }

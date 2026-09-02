@@ -179,6 +179,8 @@ public class TaskController {
                 + "\nEnd date: " + (template.endDate() == null ? "None" : template.endDate())
                 + "\nRequired photos: " + template.requiredPhotoCount()
                 + "\nChecklist items: " + template.checklistItems().size()
+                + "\nLinked SOP: "
+                + (template.linkedSopTitle() == null ? "None" : template.linkedSopTitle())
                 + "\nActive: " + (template.active() ? "Yes" : "No");
     }
 

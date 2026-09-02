@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -46,6 +47,14 @@ public class KnowledgeSopController {
             @PathVariable UUID sopId
     ) {
         return sopService.get(principal, sopId);
+    }
+
+    @GetMapping("/{sopId}/versions")
+    List<KnowledgeSopResponse> versions(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable UUID sopId
+    ) {
+        return sopService.versions(principal, sopId);
     }
 
     @ActivityTracked(module = "Knowledge", action = "created", entity = "SOP video")

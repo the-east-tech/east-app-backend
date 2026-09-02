@@ -32,6 +32,9 @@ public class TaskTemplate {
     @Column(name = "tag_id", nullable = false)
     private UUID tagId;
 
+    @Column(name = "linked_sop_id")
+    private UUID linkedSopId;
+
     @Column(nullable = false, length = 160)
     private String title;
 
@@ -74,6 +77,7 @@ public class TaskTemplate {
     public TaskTemplate(
             UUID tenantId,
             UUID tagId,
+            UUID linkedSopId,
             String title,
             String instruction,
             int requiredPhotoCount,
@@ -86,13 +90,14 @@ public class TaskTemplate {
         this.tenantId = Objects.requireNonNull(tenantId, "tenantId must not be null");
         this.createdByUserId = Objects.requireNonNull(actorUserId, "actorUserId must not be null");
         update(
-                tagId, title, instruction, requiredPhotoCount,
+                tagId, linkedSopId, title, instruction, requiredPhotoCount,
                 scheduleType, firstTaskDate, endDate, active, actorUserId
         );
     }
 
     public void update(
             UUID tagId,
+            UUID linkedSopId,
             String title,
             String instruction,
             int requiredPhotoCount,
@@ -103,6 +108,7 @@ public class TaskTemplate {
             UUID actorUserId
     ) {
         this.tagId = Objects.requireNonNull(tagId, "tagId must not be null");
+        this.linkedSopId = linkedSopId;
         this.title = requireText(title, "title");
         this.instruction = optionalText(instruction);
         if (requiredPhotoCount < 1 || requiredPhotoCount > 40) {
@@ -122,6 +128,7 @@ public class TaskTemplate {
     public UUID getId() { return id; }
     public UUID getTenantId() { return tenantId; }
     public UUID getTagId() { return tagId; }
+    public UUID getLinkedSopId() { return linkedSopId; }
     public String getTitle() { return title; }
     public String getInstruction() { return instruction; }
     public int getRequiredPhotoCount() { return requiredPhotoCount; }

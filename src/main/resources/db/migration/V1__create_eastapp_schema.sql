@@ -1,4 +1,4 @@
--- EastApp clean reset-per-release schema (v097).
+-- EastApp clean reset-per-release schema (v101).
 -- This V1 contains the complete schema for a brand-new EastApp database.
 -- While the reset-per-release policy is active, merge every schema change into
 -- this file, keep V1 as the only migration, and reset the database each release.
@@ -1030,6 +1030,7 @@ CREATE TABLE task_templates (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     tenant_id UUID NOT NULL,
     tag_id UUID NOT NULL,
+    linked_sop_id UUID,
     title VARCHAR(160) NOT NULL,
     instruction VARCHAR(1000) NOT NULL DEFAULT '',
     required_photo_count INTEGER NOT NULL,
@@ -1044,6 +1045,10 @@ CREATE TABLE task_templates (
     CONSTRAINT fk_task_templates_tag_same_tenant
         FOREIGN KEY (tenant_id, tag_id)
         REFERENCES stock_tags (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_task_templates_sop_same_tenant
+        FOREIGN KEY (tenant_id, linked_sop_id)
+        REFERENCES knowledge_sops (tenant_id, id)
+        ON DELETE SET NULL (linked_sop_id),
     CONSTRAINT fk_task_templates_creator_same_tenant
         FOREIGN KEY (tenant_id, created_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
@@ -1060,6 +1065,9 @@ CREATE TABLE task_templates (
 );
 CREATE INDEX ix_task_templates_tenant_active_tag
     ON task_templates (tenant_id, active, first_task_date, end_date, tag_id, lower(title));
+CREATE INDEX ix_task_templates_tenant_linked_sop
+    ON task_templates (tenant_id, linked_sop_id)
+    WHERE linked_sop_id IS NOT NULL;
 
 CREATE TABLE task_template_checklist_items (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -1084,6 +1092,7 @@ CREATE TABLE task_records (
     task_date DATE NOT NULL,
     title VARCHAR(160) NOT NULL,
     instruction VARCHAR(1000) NOT NULL DEFAULT '',
+    linked_sop_id UUID,
     tag_name VARCHAR(80) NOT NULL,
     required_photo_count INTEGER NOT NULL,
     schedule_type VARCHAR(16) NOT NULL,
@@ -1103,6 +1112,10 @@ CREATE TABLE task_records (
     CONSTRAINT fk_task_records_tag_same_tenant
         FOREIGN KEY (tenant_id, tag_id)
         REFERENCES stock_tags (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_task_records_sop_same_tenant
+        FOREIGN KEY (tenant_id, linked_sop_id)
+        REFERENCES knowledge_sops (tenant_id, id)
+        ON DELETE SET NULL (linked_sop_id),
     CONSTRAINT fk_task_records_submitter_same_tenant
         FOREIGN KEY (tenant_id, submitted_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
@@ -1142,6 +1155,9 @@ CREATE INDEX ix_task_records_tenant_date_status
     ON task_records (tenant_id, task_date DESC, status, tag_id);
 CREATE INDEX ix_task_records_tenant_submitter_date
     ON task_records (tenant_id, submitted_by_user_id, task_date DESC);
+CREATE INDEX ix_task_records_tenant_linked_sop
+    ON task_records (tenant_id, linked_sop_id)
+    WHERE linked_sop_id IS NOT NULL;
 
 CREATE TABLE task_record_checklist_items (
     id UUID PRIMARY KEY DEFAULT uuidv7(),

@@ -13,6 +13,8 @@ public record TaskTemplateResponse(
         String tagName,
         String title,
         String instruction,
+        UUID linkedSopId,
+        String linkedSopTitle,
         int requiredPhotoCount,
         TaskScheduleType scheduleType,
         LocalDate firstTaskDate,
