@@ -13,8 +13,8 @@ import java.util.UUID;
 
 public record UpsertStockSkuRequest(
         @NotBlank @Size(max = 120) String name,
-        @NotNull UUID tag1Id,
-        @NotNull UUID tag2Id,
+        UUID tag1Id,
+        UUID tag2Id,
         @NotBlank @Size(max = 32) String unit,
         @NotNull @DecimalMin("0") BigDecimal minimumBalanceValue,
         @NotNull @DecimalMin("0") BigDecimal maximumBalanceValue,

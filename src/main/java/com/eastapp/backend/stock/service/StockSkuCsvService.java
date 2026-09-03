@@ -139,8 +139,8 @@ public class StockSkuCsvService {
                             FORMAT_VERSION,
                             LANGUAGES,
                             sku.getName(),
-                            sku.getTag1().getTag(),
-                            sku.getTag2().getTag(),
+                            sku.getTag1() == null ? "" : sku.getTag1().getTag(),
+                            sku.getTag2() == null ? "" : sku.getTag2().getTag(),
                             sku.getUnit(),
                             decimal(sku.getMinimumBalanceValue()),
                             decimal(sku.getMaximumBalanceValue()),
@@ -225,17 +225,24 @@ public class StockSkuCsvService {
         int importedRows = 0;
         int unmatchedSupplierLinks = 0;
         for (ParsedSku row : analysis.readyRows()) {
-            StockTag tag1 = tagsByName.get(normalise(row.tag1()));
-            if (tag1 == null) {
-                tag1 = tagRepository.save(new StockTag(tenant, row.tag1(), actor));
-                tagsByName.put(normalise(row.tag1()), tag1);
-                createdTags += 1;
+            StockTag tag1 = null;
+            if (!row.tag1().isBlank()) {
+                tag1 = tagsByName.get(normalise(row.tag1()));
+                if (tag1 == null) {
+                    tag1 = tagRepository.save(new StockTag(tenant, row.tag1(), actor));
+                    tagsByName.put(normalise(row.tag1()), tag1);
+                    createdTags += 1;
+                }
             }
-            StockTag tag2 = tagsByName.get(normalise(row.tag2()));
-            if (tag2 == null) {
-                tag2 = tagRepository.save(new StockTag(tenant, row.tag2(), actor));
-                tagsByName.put(normalise(row.tag2()), tag2);
-                createdTags += 1;
+
+            StockTag tag2 = null;
+            if (!row.tag2().isBlank()) {
+                tag2 = tagsByName.get(normalise(row.tag2()));
+                if (tag2 == null) {
+                    tag2 = tagRepository.save(new StockTag(tenant, row.tag2(), actor));
+                    tagsByName.put(normalise(row.tag2()), tag2);
+                    createdTags += 1;
+                }
             }
 
             Set<StockSupplier> suppliers = new LinkedHashSet<>();
@@ -337,10 +344,12 @@ public class StockSkuCsvService {
                         continue;
                     }
                     readyRows.add(row);
-                    if (!existingTagNames.contains(normalise(row.tag1()))) {
+                    if (!row.tag1().isBlank()
+                            && !existingTagNames.contains(normalise(row.tag1()))) {
                         newTags.add(normalise(row.tag1()));
                     }
-                    if (!existingTagNames.contains(normalise(row.tag2()))) {
+                    if (!row.tag2().isBlank()
+                            && !existingTagNames.contains(normalise(row.tag2()))) {
                         newTags.add(normalise(row.tag2()));
                     }
                     for (String supplierName : row.supplierNames()) {
@@ -390,8 +399,8 @@ public class StockSkuCsvService {
             throw invalid("languages must be " + LANGUAGES + ".");
         }
         String name = requiredText(record, "sku_name", 120);
-        String tag1 = requiredText(record, "tag_1", 80);
-        String tag2 = requiredText(record, "tag_2", 80);
+        String tag1 = optionalText(record, "tag_1", 80);
+        String tag2 = optionalText(record, "tag_2", 80);
         String unit = requiredText(record, "unit", 32);
         BigDecimal minimumBalance = decimal(record, "minimum_balance");
         BigDecimal maximumBalance = decimal(record, "maximum_balance");
@@ -522,6 +531,12 @@ public class StockSkuCsvService {
     private static String requiredText(CSVRecord record, String header, int maxLength) {
         String value = text(record, header);
         if (value.isEmpty()) throw invalid(header + " is required.");
+        if (value.length() > maxLength) throw invalid(header + " is too long.");
+        return value;
+    }
+
+    private static String optionalText(CSVRecord record, String header, int maxLength) {
+        String value = text(record, header);
         if (value.length() > maxLength) throw invalid(header + " is too long.");
         return value;
     }

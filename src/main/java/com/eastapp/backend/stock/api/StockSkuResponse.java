@@ -33,8 +33,8 @@ public record StockSkuResponse(
     public static StockSkuResponse from(StockSku item) {
         return new StockSkuResponse(
                 item.getId(), item.getName(),
-                item.getTag1().getId(), item.getCategory(),
-                item.getTag2().getId(), item.getLocation(),
+                item.getTag1() == null ? null : item.getTag1().getId(), item.getCategory(),
+                item.getTag2() == null ? null : item.getTag2().getId(), item.getLocation(),
                 item.getUnit(), item.getMinimumBalanceValue(),
                 item.getMaximumBalanceValue(), item.getCurrentBalanceValue(),
                 item.getRecoveryPercent(), item.getMinimumPriceRm(),

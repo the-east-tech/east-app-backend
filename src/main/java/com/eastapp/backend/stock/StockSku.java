@@ -45,12 +45,12 @@ public class StockSku {
     @Column(nullable = false, length = 120)
     private String name;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tag1_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tag1_id")
     private StockTag tag1;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tag2_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tag2_id")
     private StockTag tag2;
 
     @Column(nullable = false, length = 32)
@@ -217,8 +217,8 @@ public class StockSku {
             UserAccount actor
     ) {
         this.name = requireText(name, "name");
-        this.tag1 = requireTenantTag(tag1, "tag1");
-        this.tag2 = requireTenantTag(tag2, "tag2");
+        this.tag1 = optionalTenantTag(tag1, "tag1");
+        this.tag2 = optionalTenantTag(tag2, "tag2");
         this.unit = requireText(unit, "unit");
         this.minimumBalanceValue = nonNegative(minimumBalanceValue, "minimumBalanceValue");
         this.maximumBalanceValue = nonNegative(maximumBalanceValue, "maximumBalanceValue");
@@ -270,65 +270,21 @@ public class StockSku {
         this.lastUpdatedBy = Objects.requireNonNull(actor, "actor must not be null");
     }
 
-    public UUID getId() {
-        return id;
-    }
-
-    public Tenant getTenant() {
-        return tenant;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public StockTag getTag1() {
-        return tag1;
-    }
-
-    public String getCategory() {
-        return tag1.getTag();
-    }
-
-    public StockTag getTag2() {
-        return tag2;
-    }
-
-    public String getLocation() {
-        return tag2.getTag();
-    }
-
-    public String getUnit() {
-        return unit;
-    }
-
-    public BigDecimal getMinimumBalanceValue() {
-        return minimumBalanceValue;
-    }
-
-    public BigDecimal getMaximumBalanceValue() {
-        return maximumBalanceValue;
-    }
-
-    public BigDecimal getCurrentBalanceValue() {
-        return currentBalanceValue;
-    }
-
-    public int getRecoveryPercent() {
-        return recoveryPercent;
-    }
-
-    public BigDecimal getMinimumPriceRm() {
-        return minimumPriceRm;
-    }
-
-    public BigDecimal getMaximumPriceRm() {
-        return maximumPriceRm;
-    }
-
-    public Set<StockSupplier> getSuppliers() {
-        return suppliers;
-    }
+    public UUID getId() { return id; }
+    public Tenant getTenant() { return tenant; }
+    public String getName() { return name; }
+    public StockTag getTag1() { return tag1; }
+    public String getCategory() { return tag1 == null ? "" : tag1.getTag(); }
+    public StockTag getTag2() { return tag2; }
+    public String getLocation() { return tag2 == null ? "" : tag2.getTag(); }
+    public String getUnit() { return unit; }
+    public BigDecimal getMinimumBalanceValue() { return minimumBalanceValue; }
+    public BigDecimal getMaximumBalanceValue() { return maximumBalanceValue; }
+    public BigDecimal getCurrentBalanceValue() { return currentBalanceValue; }
+    public int getRecoveryPercent() { return recoveryPercent; }
+    public BigDecimal getMinimumPriceRm() { return minimumPriceRm; }
+    public BigDecimal getMaximumPriceRm() { return maximumPriceRm; }
+    public Set<StockSupplier> getSuppliers() { return suppliers; }
 
     public String getPhotoPath() {
         return thumbnailMedia.isSkuImportPlaceholder()
@@ -336,46 +292,16 @@ public class StockSku {
                 : thumbnailMedia.getStorageKey();
     }
 
-    public StockMedia getThumbnailMedia() {
-        return thumbnailMedia;
-    }
-
-    public List<String> getAssignedStaffNames() {
-        return assignedStaffNames;
-    }
-
-    public List<String> getReceivingChecklist() {
-        return receivingChecklist;
-    }
-
-    public int getStockCheckFrequencyDays() {
-        return stockCheckFrequencyDays;
-    }
-
-    public LocalTime getResetTime() {
-        return resetTime;
-    }
-
-    public boolean isActive() {
-        return active;
-    }
-
-    public boolean isCoolingPeriod() {
-        return coolingPeriod;
-    }
-
-    public UserAccount getLastUpdatedBy() {
-        return lastUpdatedBy;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
-
+    public StockMedia getThumbnailMedia() { return thumbnailMedia; }
+    public List<String> getAssignedStaffNames() { return assignedStaffNames; }
+    public List<String> getReceivingChecklist() { return receivingChecklist; }
+    public int getStockCheckFrequencyDays() { return stockCheckFrequencyDays; }
+    public LocalTime getResetTime() { return resetTime; }
+    public boolean isActive() { return active; }
+    public boolean isCoolingPeriod() { return coolingPeriod; }
+    public UserAccount getLastUpdatedBy() { return lastUpdatedBy; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 
     private StockMedia requireTenantMedia(StockMedia media) {
         StockMedia resolved = Objects.requireNonNull(media, "thumbnailMedia must not be null");
@@ -385,12 +311,12 @@ public class StockSku {
         return resolved;
     }
 
-    private StockTag requireTenantTag(StockTag tag, String field) {
-        StockTag resolved = Objects.requireNonNull(tag, field + " must not be null");
-        if (!resolved.getTenant().getId().equals(tenant.getId())) {
+    private StockTag optionalTenantTag(StockTag tag, String field) {
+        if (tag == null) return null;
+        if (!tag.getTenant().getId().equals(tenant.getId())) {
             throw new IllegalArgumentException(field + " must belong to the SKU tenant");
         }
-        return resolved;
+        return tag;
     }
 
     private static String text(String value) {

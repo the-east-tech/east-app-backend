@@ -799,6 +799,7 @@ public class StockService {
     }
 
     private StockTag tag(UUID id, UUID tenantId) {
+        if (id == null) return null;
         return tagRepository.findByIdAndTenant_Id(id, tenantId)
                 .orElseThrow(() -> notFound("STOCK_TAG_NOT_FOUND", "Stock tag not found."));
     }
@@ -924,7 +925,6 @@ public class StockService {
         for (UUID id : ids) result.add(supplier(id, tenantId));
         return result;
     }
-
 
     private void requireReceivingPhoto(UUID tenantId, String storageKey, String label) {
         String value = storageKey == null ? "" : storageKey.trim();
