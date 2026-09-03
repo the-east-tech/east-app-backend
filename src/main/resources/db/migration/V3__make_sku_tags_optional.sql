@@ -1,3 +1,0 @@
-ALTER TABLE stock_skus
-    ALTER COLUMN tag1_id DROP NOT NULL,
-    ALTER COLUMN tag2_id DROP NOT NULL;
