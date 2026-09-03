@@ -20,7 +20,14 @@ public interface StockReceivingRepository extends JpaRepository<StockReceiving, 
             select receiving
             from StockReceiving receiving
             where receiving.tenant.id = :tenantId
-              and (:filterByReviewStatus = false or receiving.reviewStatus = :reviewStatus)
+              and (:filterByReviewStatus = false or receiving.reviewStatus =
+                    case :reviewStatus
+                        when 'Pending Review' then 'SUBMITTED'
+                        when 'Pending' then 'SUBMITTED'
+                        when 'Approved' then 'DONE'
+                        when 'Rejected' then 'PENDING'
+                        else :reviewStatus
+                    end)
               and (:filterByFrom = false or receiving.capturedAt >= :fromInclusive)
               and (:filterByTo = false or receiving.capturedAt < :toExclusive)
             order by receiving.capturedAt desc, receiving.id desc
@@ -36,21 +43,36 @@ public interface StockReceivingRepository extends JpaRepository<StockReceiving, 
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"tenant", "supplier", "receivedBy", "reviewedBy", "items"})
+    @EntityGraph(attributePaths = {"tenant", "supplier", "receivedBy", "reviewedBy", "items", "items.sku"})
     Optional<StockReceiving> findByIdAndTenant_Id(UUID id, UUID tenantId);
 
     boolean existsByTenant_IdAndSupplier_Id(UUID tenantId, UUID supplierId);
+
     long countByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
             UUID tenantId,
             Instant fromInclusive,
             Instant toExclusive
     );
 
+    @Query("""
+            select count(receiving)
+            from StockReceiving receiving
+            where receiving.tenant.id = :tenantId
+              and receiving.reviewStatus =
+                    case :reviewStatus
+                        when 'Pending Review' then 'SUBMITTED'
+                        when 'Pending' then 'SUBMITTED'
+                        when 'Approved' then 'DONE'
+                        when 'Rejected' then 'PENDING'
+                        else :reviewStatus
+                    end
+              and receiving.capturedAt >= :fromInclusive
+              and receiving.capturedAt < :toExclusive
+            """)
     long countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
-            UUID tenantId,
-            String reviewStatus,
-            Instant fromInclusive,
-            Instant toExclusive
+            @Param("tenantId") UUID tenantId,
+            @Param("reviewStatus") String reviewStatus,
+            @Param("fromInclusive") Instant fromInclusive,
+            @Param("toExclusive") Instant toExclusive
     );
-
 }

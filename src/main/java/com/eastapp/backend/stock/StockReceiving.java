@@ -17,6 +17,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,7 +49,9 @@ public class StockReceiving {
     @OrderBy("position ASC")
     private List<StockReceivingItem> items = new ArrayList<>();
     @Column(name = "review_status", nullable = false, length = 24)
-    private String reviewStatus = "Pending Review";
+    private String reviewStatus = StockWorkflowStatus.SUBMITTED.name();
+    @Column(name = "order_reference", updatable = false)
+    private UUID orderReference;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by_user_id")
     private UserAccount reviewedBy;
@@ -73,6 +76,8 @@ public class StockReceiving {
         this.capturedAt = Objects.requireNonNull(capturedAt);
         this.invoicePhotoName = text(invoicePhotoName);
         this.goodsPhotoName = text(goodsPhotoName);
+        this.reviewStatus = StockWorkflowStatus.SUBMITTED.name();
+        this.orderReference = supplier.beginReceiving();
     }
 
     public void addItem(StockReceivingItem item) {
@@ -81,13 +86,25 @@ public class StockReceiving {
     }
 
     public void review(String status, String note, UserAccount actor) {
-        if (!status.equals("Approved") && !status.equals("Rejected")) {
-            throw new IllegalArgumentException("review status must be Approved or Rejected");
+        StockWorkflowStatus current = StockWorkflowStatus.fromStored(reviewStatus);
+        if (current != StockWorkflowStatus.SUBMITTED) {
+            throw new IllegalStateException("Only a submitted receiving record may be reviewed.");
         }
-        this.reviewStatus = status;
+        StockWorkflowStatus next = StockWorkflowStatus.fromReviewAction(status);
+        UserAccount reviewer = Objects.requireNonNull(actor);
+        if (next == StockWorkflowStatus.PENDING) {
+            for (StockReceivingItem item : items) {
+                StockSku sku = item.getSku();
+                BigDecimal reverted = sku.getCurrentBalanceValue().subtract(item.getReceivedQuantity());
+                if (reverted.signum() < 0) reverted = BigDecimal.ZERO;
+                sku.updateBalance(reverted, reviewer);
+            }
+        }
+        this.reviewStatus = next.name();
         this.reviewNote = text(note);
-        this.reviewedBy = Objects.requireNonNull(actor);
+        this.reviewedBy = reviewer;
         this.reviewedAt = Instant.now();
+        supplier.applyReceivingReview(orderReference, next);
     }
 
     public UUID getId() { return id; }
@@ -98,7 +115,9 @@ public class StockReceiving {
     public String getInvoicePhotoName() { return invoicePhotoName; }
     public String getGoodsPhotoName() { return goodsPhotoName; }
     public List<StockReceivingItem> getItems() { return items; }
-    public String getReviewStatus() { return reviewStatus; }
+    public String getReviewStatus() { return StockWorkflowStatus.fromStored(reviewStatus).legacyLabel(); }
+    public String getWorkflowStatus() { return StockWorkflowStatus.fromStored(reviewStatus).name(); }
+    public UUID getOrderReference() { return orderReference; }
     public UserAccount getReviewedBy() { return reviewedBy; }
     public Instant getReviewedAt() { return reviewedAt; }
     public String getReviewNote() { return reviewNote; }

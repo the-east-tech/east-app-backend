@@ -15,7 +15,7 @@ public record BulkReviewStockCountsRequest(
         List<@NotNull UUID> submissionIds,
 
         @NotBlank
-        @Pattern(regexp = "Approved|Rejected")
+        @Pattern(regexp = "Approved|Rejected|DONE|PENDING")
         String status,
 
         @Size(max = 1000)

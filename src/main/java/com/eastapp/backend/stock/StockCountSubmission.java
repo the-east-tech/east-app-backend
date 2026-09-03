@@ -64,7 +64,7 @@ public class StockCountSubmission {
     @Column(name = "remark_value", nullable = false, length = 1000)
     private Map<String, String> remarks = new LinkedHashMap<>();
     @Column(name = "review_status", nullable = false, length = 24)
-    private String reviewStatus = "Pending Review";
+    private String reviewStatus = StockWorkflowStatus.SUBMITTED.name();
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by_user_id")
     private UserAccount reviewedBy;
@@ -97,15 +97,22 @@ public class StockCountSubmission {
         this.belowMinimumBalance = currentBalanceValue.compareTo(sku.getMinimumBalanceValue()) < 0;
         if (checkedItems != null) this.checkedItems.putAll(checkedItems);
         if (remarks != null) remarks.forEach((key, value) -> this.remarks.put(key, text(value)));
+        this.reviewStatus = StockWorkflowStatus.SUBMITTED.name();
     }
 
     public void review(String status, String note, UserAccount actor) {
-        if (!status.equals("Approved") && !status.equals("Rejected")) {
-            throw new IllegalArgumentException("review status must be Approved or Rejected");
+        StockWorkflowStatus current = StockWorkflowStatus.fromStored(reviewStatus);
+        if (current != StockWorkflowStatus.SUBMITTED) {
+            throw new IllegalStateException("Only a submitted stock count may be reviewed.");
         }
-        this.reviewStatus = status;
+        StockWorkflowStatus next = StockWorkflowStatus.fromReviewAction(status);
+        UserAccount reviewer = Objects.requireNonNull(actor);
+        if (next == StockWorkflowStatus.PENDING) {
+            sku.updateBalance(previousBalanceValue, reviewer);
+        }
+        this.reviewStatus = next.name();
         this.reviewNote = text(note);
-        this.reviewedBy = Objects.requireNonNull(actor);
+        this.reviewedBy = reviewer;
         this.reviewedAt = Instant.now();
     }
 
@@ -122,7 +129,8 @@ public class StockCountSubmission {
     public boolean isBelowMinimumBalance() { return belowMinimumBalance; }
     public Map<String, Boolean> getCheckedItems() { return checkedItems; }
     public Map<String, String> getRemarks() { return remarks; }
-    public String getReviewStatus() { return reviewStatus; }
+    public String getReviewStatus() { return StockWorkflowStatus.fromStored(reviewStatus).legacyLabel(); }
+    public String getWorkflowStatus() { return StockWorkflowStatus.fromStored(reviewStatus).name(); }
     public UserAccount getReviewedBy() { return reviewedBy; }
     public Instant getReviewedAt() { return reviewedAt; }
     public String getReviewNote() { return reviewNote; }

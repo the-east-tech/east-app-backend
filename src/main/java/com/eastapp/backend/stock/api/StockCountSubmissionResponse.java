@@ -27,6 +27,7 @@ public record StockCountSubmissionResponse(
         Map<String, Boolean> checkedItems,
         Map<String, String> remarks,
         String reviewStatus,
+        String workflowStatus,
         String reviewedBy,
         String reviewedAt,
         String reviewNote
@@ -42,7 +43,7 @@ public record StockCountSubmissionResponse(
                 item.getStockPhotoName(), item.getInvoicePhotoName(),
                 item.getPreviousBalanceValue(), item.getCurrentBalanceValue(),
                 item.isBelowMinimumBalance(), Map.copyOf(item.getCheckedItems()),
-                Map.copyOf(item.getRemarks()), item.getReviewStatus(),
+                Map.copyOf(item.getRemarks()), item.getReviewStatus(), item.getWorkflowStatus(),
                 item.getReviewedBy() == null ? "" : item.getReviewedBy().getEmployeeId(),
                 StockResponseSupport.label(item.getReviewedAt()), item.getReviewNote()
         );
