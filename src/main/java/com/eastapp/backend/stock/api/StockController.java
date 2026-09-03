@@ -315,7 +315,7 @@ public class StockController {
 
     @ActivityTracked(module = "Stock", action = "reviewed", entity = "stock count", targetPathVariable = "submissionId")
     @PatchMapping("/counts/{submissionId}/review")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     StockCountSubmissionResponse reviewCount(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID submissionId,
@@ -326,7 +326,7 @@ public class StockController {
 
     @ActivityTracked(module = "Stock", action = "reviewed", entity = "stock counts")
     @PatchMapping("/counts/bulk-review")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     BulkReviewStockCountsResponse bulkReviewCounts(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody BulkReviewStockCountsRequest request
@@ -346,7 +346,7 @@ public class StockController {
 
     @ActivityTracked(module = "Stock", action = "reviewed", entity = "stock receiving", targetPathVariable = "receivingId")
     @PatchMapping("/receivings/{receivingId}/review")
-    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     StockReceivingResponse reviewReceiving(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID receivingId,
