@@ -1,4 +1,4 @@
--- EastApp clean reset-per-release schema (v106).
+-- EastApp clean reset-per-release schema (v110).
 -- This V1 contains the complete schema for a brand-new EastApp database.
 -- While the reset-per-release policy is active, merge every schema change into
 -- this file, keep V1 as the only migration, and reset the database each release.
@@ -288,23 +288,34 @@ CREATE TABLE stock_suppliers (
     current_balance_value NUMERIC(14,2) NOT NULL DEFAULT 0,
     last_balance_updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_balance_updated_by_user_id UUID NOT NULL,
+    purchase_message_template VARCHAR(2000) NOT NULL
+        DEFAULT E'Hi, please prepare the following items:\n\n{items}\n\n{date}\nPlease confirm availability and delivery time. Thank u.',
+    order_state VARCHAR(24) NOT NULL DEFAULT 'NONE',
+    current_order_reference UUID,
+    ordered_at TIMESTAMPTZ,
+    ordered_by_user_id UUID,
+    ordered_message VARCHAR(4000) NOT NULL DEFAULT '',
     created_by_user_id UUID NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_stock_suppliers_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_suppliers_balance_user FOREIGN KEY (tenant_id, last_balance_updated_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_suppliers_ordered_by_same_tenant FOREIGN KEY (tenant_id, ordered_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_suppliers_created_by FOREIGN KEY (tenant_id, created_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_stock_suppliers_tenant_id_id UNIQUE (tenant_id, id)
 );
+CREATE INDEX ix_stock_suppliers_tenant_order_state
+    ON stock_suppliers (tenant_id, order_state, supplier_name);
 
 CREATE TABLE stock_skus (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     tenant_id UUID NOT NULL,
     name VARCHAR(120) NOT NULL,
-    tag1_id UUID NOT NULL,
-    tag2_id UUID NOT NULL,
+    tag1_id UUID,
+    tag2_id UUID,
     unit VARCHAR(32) NOT NULL,
     minimum_balance_value NUMERIC(14,2) NOT NULL DEFAULT 0,
     maximum_balance_value NUMERIC(14,2) NOT NULL DEFAULT 0,
@@ -375,7 +386,7 @@ CREATE TABLE stock_count_submissions (
     previous_balance_value NUMERIC(14,2) NOT NULL,
     current_balance_value NUMERIC(14,2) NOT NULL,
     below_minimum_balance BOOLEAN NOT NULL,
-    review_status VARCHAR(24) NOT NULL DEFAULT 'Pending Review',
+    review_status VARCHAR(24) NOT NULL DEFAULT 'SUBMITTED',
     reviewed_by_user_id UUID,
     reviewed_at TIMESTAMPTZ,
     review_note VARCHAR(1000) NOT NULL DEFAULT '',
@@ -388,9 +399,11 @@ CREATE TABLE stock_count_submissions (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_counts_reviewed_by FOREIGN KEY (tenant_id, reviewed_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_counts_tenant_id_id UNIQUE (tenant_id, id),
-    CONSTRAINT uq_stock_counts_tenant_sku_cycle UNIQUE (tenant_id, sku_id, count_cycle_started_at)
+    CONSTRAINT uq_stock_counts_tenant_id_id UNIQUE (tenant_id, id)
 );
+CREATE UNIQUE INDEX uq_stock_counts_tenant_sku_cycle_active
+    ON stock_count_submissions (tenant_id, sku_id, count_cycle_started_at)
+    WHERE review_status <> 'PENDING';
 CREATE INDEX ix_stock_counts_tenant_captured_at ON stock_count_submissions (tenant_id, captured_at DESC);
 CREATE INDEX ix_stock_counts_tenant_review_captured_at ON stock_count_submissions (tenant_id, review_status, captured_at DESC);
 
@@ -420,7 +433,8 @@ CREATE TABLE stock_receivings (
     captured_at TIMESTAMPTZ NOT NULL,
     invoice_photo_name VARCHAR(500) NOT NULL,
     goods_photo_name VARCHAR(500) NOT NULL,
-    review_status VARCHAR(24) NOT NULL DEFAULT 'Pending Review',
+    review_status VARCHAR(24) NOT NULL DEFAULT 'SUBMITTED',
+    order_reference UUID,
     reviewed_by_user_id UUID,
     reviewed_at TIMESTAMPTZ,
     review_note VARCHAR(1000) NOT NULL DEFAULT '',
@@ -437,6 +451,12 @@ CREATE TABLE stock_receivings (
 );
 CREATE INDEX ix_stock_receivings_tenant_captured_at ON stock_receivings (tenant_id, captured_at DESC);
 CREATE INDEX ix_stock_receivings_tenant_review_captured_at ON stock_receivings (tenant_id, review_status, captured_at DESC);
+CREATE INDEX ix_stock_receivings_tenant_order_reference
+    ON stock_receivings (tenant_id, order_reference, captured_at DESC)
+    WHERE order_reference IS NOT NULL;
+CREATE UNIQUE INDEX uq_stock_receivings_active_order_reference
+    ON stock_receivings (tenant_id, order_reference)
+    WHERE order_reference IS NOT NULL AND review_status <> 'PENDING';
 
 CREATE TABLE stock_receiving_items (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -644,7 +664,7 @@ CREATE TABLE business_reports (
     report_type VARCHAR(24) NOT NULL,
     report_date DATE NOT NULL,
     submitted_by_user_id UUID NOT NULL,
-    workflow_status VARCHAR(16) NOT NULL DEFAULT 'DRAFT',
+    workflow_status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
     submitted_at TIMESTAMPTZ,
     reviewed_by_user_id UUID,
     reviewed_at TIMESTAMPTZ,
