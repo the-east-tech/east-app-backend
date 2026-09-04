@@ -25,6 +25,8 @@ public interface StockSkuRepository extends JpaRepository<StockSku, UUID> {
     @Query("""
             select sku
             from StockSku sku
+            left join sku.tag1 tag1
+            left join sku.tag2 tag2
             where sku.tenant.id = :tenantId
               and (:active is null or sku.active = :active)
               and (
@@ -35,8 +37,8 @@ public interface StockSkuRepository extends JpaRepository<StockSku, UUID> {
               and (
                     :search = ''
                     or lower(sku.name) like lower(concat('%', :search, '%'))
-                    or lower(sku.tag1.tag) like lower(concat('%', :search, '%'))
-                    or lower(sku.tag2.tag) like lower(concat('%', :search, '%'))
+                    or lower(tag1.tag) like lower(concat('%', :search, '%'))
+                    or lower(tag2.tag) like lower(concat('%', :search, '%'))
                     or lower(sku.unit) like lower(concat('%', :search, '%'))
                     or exists (
                         select 1
