@@ -20,7 +20,7 @@ public class EmployeeIdService {
 
     @Transactional
     public String allocate(UUID tenantId) {
-        Tenant tenant = tenantRepository.findByIdForUpdate(tenantId)
+        Tenant tenant = tenantRepository.findLockedById(tenantId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "TENANT_NOT_FOUND",

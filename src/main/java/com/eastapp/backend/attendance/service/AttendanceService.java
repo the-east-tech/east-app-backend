@@ -158,7 +158,7 @@ public class AttendanceService {
         Tenant tenant = tenantRepository.findById(principal.tenantId())
                 .orElseThrow(() -> notFound("TENANT_NOT_FOUND", "Tenant not found."));
         UserAccount user = userAccountRepository
-                .findByIdAndTenant_IdForUpdate(principal.userId(), principal.tenantId())
+                .findLockedByIdAndTenant_Id(principal.userId(), principal.tenantId())
                 .orElseThrow(() -> notFound("USER_NOT_FOUND", "User not found."));
         UserSession userSession = userSessionRepository.findById(principal.sessionId())
                 .filter(session -> session.getUserAccount().getId().equals(principal.userId()))

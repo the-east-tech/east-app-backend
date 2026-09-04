@@ -51,7 +51,7 @@ public class KnowledgeSopAuditService {
     ) {
         Instant capturedAt = Instant.now();
         KnowledgeSopWatchSession existing = watchRepository
-                .findByIdForUpdate(request.sessionId())
+                .findLockedById(request.sessionId())
                 .orElse(null);
         if (existing != null) {
             requireMatchingSession(existing, principal, sopId);

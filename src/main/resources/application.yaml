@@ -21,6 +21,12 @@ spring:
       # A preserved older schema must not block application startup.
       ddl-auto: none
     open-in-view: false
+    properties:
+      hibernate:
+        default_batch_fetch_size: 32
+        jdbc.batch_size: 32
+        order_inserts: true
+        order_updates: true
 
 management:
   endpoints:

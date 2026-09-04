@@ -172,7 +172,7 @@ public class AdvertisementService {
     }
 
     private Tenant lockTenant(UUID tenantId) {
-        return tenantRepository.findByIdForUpdate(tenantId)
+        return tenantRepository.findLockedById(tenantId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "TENANT_NOT_FOUND",

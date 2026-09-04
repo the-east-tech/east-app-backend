@@ -32,11 +32,14 @@ public record StockCountSubmissionResponse(
         String reviewedAt,
         String reviewNote
 ) {
-    public static StockCountSubmissionResponse from(StockCountSubmission item) {
+    public static StockCountSubmissionResponse from(
+            StockCountSubmission item,
+            String skuPhotoPath
+    ) {
         return new StockCountSubmissionResponse(
                 item.getId(), item.getSku().getId(),
                 item.getSku().getName(), item.getSku().getUnit(),
-                item.getSku().getCategory(), item.getSku().getLocation(), item.getSku().getPhotoPath(),
+                item.getSku().getCategory(), item.getSku().getLocation(), skuPhotoPath,
                 item.getSku().getMinimumBalanceValue(), item.getSku().getMaximumBalanceValue(),
                 item.getSubmittedBy().getEmployeeId(),
                 StockResponseSupport.label(item.getCapturedAt()), item.getCapturedAt(),

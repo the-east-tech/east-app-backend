@@ -17,6 +17,7 @@ import com.eastapp.backend.stock.StockReceivingItem;
 import com.eastapp.backend.stock.StockReceivingRepository;
 import com.eastapp.backend.stock.StockMedia;
 import com.eastapp.backend.stock.StockMediaRepository;
+import com.eastapp.backend.stock.StockMediaReference;
 import com.eastapp.backend.stock.StockSku;
 import com.eastapp.backend.stock.StockSkuRepository;
 import com.eastapp.backend.stock.StockSupplier;
@@ -25,6 +26,7 @@ import com.eastapp.backend.stock.StockTag;
 import com.eastapp.backend.stock.StockTagAssignee;
 import com.eastapp.backend.stock.StockTagAssigneeRepository;
 import com.eastapp.backend.stock.StockTagRepository;
+import com.eastapp.backend.stock.StockWorkflowStatus;
 import com.eastapp.backend.stock.api.BulkReviewStockCountsResponse;
 import com.eastapp.backend.stock.api.BulkReviewStockCountsRequest;
 import com.eastapp.backend.stock.api.CreateStockCountRequest;
@@ -46,6 +48,7 @@ import com.eastapp.backend.stock.api.UpdateStockBalanceRequest;
 import com.eastapp.backend.stock.api.UpdateStockTagRequest;
 import com.eastapp.backend.stock.api.UpsertStockSkuRequest;
 import com.eastapp.backend.tasks.TaskTemplateRepository;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -59,6 +62,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -118,19 +122,37 @@ public class StockService {
     @Transactional(readOnly = true)
     public StockSnapshotResponse snapshot(AuthenticatedUser principal) {
         UUID tenantId = principal.tenantId();
+        List<StockTag> tags = tagRepository.findAllByTenant_IdOrderByTagAsc(tenantId);
+        List<StockSku> skus = skuRepository.findAllByTenant_IdOrderByNameAsc(tenantId);
+        List<StockCountSubmission> counts = countRepository
+                .findAllByTenant_IdOrderByCapturedAtDesc(
+                        tenantId,
+                        PageRequest.of(0, SNAPSHOT_HISTORY_SIZE)
+                )
+                .getContent();
+        List<StockReceiving> receivings = receivingRepository
+                .findAllByTenant_IdOrderByCapturedAtDesc(
+                        tenantId,
+                        PageRequest.of(0, SNAPSHOT_HISTORY_SIZE)
+                )
+                .getContent();
+        List<StockSku> responseSkus = new ArrayList<>(skus);
+        counts.forEach(count -> responseSkus.add(count.getSku()));
+        Map<UUID, String> photoPaths = skuPhotoPaths(tenantId, responseSkus);
         return new StockSnapshotResponse(
-                tagRepository.findAllByTenant_IdOrderByTagAsc(tenantId)
-                        .stream().map(this::tagResponse).toList(),
+                tagResponses(tenantId, tags),
                 supplierRepository.findAllByTenant_IdOrderBySupplierNameAsc(tenantId)
                         .stream().map(StockSupplierResponse::from).toList(),
-                skuRepository.findAllByTenant_IdOrderByNameAsc(tenantId)
-                        .stream().map(StockSkuResponse::from).toList(),
-                countRepository.findAllByTenant_IdOrderByCapturedAtDesc(
-                                tenantId, PageRequest.of(0, SNAPSHOT_HISTORY_SIZE))
-                        .stream().map(StockCountSubmissionResponse::from).toList(),
-                receivingRepository.findAllByTenant_IdOrderByCapturedAtDesc(
-                                tenantId, PageRequest.of(0, SNAPSHOT_HISTORY_SIZE))
-                        .stream().map(StockReceivingResponse::from).toList()
+                skus.stream()
+                        .map(sku -> StockSkuResponse.from(sku, photoPath(sku, photoPaths)))
+                        .toList(),
+                counts.stream()
+                        .map(count -> StockCountSubmissionResponse.from(
+                                count,
+                                photoPath(count.getSku(), photoPaths)
+                        ))
+                        .toList(),
+                receivings.stream().map(StockReceivingResponse::from).toList()
         );
     }
 
@@ -141,11 +163,12 @@ public class StockService {
             int page,
             int size
     ) {
+        Page<StockTag> source = tagRepository.searchByTenant(
+                principal.tenantId(), normaliseSearch(search), pageRequest(page, size)
+        );
         return PageResponse.from(
-                tagRepository.searchByTenant(
-                        principal.tenantId(), normaliseSearch(search), pageRequest(page, size)
-                ),
-                this::tagResponse
+                source,
+                tagResponses(principal.tenantId(), source.getContent())
         );
     }
 
@@ -173,11 +196,19 @@ public class StockService {
             int page,
             int size
     ) {
+        Page<StockSku> source = skuRepository.searchByTenant(
+                principal.tenantId(), normaliseSearch(search), active, assigned,
+                pageRequest(page, size)
+        );
+        Map<UUID, String> photoPaths = skuPhotoPaths(
+                principal.tenantId(),
+                source.getContent()
+        );
         return PageResponse.from(
-                skuRepository.searchByTenant(
-                        principal.tenantId(), normaliseSearch(search), active, assigned, pageRequest(page, size)
-                ),
-                StockSkuResponse::from
+                source,
+                source.getContent().stream()
+                        .map(sku -> StockSkuResponse.from(sku, photoPath(sku, photoPaths)))
+                        .toList()
         );
     }
 
@@ -195,20 +226,30 @@ public class StockService {
         boolean filterBySubmittedBy = mine || !principal.isHead() && !principal.isManager();
         UUID submittedByUserId = principal.userId();
         String resolvedReviewStatus = reviewStatus(reviewStatus);
+        Page<StockCountSubmission> source = countRepository.searchByTenant(
+                principal.tenantId(),
+                filterBySubmittedBy,
+                submittedByUserId,
+                resolvedReviewStatus != null,
+                resolvedReviewStatus == null ? "" : resolvedReviewStatus,
+                range.filterByFrom(),
+                range.fromInclusive(),
+                range.filterByTo(),
+                range.toExclusive(),
+                pageRequest(page, size)
+        );
+        Map<UUID, String> photoPaths = skuPhotoPaths(
+                principal.tenantId(),
+                source.getContent().stream().map(StockCountSubmission::getSku).toList()
+        );
         return PageResponse.from(
-                countRepository.searchByTenant(
-                        principal.tenantId(),
-                        filterBySubmittedBy,
-                        submittedByUserId,
-                        resolvedReviewStatus != null,
-                        resolvedReviewStatus == null ? "" : resolvedReviewStatus,
-                        range.filterByFrom(),
-                        range.fromInclusive(),
-                        range.filterByTo(),
-                        range.toExclusive(),
-                        pageRequest(page, size)
-                ),
-                StockCountSubmissionResponse::from
+                source,
+                source.getContent().stream()
+                        .map(count -> StockCountSubmissionResponse.from(
+                                count,
+                                photoPath(count.getSku(), photoPaths)
+                        ))
+                        .toList()
         );
     }
 
@@ -415,6 +456,7 @@ public class StockService {
         UserAccount actor = actor(principal);
         StockTag tag1 = tag(request.tag1Id(), principal.tenantId());
         StockTag tag2 = tag(request.tag2Id(), principal.tenantId());
+        String photoPath = stockPhotoPath(request.photoPath());
         StockSku sku = skuRepository.save(new StockSku(
                 tenant, request.name(), tag1, tag2, request.unit(),
                 request.minimumBalanceValue(), request.maximumBalanceValue(),
@@ -430,7 +472,7 @@ public class StockService {
                 .addChange("Name", "-", sku.getName())
                 .addChange("Unit", "-", sku.getUnit())
                 .addChange("Current Balance", "-", sku.getCurrentBalanceValue()));
-        return StockSkuResponse.from(sku);
+        return StockSkuResponse.from(sku, photoPath);
     }
 
     @Transactional
@@ -442,14 +484,21 @@ public class StockService {
         StockSku sku = sku(skuId, principal.tenantId());
         String oldName = sku.getName();
         BigDecimal oldBalance = sku.getCurrentBalanceValue();
-        String oldPhotoPath = sku.getPhotoPath();
+        String oldPhotoPath = photoPath(
+                sku,
+                skuPhotoPaths(principal.tenantId(), List.of(sku))
+        );
         if (!oldName.equalsIgnoreCase(request.name().trim())
                 && skuRepository.existsByTenant_IdAndNameIgnoreCase(principal.tenantId(), request.name().trim())) {
             throw conflict("STOCK_SKU_EXISTS", "This SKU already exists.");
         }
-        StockMedia thumbnail = request.photoPath() == null || request.photoPath().isBlank()
+        boolean keepThumbnail = request.photoPath() == null || request.photoPath().isBlank();
+        StockMedia thumbnail = keepThumbnail
                 ? sku.getThumbnailMedia()
                 : skuThumbnail(principal, request.photoPath());
+        String newPhotoPath = keepThumbnail
+                ? oldPhotoPath
+                : stockPhotoPath(request.photoPath());
         StockTag tag1 = tag(request.tag1Id(), principal.tenantId());
         StockTag tag2 = tag(request.tag2Id(), principal.tenantId());
         sku.update(
@@ -466,9 +515,9 @@ public class StockService {
         auditRepository.save(new StockAuditEntry(
                 sku.getTenant(), "SKU", "Edited SKU", sku.getId(), sku.getName(), principal, "")
                 .addChange("Name", oldName, sku.getName())
-                .addChange("Photo", oldPhotoPath, sku.getPhotoPath())
+                .addChange("Photo", oldPhotoPath, newPhotoPath)
                 .addChange("Current Balance", oldBalance, sku.getCurrentBalanceValue()));
-        return StockSkuResponse.from(sku);
+        return StockSkuResponse.from(sku, newPhotoPath);
     }
 
     @Transactional
@@ -484,7 +533,10 @@ public class StockService {
                 sku.getTenant(), "SKU Balance", "Updated balance", sku.getId(),
                 sku.getName(), principal, "")
                 .addChange("Current Balance", previous, request.balance()));
-        return StockSkuResponse.from(sku);
+        return StockSkuResponse.from(
+                sku,
+                photoPath(sku, skuPhotoPaths(principal.tenantId(), List.of(sku)))
+        );
     }
 
     @Transactional
@@ -504,8 +556,12 @@ public class StockService {
             );
         }
         Instant cycleStartedAt = countCycleStartedAt(sku, Instant.now());
-        if (countRepository.existsByTenant_IdAndSku_IdAndCountCycleStartedAt(
-                principal.tenantId(), sku.getId(), cycleStartedAt)) {
+        if (countRepository.existsByTenant_IdAndSku_IdAndCountCycleStartedAtAndReviewStatusNot(
+                principal.tenantId(),
+                sku.getId(),
+                cycleStartedAt,
+                StockWorkflowStatus.PENDING.name()
+        )) {
             throw conflict(
                     "STOCK_COUNT_ALREADY_SUBMITTED",
                     "This SKU has already been counted for the current daily cycle."
@@ -523,7 +579,10 @@ public class StockService {
                 sku.getName(), principal, "")
                 .addChange("Current Balance", previous, request.currentBalanceValue())
                 .addChange("Review Status", "-", submission.getReviewStatus()));
-        return StockCountSubmissionResponse.from(submission);
+        return StockCountSubmissionResponse.from(
+                submission,
+                photoPath(sku, skuPhotoPaths(principal.tenantId(), List.of(sku)))
+        );
     }
 
     @Transactional
@@ -544,7 +603,13 @@ public class StockService {
                 submission.getTenant(), "Stock Count", "Reviewed daily count",
                 submission.getSku().getId(), submission.getSku().getName(), principal, request.note())
                 .addChange("Review Status", previous, request.status()));
-        return StockCountSubmissionResponse.from(submission);
+        return StockCountSubmissionResponse.from(
+                submission,
+                photoPath(
+                        submission.getSku(),
+                        skuPhotoPaths(principal.tenantId(), List.of(submission.getSku()))
+                )
+        );
     }
 
     @Transactional
@@ -589,6 +654,10 @@ public class StockService {
 
         UserAccount reviewer = actor(principal);
         String note = request.note() == null ? "" : request.note().trim();
+        Map<UUID, String> photoPaths = skuPhotoPaths(
+                principal.tenantId(),
+                ordered.stream().map(StockCountSubmission::getSku).toList()
+        );
         List<StockCountSubmissionResponse> responses = new ArrayList<>();
         for (StockCountSubmission submission : ordered) {
             String previous = submission.getReviewStatus();
@@ -602,7 +671,10 @@ public class StockService {
                     principal,
                     note
             ).addChange("Review Status", previous, request.status()));
-            responses.add(StockCountSubmissionResponse.from(submission));
+            responses.add(StockCountSubmissionResponse.from(
+                    submission,
+                    photoPath(submission.getSku(), photoPaths)
+            ));
         }
 
         return new BulkReviewStockCountsResponse(
@@ -632,7 +704,16 @@ public class StockService {
                         "Each SKU can appear only once in a receiving submission."
                 );
             }
-            StockSku sku = sku(itemRequest.skuId(), principal.tenantId());
+        }
+        Map<UUID, StockSku> skusById = skuRepository
+                .findAllByTenant_IdAndIdIn(principal.tenantId(), receivedSkuIds)
+                .stream()
+                .collect(Collectors.toMap(StockSku::getId, item -> item));
+        if (skusById.size() != receivedSkuIds.size()) {
+            throw notFound("STOCK_SKU_NOT_FOUND", "One or more selected SKUs were not found.");
+        }
+        for (CreateStockReceivingItemRequest itemRequest : request.items()) {
+            StockSku sku = skusById.get(itemRequest.skuId());
             if (sku.getSuppliers().stream().noneMatch(item -> item.getId().equals(supplier.getId()))) {
                 throw badRequest(
                         "STOCK_RECEIVING_SUPPLIER_MISMATCH",
@@ -732,11 +813,17 @@ public class StockService {
                 );
         long countPending = countRepository
                 .countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
-                        principal.tenantId(), "Pending Review", fromInclusive, toExclusive
+                        principal.tenantId(),
+                        StockWorkflowStatus.SUBMITTED.name(),
+                        fromInclusive,
+                        toExclusive
                 );
         long receivingPending = receivingRepository
                 .countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
-                        principal.tenantId(), "Pending Review", fromInclusive, toExclusive
+                        principal.tenantId(),
+                        StockWorkflowStatus.SUBMITTED.name(),
+                        fromInclusive,
+                        toExclusive
                 );
 
         long total = countTotal + receivingTotal;
@@ -754,14 +841,14 @@ public class StockService {
 
     private static String reviewStatus(String value) {
         if (value == null || value.isBlank()) return null;
-        String status = value.trim();
-        if (!Set.of("Pending Review", "Approved", "Rejected").contains(status)) {
+        try {
+            return StockWorkflowStatus.canonicalFilter(value);
+        } catch (IllegalArgumentException exception) {
             throw badRequest(
                     "INVALID_REVIEW_STATUS",
                     "Review status must be Pending Review, Approved or Rejected."
             );
         }
-        return status;
     }
 
     private static DateRange dateRange(LocalDate from, LocalDate to) {
@@ -804,8 +891,17 @@ public class StockService {
                 .orElseThrow(() -> notFound("STOCK_TAG_NOT_FOUND", "Stock tag not found."));
     }
 
-    private StockTagResponse tagResponse(StockTag tag) {
-        return tagResponse(tag, assignedUsers(tag.getTenant().getId(), tag.getId()));
+    private List<StockTagResponse> tagResponses(UUID tenantId, List<StockTag> tags) {
+        Map<UUID, List<UserAccount>> usersByTag = assignedUsersByTag(
+                tenantId,
+                tags.stream().map(StockTag::getId).toList()
+        );
+        return tags.stream()
+                .map(tag -> tagResponse(
+                        tag,
+                        usersByTag.getOrDefault(tag.getId(), List.of())
+                ))
+                .toList();
     }
 
     private StockTagResponse tagResponse(StockTag tag, List<UserAccount> users) {
@@ -823,22 +919,42 @@ public class StockService {
     }
 
     private List<UserAccount> assignedUsers(UUID tenantId, UUID tagId) {
-        return tagAssigneeRepository
-                .findAllByTenantIdAndTagIdOrderByCreatedAtAsc(tenantId, tagId)
-                .stream()
-                .map(assignment -> userAccountRepository
-                        .findByIdAndTenant_Id(assignment.getUserId(), tenantId)
-                        .orElseThrow(() -> notFound(
-                                "TAG_ASSIGNEE_NOT_FOUND",
-                                "A user assigned to this tag was not found."
-                        )))
-                .sorted((left, right) -> {
-                    int byName = left.getFullName().compareToIgnoreCase(right.getFullName());
-                    return byName != 0
-                            ? byName
-                            : left.getEmployeeId().compareToIgnoreCase(right.getEmployeeId());
-                })
-                .toList();
+        return assignedUsersByTag(tenantId, List.of(tagId))
+                .getOrDefault(tagId, List.of());
+    }
+
+    private Map<UUID, List<UserAccount>> assignedUsersByTag(
+            UUID tenantId,
+            Collection<UUID> tagIds
+    ) {
+        Set<UUID> uniqueTagIds = tagIds.stream()
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (uniqueTagIds.isEmpty()) return Map.of();
+        List<StockTagAssignee> assignments = tagAssigneeRepository
+                .findAllByTenantIdAndTagIdIn(tenantId, uniqueTagIds);
+        Set<UUID> userIds = assignments.stream()
+                .map(StockTagAssignee::getUserId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<UUID, UserAccount> usersById = userIds.isEmpty()
+                ? Map.of()
+                : userAccountRepository.findAllByTenant_IdAndIdIn(tenantId, userIds)
+                        .stream()
+                        .collect(Collectors.toMap(UserAccount::getId, user -> user));
+        Map<UUID, List<UserAccount>> result = new LinkedHashMap<>();
+        for (StockTagAssignee assignment : assignments) {
+            UserAccount user = usersById.get(assignment.getUserId());
+            if (user != null) {
+                result.computeIfAbsent(assignment.getTagId(), ignored -> new ArrayList<>())
+                        .add(user);
+            }
+        }
+        result.values().forEach(users -> users.sort((left, right) -> {
+            int byName = left.getFullName().compareToIgnoreCase(right.getFullName());
+            return byName != 0
+                    ? byName
+                    : left.getEmployeeId().compareToIgnoreCase(right.getEmployeeId());
+        }));
+        return result;
     }
 
     private List<UserAccount> replaceTagAssignees(
@@ -850,13 +966,20 @@ public class StockService {
         LinkedHashSet<UUID> uniqueIds = new LinkedHashSet<>(
                 requestedUserIds == null ? List.of() : requestedUserIds
         );
-        List<UserAccount> users = new ArrayList<>();
+        Map<UUID, UserAccount> usersById = uniqueIds.isEmpty()
+                ? Map.of()
+                : userAccountRepository.findAllByTenant_IdAndIdIn(tenantId, uniqueIds)
+                        .stream()
+                        .collect(Collectors.toMap(UserAccount::getId, user -> user));
+        if (usersById.size() != uniqueIds.size()) {
+            throw notFound(
+                    "TAG_ASSIGNEE_NOT_FOUND",
+                    "One or more selected users were not found in this business."
+            );
+        }
+        List<UserAccount> users = new ArrayList<>(uniqueIds.size());
         for (UUID userId : uniqueIds) {
-            UserAccount user = userAccountRepository.findByIdAndTenant_Id(userId, tenantId)
-                    .orElseThrow(() -> notFound(
-                            "TAG_ASSIGNEE_NOT_FOUND",
-                            "One or more selected users were not found in this business."
-                    ));
+            UserAccount user = usersById.get(userId);
             if (!user.isActive() || !user.getRole().isActive()) {
                 throw badRequest(
                         "TAG_ASSIGNEE_INACTIVE",
@@ -921,9 +1044,34 @@ public class StockService {
 
     private Set<StockSupplier> suppliers(UUID tenantId, List<UUID> ids) {
         if (ids == null || ids.isEmpty()) return Set.of();
+        LinkedHashSet<UUID> uniqueIds = new LinkedHashSet<>(ids);
+        Map<UUID, StockSupplier> found = supplierRepository
+                .findAllByTenant_IdAndIdIn(tenantId, uniqueIds)
+                .stream()
+                .collect(Collectors.toMap(StockSupplier::getId, item -> item));
+        if (found.size() != uniqueIds.size()) {
+            throw notFound("STOCK_SUPPLIER_NOT_FOUND", "One or more suppliers were not found.");
+        }
         Set<StockSupplier> result = new LinkedHashSet<>();
-        for (UUID id : ids) result.add(supplier(id, tenantId));
+        for (UUID id : uniqueIds) result.add(found.get(id));
         return result;
+    }
+
+    private Map<UUID, String> skuPhotoPaths(UUID tenantId, Collection<StockSku> skus) {
+        Set<UUID> mediaIds = skus.stream()
+                .map(StockSku::getThumbnailMediaId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (mediaIds.isEmpty()) return Map.of();
+        return mediaRepository.findAllReferencesByTenantIdAndIdIn(tenantId, mediaIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        StockMediaReference::id,
+                        StockMediaReference::photoPath
+                ));
+    }
+
+    private static String photoPath(StockSku sku, Map<UUID, String> photoPaths) {
+        return photoPaths.getOrDefault(sku.getThumbnailMediaId(), "");
     }
 
     private void requireReceivingPhoto(UUID tenantId, String storageKey, String label) {
@@ -934,7 +1082,7 @@ public class StockService {
                     label + " photo is required. Capture and upload it first."
             );
         }
-        if (mediaRepository.findByTenant_IdAndStorageKey(tenantId, value).isEmpty()) {
+        if (mediaRepository.findReferenceByTenantIdAndStorageKey(tenantId, value).isEmpty()) {
             throw badRequest(
                     "STOCK_RECEIVING_PHOTO_NOT_FOUND",
                     label + " photo was not found. Capture it again."
@@ -947,11 +1095,18 @@ public class StockService {
         if (value.isEmpty()) {
             throw badRequest("STOCK_THUMBNAIL_REQUIRED", "Take and upload a stock thumbnail first.");
         }
-        return mediaRepository.findByTenant_IdAndStorageKey(principal.tenantId(), value)
+        StockMediaReference media = mediaRepository
+                .findReferenceByTenantIdAndStorageKey(principal.tenantId(), value)
                 .orElseThrow(() -> badRequest(
                         "STOCK_THUMBNAIL_NOT_FOUND",
                         "The uploaded stock thumbnail was not found."
                 ));
+        return mediaRepository.getReferenceById(media.id());
+    }
+
+    private static String stockPhotoPath(String storageKey) {
+        String value = storageKey == null ? "" : storageKey.trim();
+        return value.startsWith(StockMedia.SKU_IMPORT_PLACEHOLDER_PREFIX) ? "" : value;
     }
 
     private static Instant countCycleStartedAt(StockSku sku, Instant now) {

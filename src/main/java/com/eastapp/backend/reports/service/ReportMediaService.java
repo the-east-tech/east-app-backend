@@ -3,6 +3,7 @@ package com.eastapp.backend.reports.service;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.reports.ReportMedia;
+import com.eastapp.backend.reports.ReportMediaReference;
 import com.eastapp.backend.reports.ReportMediaRepository;
 import com.eastapp.backend.reports.api.ReportMediaUploadResponse;
 import org.springframework.core.io.ByteArrayResource;
@@ -91,10 +92,11 @@ public class ReportMediaService {
         return new StoredReportMedia(new ByteArrayResource(media.getContentBytes()), media.getContentType());
     }
 
-    public ReportMedia requireOwnedMedia(AuthenticatedUser principal, String storageKey) {
-        ReportMedia media = mediaRepository.findByTenantIdAndStorageKey(principal.tenantId(), storageKey)
+    public ReportMediaReference requireOwnedMedia(AuthenticatedUser principal, String storageKey) {
+        ReportMediaReference media = mediaRepository
+                .findReferenceByTenantIdAndStorageKey(principal.tenantId(), storageKey)
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "REPORT_MEDIA_NOT_FOUND", "Upload the report photo again."));
-        if (!media.getUploadedByUserId().equals(principal.userId())) {
+        if (!media.uploadedByUserId().equals(principal.userId())) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "REPORT_MEDIA_NOT_OWNED",
@@ -104,8 +106,8 @@ public class ReportMediaService {
         return media;
     }
 
-    public ReportMedia requireTenantMedia(AuthenticatedUser principal, String storageKey) {
-        return mediaRepository.findByTenantIdAndStorageKey(principal.tenantId(), storageKey)
+    public ReportMediaReference requireTenantMedia(AuthenticatedUser principal, String storageKey) {
+        return mediaRepository.findReferenceByTenantIdAndStorageKey(principal.tenantId(), storageKey)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.BAD_REQUEST,
                         "REPORT_MEDIA_NOT_FOUND",

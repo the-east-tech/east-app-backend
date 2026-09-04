@@ -522,12 +522,38 @@ public class TaskService {
         if (templates.stream().allMatch(template -> existing.contains(template.getId()))) return;
 
         lockTenant(tenantId);
-        for (TaskTemplate template : templates) {
-            if (recordRepository.findByTenantIdAndTemplateIdAndTaskDate(
-                    tenantId, template.getId(), date
-            ).isEmpty()) {
-                materialiseTemplate(template, date, requireTag(tenantId, template.getTagId()));
+        existing = recordRepository
+                .findAllByTenantIdAndTaskDateOrderByTagNameAscTitleAsc(tenantId, date)
+                .stream()
+                .map(TaskRecord::getTemplateId)
+                .collect(Collectors.toSet());
+        List<TaskTemplate> missing = templates.stream()
+                .filter(template -> !existing.contains(template.getId()))
+                .toList();
+        if (missing.isEmpty()) return;
+        Map<UUID, StockTag> tags = tagRepository.findAllByTenant_IdAndIdIn(
+                        tenantId,
+                        missing.stream().map(TaskTemplate::getTagId).collect(Collectors.toSet())
+                ).stream()
+                .collect(Collectors.toMap(StockTag::getId, tag -> tag));
+        Map<UUID, List<TaskTemplateChecklistItem>> checks = templateChecklistRepository
+                .findAllByTenantIdAndTemplateIdIn(
+                        tenantId,
+                        missing.stream().map(TaskTemplate::getId).toList()
+                ).stream()
+                .sorted(Comparator.comparingInt(TaskTemplateChecklistItem::getPosition))
+                .collect(Collectors.groupingBy(TaskTemplateChecklistItem::getTemplateId));
+        for (TaskTemplate template : missing) {
+            StockTag tag = tags.get(template.getTagId());
+            if (tag == null) {
+                throw notFound("STOCK_TAG_NOT_FOUND", "Stock tag was not found.");
             }
+            createMaterialisedTemplate(
+                    template,
+                    date,
+                    tag,
+                    checks.getOrDefault(template.getId(), List.of())
+            );
         }
     }
 
@@ -539,28 +565,43 @@ public class TaskService {
         return recordRepository.findByTenantIdAndTemplateIdAndTaskDate(
                         template.getTenantId(), template.getId(), date
                 )
-                .orElseGet(() -> {
-                    TaskRecord saved = recordRepository.saveAndFlush(
-                            new TaskRecord(template, date, tag.getTag())
-                    );
-                    List<TaskTemplateChecklistItem> templateChecks = templateChecklistRepository
-                            .findAllByTenantIdAndTemplateIdOrderByPositionAsc(
-                                    template.getTenantId(), template.getId()
-                            );
-                    recordChecklistRepository.saveAll(templateChecks.stream()
-                            .map(item -> new TaskRecordChecklistItem(
-                                    template.getTenantId(),
-                                    saved.getId(),
-                                    item.getPosition(),
-                                    item.getDescription()
-                            ))
-                            .toList());
-                    return saved;
-                });
+                .orElseGet(() -> createMaterialisedTemplate(template, date, tag));
+    }
+
+    private TaskRecord createMaterialisedTemplate(
+            TaskTemplate template,
+            LocalDate date,
+            StockTag tag
+    ) {
+        List<TaskTemplateChecklistItem> templateChecks = templateChecklistRepository
+                .findAllByTenantIdAndTemplateIdOrderByPositionAsc(
+                        template.getTenantId(), template.getId()
+                );
+        return createMaterialisedTemplate(template, date, tag, templateChecks);
+    }
+
+    private TaskRecord createMaterialisedTemplate(
+            TaskTemplate template,
+            LocalDate date,
+            StockTag tag,
+            List<TaskTemplateChecklistItem> templateChecks
+    ) {
+        TaskRecord saved = recordRepository.saveAndFlush(
+                new TaskRecord(template, date, tag.getTag())
+        );
+        recordChecklistRepository.saveAll(templateChecks.stream()
+                .map(item -> new TaskRecordChecklistItem(
+                        template.getTenantId(),
+                        saved.getId(),
+                        item.getPosition(),
+                        item.getDescription()
+                ))
+                .toList());
+        return saved;
     }
 
     private void lockTenant(UUID tenantId) {
-        tenantRepository.findByIdForUpdate(tenantId)
+        tenantRepository.findLockedById(tenantId)
                 .orElseThrow(() -> notFound("TENANT_NOT_FOUND", "Business was not found."));
     }
 
@@ -938,7 +979,7 @@ public class TaskService {
     }
 
     private TaskRecord requireRecordForUpdate(UUID tenantId, UUID recordId) {
-        return recordRepository.findByIdAndTenantIdForUpdate(recordId, tenantId)
+        return recordRepository.findLockedByIdAndTenantId(recordId, tenantId)
                 .orElseThrow(() -> notFound("TASK_NOT_FOUND", "Task was not found."));
     }
 

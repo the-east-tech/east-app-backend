@@ -286,13 +286,8 @@ public class StockSku {
     public BigDecimal getMaximumPriceRm() { return maximumPriceRm; }
     public Set<StockSupplier> getSuppliers() { return suppliers; }
 
-    public String getPhotoPath() {
-        return thumbnailMedia.isSkuImportPlaceholder()
-                ? ""
-                : thumbnailMedia.getStorageKey();
-    }
-
     public StockMedia getThumbnailMedia() { return thumbnailMedia; }
+    public UUID getThumbnailMediaId() { return thumbnailMedia.getId(); }
     public List<String> getAssignedStaffNames() { return assignedStaffNames; }
     public List<String> getReceivingChecklist() { return receivingChecklist; }
     public int getStockCheckFrequencyDays() { return stockCheckFrequencyDays; }
@@ -304,11 +299,7 @@ public class StockSku {
     public Instant getUpdatedAt() { return updatedAt; }
 
     private StockMedia requireTenantMedia(StockMedia media) {
-        StockMedia resolved = Objects.requireNonNull(media, "thumbnailMedia must not be null");
-        if (!resolved.getTenant().getId().equals(tenant.getId())) {
-            throw new IllegalArgumentException("thumbnailMedia must belong to the SKU tenant");
-        }
-        return resolved;
+        return Objects.requireNonNull(media, "thumbnailMedia must not be null");
     }
 
     private StockTag optionalTenantTag(StockTag tag, String field) {

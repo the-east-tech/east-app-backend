@@ -1,4 +1,4 @@
--- EastApp clean reset-per-release schema (v110).
+-- EastApp clean reset-per-release schema (v114).
 -- This V1 contains the complete schema for a brand-new EastApp database.
 -- While the reset-per-release policy is active, merge every schema change into
 -- this file, keep V1 as the only migration, and reset the database each release.
@@ -357,6 +357,8 @@ CREATE TABLE stock_sku_suppliers (
     CONSTRAINT fk_stock_sku_suppliers_supplier FOREIGN KEY (supplier_id)
         REFERENCES stock_suppliers (id) ON DELETE RESTRICT
 );
+CREATE INDEX ix_stock_sku_suppliers_supplier
+    ON stock_sku_suppliers (supplier_id, sku_id);
 
 CREATE TABLE stock_sku_assignees (
     sku_id UUID NOT NULL,
@@ -406,6 +408,8 @@ CREATE UNIQUE INDEX uq_stock_counts_tenant_sku_cycle_active
     WHERE review_status <> 'PENDING';
 CREATE INDEX ix_stock_counts_tenant_captured_at ON stock_count_submissions (tenant_id, captured_at DESC);
 CREATE INDEX ix_stock_counts_tenant_review_captured_at ON stock_count_submissions (tenant_id, review_status, captured_at DESC);
+CREATE INDEX ix_stock_counts_tenant_submitter_captured_at
+    ON stock_count_submissions (tenant_id, submitted_by_user_id, captured_at DESC);
 
 CREATE TABLE stock_count_submission_checks (
     submission_id UUID NOT NULL,
@@ -451,6 +455,8 @@ CREATE TABLE stock_receivings (
 );
 CREATE INDEX ix_stock_receivings_tenant_captured_at ON stock_receivings (tenant_id, captured_at DESC);
 CREATE INDEX ix_stock_receivings_tenant_review_captured_at ON stock_receivings (tenant_id, review_status, captured_at DESC);
+CREATE INDEX ix_stock_receivings_tenant_supplier
+    ON stock_receivings (tenant_id, supplier_id);
 CREATE INDEX ix_stock_receivings_tenant_order_reference
     ON stock_receivings (tenant_id, order_reference, captured_at DESC)
     WHERE order_reference IS NOT NULL;
@@ -492,6 +498,8 @@ CREATE TABLE stock_audit_entries (
     CONSTRAINT uq_stock_audit_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE INDEX ix_stock_audit_tenant_captured_at ON stock_audit_entries (tenant_id, captured_at DESC);
+CREATE INDEX ix_stock_audit_tenant_actor_captured_at
+    ON stock_audit_entries (tenant_id, actor_employee_id, captured_at DESC);
 
 CREATE TABLE stock_audit_entry_changes (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -691,6 +699,8 @@ CREATE INDEX ix_business_reports_tenant_type_date
     ON business_reports (tenant_id, report_type, report_date DESC);
 CREATE INDEX ix_business_reports_tenant_workflow_date
     ON business_reports (tenant_id, workflow_status, report_date DESC);
+CREATE INDEX ix_business_reports_tenant_workflow_submitted
+    ON business_reports (tenant_id, workflow_status, submitted_at, id);
 
 CREATE TABLE sales_report_details (
     report_id UUID PRIMARY KEY,
@@ -921,6 +931,8 @@ CREATE INDEX ix_task_records_tenant_date_status
     ON task_records (tenant_id, task_date DESC, status, tag_id);
 CREATE INDEX ix_task_records_tenant_submitter_date
     ON task_records (tenant_id, submitted_by_user_id, task_date DESC);
+CREATE INDEX ix_task_records_tenant_status_role_submitted
+    ON task_records (tenant_id, status, submitted_by_role, submitted_at, id);
 CREATE INDEX ix_task_records_tenant_linked_sop
     ON task_records (tenant_id, linked_sop_id)
     WHERE linked_sop_id IS NOT NULL;
