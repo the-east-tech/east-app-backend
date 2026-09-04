@@ -55,7 +55,7 @@ class KnowledgeSopAuditServiceTests {
 
     @Test
     void createsAClientIdentifiedSessionForIdempotentCumulativeTracking() {
-        when(watchRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.empty());
+        when(watchRepository.findLockedById(SESSION_ID)).thenReturn(Optional.empty());
         when(sopRepository.findByIdAndTenant_Id(SOP_ID, TENANT_ID)).thenReturn(Optional.of(sop));
         when(userRepository.findByIdAndTenant_Id(USER_ID, TENANT_ID)).thenReturn(Optional.of(user));
         when(tenantRepository.findById(TENANT_ID)).thenReturn(Optional.of(tenant));
@@ -73,7 +73,7 @@ class KnowledgeSopAuditServiceTests {
 
     @Test
     void retryUpdatesTheSameSessionWithCumulativeSeconds() {
-        when(watchRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(existing));
+        when(watchRepository.findLockedById(SESSION_ID)).thenReturn(Optional.of(existing));
         when(existing.getTenant()).thenReturn(tenant);
         when(existing.getUser()).thenReturn(user);
         when(existing.getSop()).thenReturn(sop);
