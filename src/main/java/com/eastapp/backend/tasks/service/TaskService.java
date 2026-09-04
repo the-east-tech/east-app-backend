@@ -514,21 +514,21 @@ public class TaskService {
                 .filter(template -> template.isScheduledFor(date))
                 .toList();
         if (templates.isEmpty()) return;
-        Set<UUID> existing = recordRepository
+        Set<UUID> existingBeforeLock = recordRepository
                 .findAllByTenantIdAndTaskDateOrderByTagNameAscTitleAsc(tenantId, date)
                 .stream()
                 .map(TaskRecord::getTemplateId)
                 .collect(Collectors.toSet());
-        if (templates.stream().allMatch(template -> existing.contains(template.getId()))) return;
+        if (templates.stream().allMatch(template -> existingBeforeLock.contains(template.getId()))) return;
 
         lockTenant(tenantId);
-        existing = recordRepository
+        Set<UUID> existingAfterLock = recordRepository
                 .findAllByTenantIdAndTaskDateOrderByTagNameAscTitleAsc(tenantId, date)
                 .stream()
                 .map(TaskRecord::getTemplateId)
                 .collect(Collectors.toSet());
         List<TaskTemplate> missing = templates.stream()
-                .filter(template -> !existing.contains(template.getId()))
+                .filter(template -> !existingAfterLock.contains(template.getId()))
                 .toList();
         if (missing.isEmpty()) return;
         Map<UUID, StockTag> tags = tagRepository.findAllByTenant_IdAndIdIn(
