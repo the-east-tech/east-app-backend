@@ -56,7 +56,7 @@ public class AttendanceQrCodeService {
 
         // Serialise QR generation within a tenant so concurrent requests cannot
         // bypass the 3-active-codes-per-action FIFO limit.
-        Tenant tenant = tenantRepository.findByIdForUpdate(principal.tenantId())
+        Tenant tenant = tenantRepository.findLockedById(principal.tenantId())
                 .orElseThrow(() -> notFound("TENANT_NOT_FOUND", "Tenant not found."));
         UserAccount generator = userAccountRepository
                 .findByIdAndTenant_Id(principal.userId(), principal.tenantId())

@@ -1,6 +1,7 @@
 package com.eastapp.backend.knowledge;
 
 import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -14,17 +15,8 @@ public interface KnowledgeSopWatchSessionRepository
         extends JpaRepository<KnowledgeSopWatchSession, UUID> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-            select session
-            from KnowledgeSopWatchSession session
-            join fetch session.tenant
-            join fetch session.user
-            join fetch session.sop
-            where session.id = :sessionId
-            """)
-    Optional<KnowledgeSopWatchSession> findByIdForUpdate(
-            @Param("sessionId") UUID sessionId
-    );
+    @EntityGraph(attributePaths = {"tenant", "user", "sop"})
+    Optional<KnowledgeSopWatchSession> findLockedById(UUID sessionId);
 
     @Query(value = """
             select

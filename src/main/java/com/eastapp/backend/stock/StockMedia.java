@@ -66,7 +66,4 @@ public class StockMedia {
     public String getContentType() { return contentType; }
     public long getSizeBytes() { return sizeBytes; }
     public byte[] getContentBytes() { return Arrays.copyOf(contentBytes, contentBytes.length); }
-    public boolean isSkuImportPlaceholder() {
-        return storageKey.startsWith(SKU_IMPORT_PLACEHOLDER_PREFIX);
-    }
 }

@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,6 +15,8 @@ import java.util.UUID;
 public interface StockTagRepository extends JpaRepository<StockTag, UUID> {
     @EntityGraph(attributePaths = {"tenant", "createdBy", "updatedBy"})
     List<StockTag> findAllByTenant_IdOrderByTagAsc(UUID tenantId);
+
+    List<StockTag> findAllByTenant_IdAndIdIn(UUID tenantId, Collection<UUID> ids);
 
     @EntityGraph(attributePaths = {"tenant", "createdBy", "updatedBy"})
     @Query("""

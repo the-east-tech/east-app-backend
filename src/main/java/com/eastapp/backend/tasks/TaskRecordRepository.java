@@ -4,8 +4,6 @@ import com.eastapp.backend.people.SystemRole;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.Collection;
@@ -17,14 +15,9 @@ public interface TaskRecordRepository extends JpaRepository<TaskRecord, UUID> {
     Optional<TaskRecord> findByIdAndTenantId(UUID id, UUID tenantId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-            select task
-            from TaskRecord task
-            where task.id = :id and task.tenantId = :tenantId
-            """)
-    Optional<TaskRecord> findByIdAndTenantIdForUpdate(
-            @Param("id") UUID id,
-            @Param("tenantId") UUID tenantId
+    Optional<TaskRecord> findLockedByIdAndTenantId(
+            UUID id,
+            UUID tenantId
     );
 
     Optional<TaskRecord> findByTenantIdAndTemplateIdAndTaskDate(

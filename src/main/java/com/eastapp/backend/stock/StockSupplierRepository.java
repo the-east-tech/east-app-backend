@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,16 +40,13 @@ public interface StockSupplierRepository extends JpaRepository<StockSupplier, UU
     @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy", "orderedBy"})
     Optional<StockSupplier> findByIdAndTenant_Id(UUID id, UUID tenantId);
 
+    List<StockSupplier> findAllByTenant_IdAndIdIn(UUID tenantId, Collection<UUID> ids);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy", "orderedBy"})
-    @Query("""
-            select supplier
-            from StockSupplier supplier
-            where supplier.id = :id and supplier.tenant.id = :tenantId
-            """)
-    Optional<StockSupplier> findByIdAndTenant_IdForUpdate(
-            @Param("id") UUID id,
-            @Param("tenantId") UUID tenantId
+    Optional<StockSupplier> findLockedByIdAndTenant_Id(
+            UUID id,
+            UUID tenantId
     );
 
     boolean existsByTenant_IdAndSupplierNameIgnoreCase(UUID tenantId, String supplierName);

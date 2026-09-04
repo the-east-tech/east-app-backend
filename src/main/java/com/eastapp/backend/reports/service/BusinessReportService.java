@@ -16,7 +16,7 @@ import com.eastapp.backend.reports.ComplaintReportDetailRepository;
 import com.eastapp.backend.reports.ComplaintStatus;
 import com.eastapp.backend.reports.DailyReportPhoto;
 import com.eastapp.backend.reports.DailyReportPhotoRepository;
-import com.eastapp.backend.reports.ReportMedia;
+import com.eastapp.backend.reports.ReportMediaReference;
 import com.eastapp.backend.reports.ReportMediaRepository;
 import com.eastapp.backend.reports.ReportWorkflowStatus;
 import com.eastapp.backend.reports.SalesReportDetail;
@@ -55,6 +55,7 @@ import com.eastapp.backend.stock.StockCountSubmission;
 import com.eastapp.backend.stock.StockCountSubmissionRepository;
 import com.eastapp.backend.stock.StockSku;
 import com.eastapp.backend.stock.StockSkuRepository;
+import com.eastapp.backend.stock.StockWorkflowStatus;
 import com.eastapp.backend.tasks.api.TaskOverviewResponse;
 import com.eastapp.backend.tasks.service.TaskService;
 import org.springframework.http.HttpStatus;
@@ -334,14 +335,31 @@ public class BusinessReportService {
             range = dateRange(from, to, 30);
         }
         Map<UUID, String> names = userNames(principal.tenantId());
-        return reportRepository
+        List<BusinessReport> reports = reportRepository
                 .findAllByTenantIdAndReportTypeAndReportDateBetweenOrderByReportDateAscCreatedAtAsc(
                         principal.tenantId(), BusinessReportType.SALES, range.from(), range.to()
                 ).stream()
                 .filter(report -> report.getWorkflowStatus() != ReportWorkflowStatus.DRAFT)
                 .sorted(Comparator.comparing(BusinessReport::getReportDate).reversed()
                         .thenComparing(BusinessReport::getCreatedAt, Comparator.reverseOrder()))
-                .map(report -> toSalesResponse(report, names))
+                .toList();
+        Map<UUID, SalesReportDetail> details = salesDetails(reports);
+        Map<UUID, List<SalesVoidBill>> voidBills = voidBillsByReport(reports);
+        Map<UUID, String> media = mediaStorageKeys(
+                principal.tenantId(),
+                voidBills.values().stream()
+                        .flatMap(List::stream)
+                        .map(SalesVoidBill::getPhotoMediaId)
+                        .toList()
+        );
+        return reports.stream()
+                .map(report -> toSalesResponse(
+                        report,
+                        names,
+                        details.get(report.getId()),
+                        voidBills.getOrDefault(report.getId(), List.of()),
+                        media
+                ))
                 .toList();
     }
 
@@ -403,7 +421,7 @@ public class BusinessReportService {
     ) {
         requireSalesAccess(principal);
         validateEditableDate(principal, request.reportDate());
-        ReportMedia media = reportMediaService.requireOwnedMedia(principal, request.photoStorageKey());
+        ReportMediaReference media = reportMediaService.requireOwnedMedia(principal, request.photoStorageKey());
         BusinessReport report = reportRepository.findByTenantIdAndReportTypeAndReportDate(
                 principal.tenantId(), BusinessReportType.SALES, request.reportDate()
         ).orElseGet(() -> reportRepository.saveAndFlush(new BusinessReport(
@@ -427,13 +445,13 @@ public class BusinessReportService {
         SalesVoidBill saved = voidBillRepository.saveAndFlush(new SalesVoidBill(
                 principal.tenantId(),
                 report.getId(),
-                media.getId(),
+                media.id(),
                 request.billNumber(),
                 request.reason(),
                 request.amountRm(),
                 principal.userId()
         ));
-        return toVoidBillResponse(saved, media, userNames(principal.tenantId()));
+        return toVoidBillResponse(saved, media.storageKey(), userNames(principal.tenantId()));
     }
 
     @Transactional
@@ -470,7 +488,7 @@ public class BusinessReportService {
             CreateWasteReportRequest request
     ) {
         validateEditableDate(principal, request.reportDate());
-        ReportMedia media = reportMediaService.requireOwnedMedia(principal, request.photoStorageKey());
+        ReportMediaReference media = reportMediaService.requireOwnedMedia(principal, request.photoStorageKey());
         UUID skuId = request.skuId();
         String itemName = request.itemName().trim();
         String unit = request.unit().trim();
@@ -500,11 +518,16 @@ public class BusinessReportService {
                 unit,
                 unitCost,
                 request.reason(),
-                media.getId()
+                media.id()
         ));
         report.submit();
         reportRepository.save(report);
-        return toWasteResponse(report, detail, media, userNames(principal.tenantId()));
+        return toWasteResponse(
+                report,
+                detail,
+                media.storageKey(),
+                userNames(principal.tenantId())
+        );
     }
 
     @Transactional(readOnly = true)
@@ -524,7 +547,7 @@ public class BusinessReportService {
                 .sorted(Comparator.comparing(BusinessReport::getCreatedAt).reversed())
                 .toList();
         Map<UUID, WasteReportDetail> details = wasteDetails(reports);
-        Map<UUID, ReportMedia> media = mediaById(
+        Map<UUID, String> media = mediaStorageKeys(
                 principal.tenantId(),
                 details.values().stream().map(WasteReportDetail::getPhotoMediaId).toList()
         );
@@ -532,8 +555,12 @@ public class BusinessReportService {
         for (BusinessReport report : reports) {
             WasteReportDetail detail = details.get(report.getId());
             if (detail == null) continue;
-            ReportMedia photo = media.get(detail.getPhotoMediaId());
-            result.add(toWasteResponse(report, detail, photo, names));
+            result.add(toWasteResponse(
+                    report,
+                    detail,
+                    media.getOrDefault(detail.getPhotoMediaId(), ""),
+                    names
+            ));
         }
         return List.copyOf(result);
     }
@@ -566,7 +593,7 @@ public class BusinessReportService {
             AddDailyPhotoRequest request
     ) {
         validateEditableDate(principal, request.reportDate());
-        ReportMedia media = reportMediaService.requireOwnedMedia(principal, request.photoStorageKey());
+        ReportMediaReference media = reportMediaService.requireOwnedMedia(principal, request.photoStorageKey());
         BusinessReport report = reportRepository
                 .findByTenantIdAndReportTypeAndReportDateAndSubmittedByUserId(
                         principal.tenantId(), BusinessReportType.DAILY_PHOTO, request.reportDate(), principal.userId()
@@ -585,7 +612,7 @@ public class BusinessReportService {
             throw locked("This daily photo batch has already been submitted.");
         }
         dailyPhotoRepository.saveAndFlush(new DailyReportPhoto(
-                principal.tenantId(), report.getId(), media.getId(), principal.userId()
+                principal.tenantId(), report.getId(), media.id(), principal.userId()
         ));
         return toDailyPhotoResponse(report, principal.fullName());
     }
@@ -622,7 +649,7 @@ public class BusinessReportService {
             CreateComplaintReportRequest request
     ) {
         validateEditableDate(principal, request.reportDate());
-        ReportMedia media = reportMediaService.requireOwnedMedia(principal, request.photoStorageKey());
+        ReportMediaReference media = reportMediaService.requireOwnedMedia(principal, request.photoStorageKey());
         BusinessReport report = reportRepository.saveAndFlush(new BusinessReport(
                 principal.tenantId(),
                 BusinessReportType.COMPLAINT,
@@ -632,7 +659,7 @@ public class BusinessReportService {
         ComplaintReportDetail detail = complaintRepository.saveAndFlush(new ComplaintReportDetail(
                 report.getId(),
                 principal.tenantId(),
-                media.getId(),
+                media.id(),
                 request.customerGender(),
                 request.estimatedAge(),
                 request.complaintInfo(),
@@ -643,7 +670,12 @@ public class BusinessReportService {
         ));
         report.markCompleteWithoutApproval();
         reportRepository.save(report);
-        return toComplaintResponse(report, detail, media, userNames(principal.tenantId()));
+        return toComplaintResponse(
+                report,
+                detail,
+                media.storageKey(),
+                userNames(principal.tenantId())
+        );
     }
 
     @Transactional(readOnly = true)
@@ -663,7 +695,7 @@ public class BusinessReportService {
                 .sorted(Comparator.comparing(BusinessReport::getCreatedAt).reversed())
                 .toList();
         Map<UUID, ComplaintReportDetail> details = complaintDetails(reports);
-        Map<UUID, ReportMedia> media = mediaById(
+        Map<UUID, String> media = mediaStorageKeys(
                 principal.tenantId(),
                 details.values().stream().map(ComplaintReportDetail::getPhotoMediaId).toList()
         );
@@ -671,7 +703,12 @@ public class BusinessReportService {
         for (BusinessReport report : reports) {
             ComplaintReportDetail detail = details.get(report.getId());
             if (detail == null) continue;
-            result.add(toComplaintResponse(report, detail, media.get(detail.getPhotoMediaId()), names));
+            result.add(toComplaintResponse(
+                    report,
+                    detail,
+                    media.getOrDefault(detail.getPhotoMediaId(), ""),
+                    names
+            ));
         }
         return List.copyOf(result);
     }
@@ -688,9 +725,15 @@ public class BusinessReportService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "COMPLAINT_NOT_FOUND", "Complaint report was not found."));
         detail.updateResolution(request.actionTaken(), request.compensationAmountRm(), request.status());
         complaintRepository.save(detail);
-        ReportMedia media = mediaRepository.findByIdAndTenantId(detail.getPhotoMediaId(), principal.tenantId())
+        ReportMediaReference media = mediaRepository
+                .findReferenceByIdAndTenantId(detail.getPhotoMediaId(), principal.tenantId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "REPORT_MEDIA_NOT_FOUND", "Complaint photo was not found."));
-        return toComplaintResponse(report, detail, media, userNames(principal.tenantId()));
+        return toComplaintResponse(
+                report,
+                detail,
+                media.storageKey(),
+                userNames(principal.tenantId())
+        );
     }
 
     @Transactional(readOnly = true)
@@ -767,7 +810,7 @@ public class BusinessReportService {
             ReviewBusinessReportRequest request
     ) {
         requireReviewer(principal);
-        BusinessReport report = reportRepository.findByIdAndTenantIdForUpdate(reportId, principal.tenantId())
+        BusinessReport report = reportRepository.findLockedByIdAndTenantId(reportId, principal.tenantId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "REPORT_NOT_FOUND", "Report was not found."));
         if (report.getReportType() == BusinessReportType.COMPLAINT) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "REPORT_REVIEW_NOT_REQUIRED", "Complaints use Open and Resolved status instead of approval.");
@@ -902,7 +945,7 @@ public class BusinessReportService {
         List<StockCountSubmission> approvedCounts = stockCountRepository
                 .findAllByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtAsc(
                         tenantId,
-                        "Approved",
+                        StockWorkflowStatus.DONE.name(),
                         fromInclusive,
                         toExclusive
                 );
@@ -1193,12 +1236,26 @@ public class BusinessReportService {
         ).orElse(null);
         List<SalesVoidBill> voidBills = voidBillRepository
                 .findAllByTenantIdAndSalesReportIdOrderByCreatedAtAsc(report.getTenantId(), report.getId());
-        Map<UUID, ReportMedia> media = mediaById(
+        Map<UUID, String> media = mediaStorageKeys(
                 report.getTenantId(),
                 voidBills.stream().map(SalesVoidBill::getPhotoMediaId).toList()
         );
+        return toSalesResponse(report, names, detail, voidBills, media);
+    }
+
+    private SalesReportResponse toSalesResponse(
+            BusinessReport report,
+            Map<UUID, String> names,
+            SalesReportDetail detail,
+            List<SalesVoidBill> voidBills,
+            Map<UUID, String> media
+    ) {
         List<VoidBillResponse> voidResponses = voidBills.stream()
-                .map(item -> toVoidBillResponse(item, media.get(item.getPhotoMediaId()), names))
+                .map(item -> toVoidBillResponse(
+                        item,
+                        media.getOrDefault(item.getPhotoMediaId(), ""),
+                        names
+                ))
                 .toList();
         BigDecimal cashTotal = detail == null ? BigDecimal.ZERO : detail.getSubTotalRm();
         UUID cashReceivedByUserId = detail == null
@@ -1250,7 +1307,7 @@ public class BusinessReportService {
 
     private VoidBillResponse toVoidBillResponse(
             SalesVoidBill item,
-            ReportMedia media,
+            String photoStorageKey,
             Map<UUID, String> names
     ) {
         return new VoidBillResponse(
@@ -1258,7 +1315,7 @@ public class BusinessReportService {
                 item.getBillNumber(),
                 item.getReason(),
                 moneyValue(item.getAmountRm()),
-                media == null ? "" : media.getStorageKey(),
+                photoStorageKey,
                 userName(item.getCreatedByUserId(), names),
                 item.getCreatedAt()
         );
@@ -1267,7 +1324,7 @@ public class BusinessReportService {
     private WasteReportResponse toWasteResponse(
             BusinessReport report,
             WasteReportDetail detail,
-            ReportMedia media,
+            String photoStorageKey,
             Map<UUID, String> names
     ) {
         return new WasteReportResponse(
@@ -1281,7 +1338,7 @@ public class BusinessReportService {
                 moneyValue(detail.getEstimatedUnitCostRm()),
                 moneyValue(detail.estimatedLossRm()),
                 detail.getReason(),
-                media == null ? "" : media.getStorageKey(),
+                photoStorageKey,
                 userName(report.getSubmittedByUserId(), names),
                 report.getSubmittedAt(),
                 userNameNullable(report.getReviewedByUserId(), names),
@@ -1292,16 +1349,14 @@ public class BusinessReportService {
     private DailyPhotoReportResponse toDailyPhotoResponse(BusinessReport report, String userName) {
         List<DailyReportPhoto> photos = dailyPhotoRepository
                 .findAllByTenantIdAndReportIdOrderByCreatedAtAsc(report.getTenantId(), report.getId());
-        Map<UUID, ReportMedia> media = mediaById(
+        Map<UUID, String> media = mediaStorageKeys(
                 report.getTenantId(),
                 photos.stream().map(DailyReportPhoto::getPhotoMediaId).toList()
         );
         List<DailyPhotoItemResponse> items = photos.stream()
                 .map(photo -> new DailyPhotoItemResponse(
                         photo.getId(),
-                        Optional.ofNullable(media.get(photo.getPhotoMediaId()))
-                                .map(ReportMedia::getStorageKey)
-                                .orElse(""),
+                        media.getOrDefault(photo.getPhotoMediaId(), ""),
                         photo.getCreatedAt()
                 ))
                 .toList();
@@ -1343,14 +1398,14 @@ public class BusinessReportService {
     private ComplaintReportResponse toComplaintResponse(
             BusinessReport report,
             ComplaintReportDetail detail,
-            ReportMedia media,
+            String photoStorageKey,
             Map<UUID, String> names
     ) {
         return new ComplaintReportResponse(
                 report.getId(),
                 report.getReportDate(),
                 detail.getComplaintStatus(),
-                media == null ? "" : media.getStorageKey(),
+                photoStorageKey,
                 detail.getCustomerGender(),
                 detail.getEstimatedAge(),
                 detail.getComplaintInfo(),
@@ -1415,6 +1470,26 @@ public class BusinessReportService {
         return totals;
     }
 
+    private Map<UUID, List<SalesVoidBill>> voidBillsByReport(
+            List<BusinessReport> reports
+    ) {
+        List<UUID> ids = reportIds(reports);
+        if (ids.isEmpty()) return Map.of();
+        Map<UUID, List<SalesVoidBill>> result = new HashMap<>();
+        for (SalesVoidBill item : voidBillRepository.findAllByTenantIdAndSalesReportIdIn(
+                reports.getFirst().getTenantId(),
+                ids
+        )) {
+            result.computeIfAbsent(item.getSalesReportId(), ignored -> new ArrayList<>())
+                    .add(item);
+        }
+        result.values().forEach(items -> items.sort(
+                Comparator.comparing(SalesVoidBill::getCreatedAt)
+                        .thenComparing(SalesVoidBill::getId)
+        ));
+        return result;
+    }
+
     private Map<UUID, Integer> voidBillCounts(List<BusinessReport> reports) {
         List<UUID> ids = reportIds(reports);
         if (ids.isEmpty()) return Map.of();
@@ -1449,11 +1524,14 @@ public class BusinessReportService {
                 .stream().collect(Collectors.toMap(ComplaintReportDetail::getReportId, Function.identity()));
     }
 
-    private Map<UUID, ReportMedia> mediaById(UUID tenantId, List<UUID> ids) {
+    private Map<UUID, String> mediaStorageKeys(UUID tenantId, List<UUID> ids) {
         List<UUID> distinct = ids.stream().filter(Objects::nonNull).distinct().toList();
         if (distinct.isEmpty()) return Map.of();
-        return mediaRepository.findAllByTenantIdAndIdIn(tenantId, distinct)
-                .stream().collect(Collectors.toMap(ReportMedia::getId, Function.identity()));
+        return mediaRepository.findAllReferencesByTenantIdAndIdIn(tenantId, distinct)
+                .stream().collect(Collectors.toMap(
+                        ReportMediaReference::id,
+                        ReportMediaReference::storageKey
+                ));
     }
 
     private Map<UUID, String> userNames(UUID tenantId) {

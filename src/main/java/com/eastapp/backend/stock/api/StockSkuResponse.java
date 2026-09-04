@@ -30,7 +30,7 @@ public record StockSkuResponse(
         boolean active,
         boolean coolingPeriod
 ) {
-    public static StockSkuResponse from(StockSku item) {
+    public static StockSkuResponse from(StockSku item, String photoPath) {
         return new StockSkuResponse(
                 item.getId(), item.getName(),
                 item.getTag1() == null ? null : item.getTag1().getId(), item.getCategory(),
@@ -40,7 +40,7 @@ public record StockSkuResponse(
                 item.getRecoveryPercent(), item.getMinimumPriceRm(),
                 item.getMaximumPriceRm(),
                 item.getSuppliers().stream().map(supplier -> supplier.getId()).toList(),
-                item.getPhotoPath(), List.copyOf(item.getAssignedStaffNames()),
+                photoPath, List.copyOf(item.getAssignedStaffNames()),
                 List.copyOf(item.getReceivingChecklist()),
                 item.getStockCheckFrequencyDays(), item.getResetTime().toString(),
                 StockResponseSupport.label(item.getUpdatedAt()),

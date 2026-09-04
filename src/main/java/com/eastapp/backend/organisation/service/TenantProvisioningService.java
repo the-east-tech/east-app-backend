@@ -98,7 +98,7 @@ public class TenantProvisioningService {
 
     @Transactional
     public UserAccount addOwnerContext(Tenant tenant, UserAccount sourceOwner) {
-        Tenant lockedTenant = tenantRepository.findByIdForUpdate(tenant.getId())
+        Tenant lockedTenant = tenantRepository.findLockedById(tenant.getId())
                 .orElseThrow(() -> new IllegalStateException(
                         "Tenant is unavailable while creating Owner context " + tenant.getId()
                 ));

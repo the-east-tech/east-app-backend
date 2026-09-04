@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,14 +15,12 @@ import java.util.UUID;
 public interface StockSkuRepository extends JpaRepository<StockSku, UUID> {
 
     @EntityGraph(attributePaths = {
-            "tenant", "lastUpdatedBy", "createdBy", "suppliers",
-            "tag1", "tag2", "thumbnailMedia"
+            "tenant", "lastUpdatedBy", "createdBy", "tag1", "tag2"
     })
     List<StockSku> findAllByTenant_IdOrderByNameAsc(UUID tenantId);
 
     @EntityGraph(attributePaths = {
-            "tenant", "lastUpdatedBy", "createdBy", "suppliers",
-            "tag1", "tag2", "thumbnailMedia"
+            "tenant", "lastUpdatedBy", "createdBy", "tag1", "tag2"
     })
     @Query("""
             select sku
@@ -59,9 +58,12 @@ public interface StockSkuRepository extends JpaRepository<StockSku, UUID> {
 
     @EntityGraph(attributePaths = {
             "tenant", "lastUpdatedBy", "createdBy", "suppliers",
-            "tag1", "tag2", "thumbnailMedia"
+            "tag1", "tag2"
     })
     Optional<StockSku> findByIdAndTenant_Id(UUID id, UUID tenantId);
+
+    @EntityGraph(attributePaths = {"tenant", "suppliers"})
+    List<StockSku> findAllByTenant_IdAndIdIn(UUID tenantId, Collection<UUID> ids);
 
     boolean existsByTenant_IdAndNameIgnoreCase(UUID tenantId, String name);
 

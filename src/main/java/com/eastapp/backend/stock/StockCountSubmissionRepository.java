@@ -27,14 +27,7 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
               and (:filterBySubmittedBy = false or submission.submittedBy.id = :submittedByUserId)
               and (
                     (:filterByReviewStatus = false and submission.reviewStatus <> 'PENDING')
-                    or (:filterByReviewStatus = true and submission.reviewStatus =
-                        case :reviewStatus
-                            when 'Pending Review' then 'SUBMITTED'
-                            when 'Pending' then 'SUBMITTED'
-                            when 'Approved' then 'DONE'
-                            when 'Rejected' then 'PENDING'
-                            else :reviewStatus
-                        end)
+                    or (:filterByReviewStatus = true and submission.reviewStatus = :reviewStatus)
                   )
               and (:filterByFrom = false or submission.capturedAt >= :fromInclusive)
               and (:filterByTo = false or submission.capturedAt < :toExclusive)
@@ -53,18 +46,11 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             Pageable pageable
     );
 
-    @Query("""
-            select case when count(submission) > 0 then true else false end
-            from StockCountSubmission submission
-            where submission.tenant.id = :tenantId
-              and submission.sku.id = :skuId
-              and submission.countCycleStartedAt = :countCycleStartedAt
-              and submission.reviewStatus <> 'PENDING'
-            """)
-    boolean existsByTenant_IdAndSku_IdAndCountCycleStartedAt(
-            @Param("tenantId") UUID tenantId,
-            @Param("skuId") UUID skuId,
-            @Param("countCycleStartedAt") Instant countCycleStartedAt
+    boolean existsByTenant_IdAndSku_IdAndCountCycleStartedAtAndReviewStatusNot(
+            UUID tenantId,
+            UUID skuId,
+            Instant countCycleStartedAt,
+            String excludedReviewStatus
     );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -75,27 +61,11 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
     Optional<StockCountSubmission> findByIdAndTenant_Id(UUID id, UUID tenantId);
 
     @EntityGraph(attributePaths = {"tenant", "sku", "submittedBy", "reviewedBy"})
-    @Query("""
-            select submission
-            from StockCountSubmission submission
-            where submission.tenant.id = :tenantId
-              and submission.reviewStatus =
-                    case :reviewStatus
-                        when 'Pending Review' then 'SUBMITTED'
-                        when 'Pending' then 'SUBMITTED'
-                        when 'Approved' then 'DONE'
-                        when 'Rejected' then 'PENDING'
-                        else :reviewStatus
-                    end
-              and submission.capturedAt >= :fromInclusive
-              and submission.capturedAt < :toExclusive
-            order by submission.capturedAt asc
-            """)
     List<StockCountSubmission> findAllByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtAsc(
-            @Param("tenantId") UUID tenantId,
-            @Param("reviewStatus") String reviewStatus,
-            @Param("fromInclusive") Instant fromInclusive,
-            @Param("toExclusive") Instant toExclusive
+            UUID tenantId,
+            String reviewStatus,
+            Instant fromInclusive,
+            Instant toExclusive
     );
 
     long countByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
@@ -104,25 +74,10 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             Instant toExclusive
     );
 
-    @Query("""
-            select count(submission)
-            from StockCountSubmission submission
-            where submission.tenant.id = :tenantId
-              and submission.reviewStatus =
-                    case :reviewStatus
-                        when 'Pending Review' then 'SUBMITTED'
-                        when 'Pending' then 'SUBMITTED'
-                        when 'Approved' then 'DONE'
-                        when 'Rejected' then 'PENDING'
-                        else :reviewStatus
-                    end
-              and submission.capturedAt >= :fromInclusive
-              and submission.capturedAt < :toExclusive
-            """)
     long countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
-            @Param("tenantId") UUID tenantId,
-            @Param("reviewStatus") String reviewStatus,
-            @Param("fromInclusive") Instant fromInclusive,
-            @Param("toExclusive") Instant toExclusive
+            UUID tenantId,
+            String reviewStatus,
+            Instant fromInclusive,
+            Instant toExclusive
     );
 }

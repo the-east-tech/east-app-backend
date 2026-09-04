@@ -81,7 +81,7 @@ public class StockPurchaseService {
     }
 
     private StockSupplier supplierForUpdate(AuthenticatedUser principal, UUID supplierId) {
-        return supplierRepository.findByIdAndTenant_IdForUpdate(supplierId, principal.tenantId())
+        return supplierRepository.findLockedByIdAndTenant_Id(supplierId, principal.tenantId())
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND,
                         "STOCK_SUPPLIER_NOT_FOUND",
