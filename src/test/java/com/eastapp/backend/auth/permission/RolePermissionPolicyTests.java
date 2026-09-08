@@ -60,8 +60,9 @@ class RolePermissionPolicyTests {
                 SystemPermission.TASK_CONTRIBUTE
         );
 
-        assertEquals(expected, RolePermissionPolicy.grantedTo(SystemRole.STAFF_1));
-        assertEquals(expected, RolePermissionPolicy.grantedTo(SystemRole.STAFF_2));
+        assertEquals(expected, RolePermissionPolicy.grantedTo(SystemRole.SENIOR_STAFF));
+        assertEquals(expected, RolePermissionPolicy.grantedTo(SystemRole.STAFF));
+        assertEquals(expected, RolePermissionPolicy.grantedTo(SystemRole.PART_TIME));
     }
 
     @Test
