@@ -9,6 +9,7 @@ import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.activity.service.WorkflowActivityService;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.knowledge.KnowledgeSopRepository;
+import com.eastapp.backend.stock.StockCheckSchedule;
 import com.eastapp.backend.stock.StockCountSubmission;
 import com.eastapp.backend.stock.StockCountSubmissionRepository;
 import com.eastapp.backend.stock.StockReceiving;
@@ -61,10 +62,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -585,8 +584,8 @@ public class StockService {
                 request.minimumPriceRm(), request.maximumPriceRm(),
                 suppliers(principal.tenantId(), request.supplierIds()),
                 thumbnail, request.assignedStaffNames(),
-                request.receivingChecklist(), request.stockCheckFrequencyDays(),
-                parseResetTime(request.resetTime()), request.active(), request.coolingPeriod(), actor
+                request.receivingChecklist(), request.stockCheckSchedule(),
+                request.stockCheckDay(), request.active(), request.coolingPeriod(), actor
         ));
     }
 
@@ -614,8 +613,8 @@ public class StockService {
                 request.minimumPriceRm(), request.maximumPriceRm(),
                 suppliers(principal.tenantId(), request.supplierIds()),
                 thumbnail, request.assignedStaffNames(),
-                request.receivingChecklist(), request.stockCheckFrequencyDays(),
-                parseResetTime(request.resetTime()), request.active(), request.coolingPeriod(),
+                request.receivingChecklist(), request.stockCheckSchedule(),
+                request.stockCheckDay(), request.active(), request.coolingPeriod(),
                 actor(principal)
         );
         return sku;
@@ -710,7 +709,7 @@ public class StockService {
         )) {
             throw conflict(
                     "STOCK_COUNT_ALREADY_SUBMITTED",
-                    "This SKU has already been counted for the current daily cycle."
+                    "This SKU has already been counted for the current stock-check cycle."
             );
         }
         BigDecimal previous = sku.getCurrentBalanceValue();
@@ -770,7 +769,7 @@ public class StockService {
         if (uniqueIds.size() != requestedIds.size()) {
             throw badRequest(
                     "STOCK_COUNT_DUPLICATE_REVIEW_ID",
-                    "Each daily count can be selected only once."
+                    "Each stock check can be selected only once."
             );
         }
 
@@ -781,7 +780,7 @@ public class StockService {
         if (found.size() != uniqueIds.size()) {
             throw notFound(
                     "STOCK_COUNT_NOT_FOUND",
-                    "One or more selected daily counts were not found."
+                    "One or more selected stock checks were not found."
             );
         }
 
@@ -795,7 +794,7 @@ public class StockService {
             if (!"Pending Review".equals(submission.getReviewStatus())) {
                 throw conflict(
                         "STOCK_COUNT_ALREADY_REVIEWED",
-                        "At least one selected daily count has already been reviewed. No records were changed."
+                        "At least one selected stock check has already been reviewed. No records were changed."
                 );
             }
         }
@@ -1208,18 +1207,28 @@ public class StockService {
     }
 
     private static Instant countCycleStartedAt(StockSku sku, Instant now) {
-        ZonedDateTime localNow = now.atZone(ZONE_ID);
-        ZonedDateTime cycleStart = localNow.toLocalDate().atTime(sku.getResetTime()).atZone(ZONE_ID);
-        if (localNow.isBefore(cycleStart)) cycleStart = cycleStart.minusDays(1);
-        return cycleStart.toInstant();
+        LocalDate today = now.atZone(ZONE_ID).toLocalDate();
+        LocalDate cycleDate = switch (sku.getStockCheckSchedule()) {
+            case DAILY -> today;
+            case WEEKLY -> today.minusDays(Math.floorMod(
+                    today.getDayOfWeek().getValue() - sku.getStockCheckDay(),
+                    7
+            ));
+            case MONTHLY -> {
+                int day = sku.getStockCheckDay();
+                YearMonth month = YearMonth.from(today);
+                LocalDate candidate = monthlyStockCheckDate(month, day);
+                if (candidate.isAfter(today)) {
+                    candidate = monthlyStockCheckDate(month.minusMonths(1), day);
+                }
+                yield candidate;
+            }
+        };
+        return cycleDate.atStartOfDay(ZONE_ID).toInstant();
     }
 
-    private static LocalTime parseResetTime(String value) {
-        try {
-            return LocalTime.parse(value.trim());
-        } catch (DateTimeParseException error) {
-            throw badRequest("INVALID_RESET_TIME", "Reset time must use HH:mm format.");
-        }
+    private static LocalDate monthlyStockCheckDate(YearMonth month, int day) {
+        return month.atDay(Math.min(day, month.lengthOfMonth()));
     }
 
     private static ApiException notFound(String code, String message) {

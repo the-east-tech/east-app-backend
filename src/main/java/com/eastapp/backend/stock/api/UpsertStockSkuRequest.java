@@ -1,5 +1,6 @@
 package com.eastapp.backend.stock.api;
 
+import com.eastapp.backend.stock.StockCheckSchedule;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -26,8 +27,8 @@ public record UpsertStockSkuRequest(
         @Size(max = 500) String photoPath,
         List<@Size(max = 120) String> assignedStaffNames,
         List<@Size(max = 300) String> receivingChecklist,
-        @Min(1) int stockCheckFrequencyDays,
-        @NotBlank String resetTime,
+        @NotNull StockCheckSchedule stockCheckSchedule,
+        Integer stockCheckDay,
         boolean active,
         boolean coolingPeriod
 ) {}

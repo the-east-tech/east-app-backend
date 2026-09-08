@@ -6,6 +6,7 @@ import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
+import com.eastapp.backend.stock.StockCheckSchedule;
 import com.eastapp.backend.stock.StockMedia;
 import com.eastapp.backend.stock.StockMediaRepository;
 import com.eastapp.backend.stock.StockSku;
@@ -37,10 +38,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
@@ -55,13 +53,12 @@ import java.util.UUID;
 @Service
 public class StockSkuCsvService {
     private static final String FORMAT_NAME = "EASTAPP_SKU_CSV";
-    private static final int FORMAT_VERSION = 1;
+    private static final int FORMAT_VERSION = 2;
     private static final String LANGUAGES = "ENGLISH|CHINESE";
     private static final int MAX_FILE_BYTES = 2 * 1024 * 1024;
     private static final int MAX_ROWS = 1_000;
     private static final int MAX_MESSAGES = 20;
     private static final ZoneId ZONE_ID = ZoneId.of("Asia/Kuala_Lumpur");
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {};
     private static final byte[] TRANSPARENT_PNG = Base64.getDecoder().decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
@@ -81,8 +78,8 @@ public class StockSkuCsvService {
             "maximum_price_rm",
             "supplier_names",
             "receiving_checklist",
-            "stock_check_frequency_days",
-            "reset_time",
+            "stock_check_schedule",
+            "stock_check_day",
             "active",
             "cooling_period"
     );
@@ -148,8 +145,8 @@ public class StockSkuCsvService {
                             decimal(sku.getMaximumPriceRm()),
                             objectMapper.writeValueAsString(supplierNames),
                             objectMapper.writeValueAsString(sku.getReceivingChecklist()),
-                            sku.getStockCheckFrequencyDays(),
-                            sku.getResetTime().format(TIME_FORMAT),
+                            sku.getStockCheckSchedule().name(),
+                            sku.getStockCheckDay() == null ? "" : sku.getStockCheckDay(),
                             sku.isActive(),
                             sku.isCoolingPeriod()
                     );
@@ -269,8 +266,8 @@ public class StockSkuCsvService {
                     noImage.getStorageKey(),
                     List.of(),
                     row.receivingChecklist(),
-                    row.frequencyDays(),
-                    row.resetTime().format(TIME_FORMAT),
+                    row.stockCheckSchedule(),
+                    row.stockCheckDay(),
                     row.active(),
                     row.coolingPeriod()
             ));
@@ -380,7 +377,7 @@ public class StockSkuCsvService {
         if (!FORMAT_NAME.equals(text(record, "eastapp_format"))) {
             throw invalid("eastapp_format must be " + FORMAT_NAME + ".");
         }
-        if (integer(record, "format_version", 1, 1) != FORMAT_VERSION) {
+        if (integer(record, "format_version", FORMAT_VERSION, FORMAT_VERSION) != FORMAT_VERSION) {
             throw invalid("Unsupported format_version.");
         }
         if (!LANGUAGES.equals(text(record, "languages"))) {
@@ -407,14 +404,21 @@ public class StockSkuCsvService {
         List<String> checklist = stringList(
                 record, "receiving_checklist", 50, 300
         );
-        int frequencyDays = integer(
-                record, "stock_check_frequency_days", 1, Integer.MAX_VALUE
-        );
-        LocalTime resetTime;
+        StockCheckSchedule stockCheckSchedule;
         try {
-            resetTime = LocalTime.parse(requiredText(record, "reset_time", 8));
-        } catch (DateTimeParseException exception) {
-            throw invalid("reset_time must use HH:mm format.");
+            stockCheckSchedule = StockCheckSchedule.valueOf(
+                    requiredText(record, "stock_check_schedule", 16).toUpperCase(Locale.ROOT)
+            );
+        } catch (IllegalArgumentException exception) {
+            throw invalid("stock_check_schedule must be DAILY, WEEKLY or MONTHLY.");
+        }
+        Integer stockCheckDay = null;
+        if (stockCheckSchedule == StockCheckSchedule.WEEKLY) {
+            stockCheckDay = integer(record, "stock_check_day", 1, 7);
+        } else if (stockCheckSchedule == StockCheckSchedule.MONTHLY) {
+            stockCheckDay = integer(record, "stock_check_day", 1, 31);
+        } else if (!text(record, "stock_check_day").isEmpty()) {
+            throw invalid("stock_check_day must be blank for DAILY.");
         }
         return new ParsedSku(
                 name,
@@ -428,8 +432,8 @@ public class StockSkuCsvService {
                 maximumPrice,
                 supplierNames,
                 checklist,
-                frequencyDays,
-                resetTime,
+                stockCheckSchedule,
+                stockCheckDay,
                 bool(record, "active"),
                 bool(record, "cooling_period")
         );
@@ -511,7 +515,7 @@ public class StockSkuCsvService {
                 || !headers.containsAll(HEADERS)) {
             throw badRequest(
                     "SKU_CSV_FORMAT_NOT_RECOGNISED",
-                    "The selected file is not a recognised EastApp SKU CSV v1."
+                    "The selected file is not a recognised EastApp SKU CSV v" + FORMAT_VERSION + "."
             );
         }
     }
@@ -623,8 +627,8 @@ public class StockSkuCsvService {
             BigDecimal maximumPrice,
             List<String> supplierNames,
             List<String> receivingChecklist,
-            int frequencyDays,
-            LocalTime resetTime,
+            StockCheckSchedule stockCheckSchedule,
+            Integer stockCheckDay,
             boolean active,
             boolean coolingPeriod
     ) {}

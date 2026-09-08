@@ -30,7 +30,7 @@ class ActivityEventTests {
                 UUID.randomUUID(),
                 "Nicky",
                 "E0001",
-                "STAFF_1",
+                "STAFF",
                 "Task",
                 "submitted",
                 "task",

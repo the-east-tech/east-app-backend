@@ -1,4 +1,4 @@
--- EastApp clean reset-per-release schema (v114).
+-- EastApp clean reset-per-release schema (v118).
 -- This V1 contains the complete schema for a brand-new EastApp database.
 -- While the reset-per-release policy is active, merge every schema change into
 -- this file, keep V1 as the only migration, and reset the database each release.
@@ -324,8 +324,8 @@ CREATE TABLE stock_skus (
     minimum_price_rm NUMERIC(14,2) NOT NULL DEFAULT 0,
     maximum_price_rm NUMERIC(14,2) NOT NULL DEFAULT 0,
     thumbnail_media_id UUID NOT NULL,
-    stock_check_frequency_days INTEGER NOT NULL DEFAULT 1,
-    reset_time TIME NOT NULL DEFAULT '08:00',
+    stock_check_schedule VARCHAR(16) NOT NULL DEFAULT 'DAILY',
+    stock_check_day INTEGER,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     cooling_period BOOLEAN NOT NULL DEFAULT TRUE,
     last_updated_by_user_id UUID NOT NULL,

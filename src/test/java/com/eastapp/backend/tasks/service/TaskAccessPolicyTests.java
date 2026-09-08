@@ -15,8 +15,9 @@ class TaskAccessPolicyTests {
         assertTrue(policy.canOversee(SystemRole.HEAD));
         assertTrue(policy.canOversee(SystemRole.MANAGER));
         assertFalse(policy.canOversee(SystemRole.SUPERVISOR));
-        assertFalse(policy.canOversee(SystemRole.STAFF_1));
-        assertFalse(policy.canOversee(SystemRole.STAFF_2));
+        assertFalse(policy.canOversee(SystemRole.SENIOR_STAFF));
+        assertFalse(policy.canOversee(SystemRole.STAFF));
+        assertFalse(policy.canOversee(SystemRole.PART_TIME));
     }
 
     @Test
@@ -31,7 +32,7 @@ class TaskAccessPolicyTests {
         assertFalse(policy.canRate(SystemRole.HEAD, SystemRole.OWNER));
         assertFalse(policy.canRate(SystemRole.HEAD, SystemRole.HEAD));
         assertTrue(policy.canRate(SystemRole.HEAD, SystemRole.MANAGER));
-        assertTrue(policy.canRate(SystemRole.HEAD, SystemRole.STAFF_1));
+        assertTrue(policy.canRate(SystemRole.HEAD, SystemRole.SENIOR_STAFF));
     }
 
     @Test
@@ -40,13 +41,13 @@ class TaskAccessPolicyTests {
         assertFalse(policy.canRate(SystemRole.MANAGER, SystemRole.HEAD));
         assertFalse(policy.canRate(SystemRole.MANAGER, SystemRole.MANAGER));
         assertTrue(policy.canRate(SystemRole.MANAGER, SystemRole.SUPERVISOR));
-        assertTrue(policy.canRate(SystemRole.MANAGER, SystemRole.STAFF_2));
+        assertTrue(policy.canRate(SystemRole.MANAGER, SystemRole.PART_TIME));
     }
 
     @Test
     void operationalRolesCannotRateAndMissingSubmitterRoleIsDenied() {
-        assertFalse(policy.canRate(SystemRole.SUPERVISOR, SystemRole.STAFF_1));
-        assertFalse(policy.canRate(SystemRole.STAFF_1, SystemRole.STAFF_2));
+        assertFalse(policy.canRate(SystemRole.SUPERVISOR, SystemRole.SENIOR_STAFF));
+        assertFalse(policy.canRate(SystemRole.STAFF, SystemRole.PART_TIME));
         assertFalse(policy.canRate(SystemRole.HEAD, null));
     }
 }
