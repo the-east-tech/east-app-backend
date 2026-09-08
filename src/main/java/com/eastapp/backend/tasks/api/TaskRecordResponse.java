@@ -33,7 +33,6 @@ public record TaskRecordResponse(
         Instant ratedAt,
         boolean canContribute,
         boolean canSubmit,
-        boolean canRate,
-        List<TaskAuditResponse> activity
+        boolean canRate
 ) {
 }

@@ -1,6 +1,5 @@
 package com.eastapp.backend.advertising.api;
 
-import com.eastapp.backend.activity.tracking.ActivityTracked;
 import com.eastapp.backend.advertising.service.AdvertisementService;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import jakarta.validation.Valid;
@@ -44,7 +43,6 @@ public class AdvertisementController {
         return service.all(principal);
     }
 
-    @ActivityTracked(module = "Advertising", action = "created", entity = "advertisement")
     @PostMapping
     @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<AdvertisementResponse> create(
@@ -55,7 +53,6 @@ public class AdvertisementController {
                 .body(service.create(principal, request));
     }
 
-    @ActivityTracked(module = "Advertising", action = "updated", entity = "advertisement", targetPathVariable = "id")
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('OWNER')")
     public AdvertisementResponse update(
@@ -66,7 +63,6 @@ public class AdvertisementController {
         return service.update(principal, id, request);
     }
 
-    @ActivityTracked(module = "Advertising", action = "deleted", entity = "advertisement", targetPathVariable = "id")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<Void> delete(

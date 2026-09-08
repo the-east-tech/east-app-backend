@@ -28,6 +28,9 @@ public record SalesReportResponse(
         Instant submittedAt,
         String reviewedByName,
         String reviewNote,
+        String amendedByName,
+        Instant amendedAt,
+        String amendReason,
         List<VoidBillResponse> voidBills
 ) {
 }

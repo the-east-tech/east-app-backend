@@ -54,6 +54,15 @@ public class BusinessReport {
     @Column(name = "review_note", length = 500)
     private String reviewNote;
 
+    @Column(name = "amended_by_user_id")
+    private UUID amendedByUserId;
+
+    @Column(name = "amended_at")
+    private Instant amendedAt;
+
+    @Column(name = "amend_reason", length = 500)
+    private String amendReason;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -137,6 +146,20 @@ public class BusinessReport {
         }
     }
 
+    public void amend(UUID userId, String reason) {
+        if (workflowStatus != ReportWorkflowStatus.DONE) {
+            throw new IllegalStateException("Only a completed report can be amended");
+        }
+        workflowStatus = ReportWorkflowStatus.PENDING;
+        submittedAt = null;
+        reviewedByUserId = null;
+        reviewedAt = null;
+        reviewNote = null;
+        amendedByUserId = Objects.requireNonNull(userId, "userId must not be null");
+        amendedAt = Instant.now();
+        amendReason = requireText(reason, "An amendment reason is required.");
+    }
+
     private void requireSubmitted() {
         if (workflowStatus != ReportWorkflowStatus.SUBMITTED) {
             throw new IllegalStateException("Only submitted reports can be reviewed");
@@ -165,6 +188,9 @@ public class BusinessReport {
     public UUID getReviewedByUserId() { return reviewedByUserId; }
     public Instant getReviewedAt() { return reviewedAt; }
     public String getReviewNote() { return reviewNote; }
+    public UUID getAmendedByUserId() { return amendedByUserId; }
+    public Instant getAmendedAt() { return amendedAt; }
+    public String getAmendReason() { return amendReason; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

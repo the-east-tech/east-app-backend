@@ -24,7 +24,6 @@ public record TaskTemplateResponse(
         TaskPersonResponse createdBy,
         TaskPersonResponse updatedBy,
         Instant createdAt,
-        Instant updatedAt,
-        List<TaskAuditResponse> activity
+        Instant updatedAt
 ) {
 }

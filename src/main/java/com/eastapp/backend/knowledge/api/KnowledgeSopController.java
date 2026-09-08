@@ -1,6 +1,5 @@
 package com.eastapp.backend.knowledge.api;
 
-import com.eastapp.backend.activity.tracking.ActivityTracked;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.knowledge.service.KnowledgeSopService;
@@ -57,7 +56,6 @@ public class KnowledgeSopController {
         return sopService.versions(principal, sopId);
     }
 
-    @ActivityTracked(module = "Knowledge", action = "created", entity = "SOP video")
     @PostMapping
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     ResponseEntity<KnowledgeSopResponse> create(
@@ -68,7 +66,6 @@ public class KnowledgeSopController {
                 .body(sopService.create(principal, request));
     }
 
-    @ActivityTracked(module = "Knowledge", action = "updated", entity = "SOP video", targetPathVariable = "sopId")
     @PutMapping("/{sopId}")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     KnowledgeSopResponse update(
@@ -79,7 +76,6 @@ public class KnowledgeSopController {
         return sopService.update(principal, sopId, request);
     }
 
-    @ActivityTracked(module = "Knowledge", action = "deleted", entity = "SOP videos")
     @PostMapping("/bulk-delete")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     ResponseEntity<Void> bulkDelete(

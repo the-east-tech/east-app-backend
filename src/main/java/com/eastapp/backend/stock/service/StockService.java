@@ -6,10 +6,9 @@ import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.activity.service.WorkflowActivityService;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.knowledge.KnowledgeSopRepository;
-import com.eastapp.backend.stock.StockAuditEntry;
-import com.eastapp.backend.stock.StockAuditEntryRepository;
 import com.eastapp.backend.stock.StockCountSubmission;
 import com.eastapp.backend.stock.StockCountSubmissionRepository;
 import com.eastapp.backend.stock.StockReceiving;
@@ -19,6 +18,9 @@ import com.eastapp.backend.stock.StockMedia;
 import com.eastapp.backend.stock.StockMediaRepository;
 import com.eastapp.backend.stock.StockMediaReference;
 import com.eastapp.backend.stock.StockSku;
+import com.eastapp.backend.stock.StockSkuChangeRequest;
+import com.eastapp.backend.stock.StockSkuChangeRequestRepository;
+import com.eastapp.backend.stock.StockSkuChangeType;
 import com.eastapp.backend.stock.StockSkuRepository;
 import com.eastapp.backend.stock.StockSupplier;
 import com.eastapp.backend.stock.StockSupplierRepository;
@@ -35,11 +37,11 @@ import com.eastapp.backend.stock.api.CreateStockReceivingRequest;
 import com.eastapp.backend.stock.api.CreateStockSupplierRequest;
 import com.eastapp.backend.stock.api.CreateStockTagRequest;
 import com.eastapp.backend.stock.api.ReviewStockRecordRequest;
-import com.eastapp.backend.stock.api.StockAuditEntryResponse;
 import com.eastapp.backend.stock.api.StockCountSubmissionResponse;
 import com.eastapp.backend.stock.api.StockReceivingResponse;
 import com.eastapp.backend.stock.api.StockReviewSummaryResponse;
 import com.eastapp.backend.stock.api.StockSkuResponse;
+import com.eastapp.backend.stock.api.StockSkuChangeRequestResponse;
 import com.eastapp.backend.stock.api.StockSnapshotResponse;
 import com.eastapp.backend.stock.api.StockSupplierResponse;
 import com.eastapp.backend.stock.api.StockTagAssigneeResponse;
@@ -48,6 +50,8 @@ import com.eastapp.backend.stock.api.UpdateStockBalanceRequest;
 import com.eastapp.backend.stock.api.UpdateStockTagRequest;
 import com.eastapp.backend.stock.api.UpsertStockSkuRequest;
 import com.eastapp.backend.tasks.TaskTemplateRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -84,12 +88,14 @@ public class StockService {
     private final StockTagAssigneeRepository tagAssigneeRepository;
     private final StockSupplierRepository supplierRepository;
     private final StockSkuRepository skuRepository;
+    private final StockSkuChangeRequestRepository skuChangeRequestRepository;
     private final StockCountSubmissionRepository countRepository;
     private final StockReceivingRepository receivingRepository;
-    private final StockAuditEntryRepository auditRepository;
+    private final WorkflowActivityService workflowActivityService;
     private final StockMediaRepository mediaRepository;
     private final KnowledgeSopRepository knowledgeSopRepository;
     private final TaskTemplateRepository taskTemplateRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public StockService(
             TenantRepository tenantRepository,
@@ -98,9 +104,10 @@ public class StockService {
             StockTagAssigneeRepository tagAssigneeRepository,
             StockSupplierRepository supplierRepository,
             StockSkuRepository skuRepository,
+            StockSkuChangeRequestRepository skuChangeRequestRepository,
             StockCountSubmissionRepository countRepository,
             StockReceivingRepository receivingRepository,
-            StockAuditEntryRepository auditRepository,
+            WorkflowActivityService workflowActivityService,
             StockMediaRepository mediaRepository,
             KnowledgeSopRepository knowledgeSopRepository,
             TaskTemplateRepository taskTemplateRepository
@@ -111,9 +118,10 @@ public class StockService {
         this.tagAssigneeRepository = tagAssigneeRepository;
         this.supplierRepository = supplierRepository;
         this.skuRepository = skuRepository;
+        this.skuChangeRequestRepository = skuChangeRequestRepository;
         this.countRepository = countRepository;
         this.receivingRepository = receivingRepository;
-        this.auditRepository = auditRepository;
+        this.workflowActivityService = workflowActivityService;
         this.mediaRepository = mediaRepository;
         this.knowledgeSopRepository = knowledgeSopRepository;
         this.taskTemplateRepository = taskTemplateRepository;
@@ -291,10 +299,6 @@ public class StockService {
         List<UserAccount> assignedUsers = replaceTagAssignees(
                 principal.tenantId(), saved.getId(), request.assignedUserIds(), actor
         );
-        auditRepository.save(new StockAuditEntry(
-                tenant, "Tag", "Created tag", saved.getId(), saved.getTag(), principal, "")
-                .addChange("Tag", "-", saved.getTag())
-                .addChange("Assigned Users", "-", userLabels(assignedUsers)));
         return tagResponse(saved, assignedUsers);
     }
 
@@ -319,10 +323,6 @@ public class StockService {
                 : replaceTagAssignees(
                         principal.tenantId(), tagId, request.assignedUserIds(), actor
                 );
-        auditRepository.save(new StockAuditEntry(
-                tag.getTenant(), "Tag", "Updated tag", tag.getId(), newName, principal, "")
-                .addChange("Tag", oldName, newName)
-                .addChange("Assigned Users", userLabels(oldUsers), userLabels(newUsers)));
         return tagResponse(tag, newUsers);
     }
 
@@ -349,9 +349,6 @@ public class StockService {
                     "This tag belongs to a Task and cannot be deleted."
             );
         }
-        auditRepository.save(new StockAuditEntry(
-                tag.getTenant(), "Tag", "Deleted tag", tag.getId(), tag.getTag(), principal, "")
-                .addChange("Tag", tag.getTag(), "Deleted"));
         tagRepository.delete(tag);
     }
 
@@ -374,12 +371,6 @@ public class StockService {
                 request.pricingPerUnit(), request.minimumBalanceValue(),
                 request.maximumBalanceValue(), request.currentBalanceValue(), actor
         ));
-        auditRepository.save(new StockAuditEntry(
-                tenant, "Supplier", "Created supplier", supplier.getId(),
-                supplier.getSupplierName(), principal, "")
-                .addChange("Supplier Name", "-", supplier.getSupplierName())
-                .addChange("Supplier Item", "-", supplier.getSupplierItem())
-                .addChange("Current Balance", "-", supplier.getCurrentBalanceValue()));
         return StockSupplierResponse.from(supplier);
     }
 
@@ -403,10 +394,6 @@ public class StockService {
                 request.pricingPerUnit(), request.minimumBalanceValue(),
                 request.maximumBalanceValue(), request.currentBalanceValue(), actor(principal)
         );
-        auditRepository.save(new StockAuditEntry(
-                supplier.getTenant(), "Supplier", "Edited supplier", supplier.getId(),
-                supplier.getSupplierName(), principal, "")
-                .addChange("Supplier Name", previousName, supplier.getSupplierName()));
         return StockSupplierResponse.from(supplier);
     }
 
@@ -423,10 +410,6 @@ public class StockService {
                     "This supplier is assigned to an SKU or receiving record and cannot be deleted."
             );
         }
-        auditRepository.save(new StockAuditEntry(
-                supplier.getTenant(), "Supplier", "Deleted supplier", supplier.getId(),
-                supplier.getSupplierName(), principal, "")
-                .addChange("Supplier", supplier.getSupplierName(), "Deleted"));
         supplierRepository.delete(supplier);
     }
 
@@ -437,17 +420,156 @@ public class StockService {
             UpdateStockBalanceRequest request
     ) {
         StockSupplier supplier = supplier(supplierId, principal.tenantId());
-        BigDecimal previous = supplier.getCurrentBalanceValue();
         supplier.updateBalance(request.balance(), actor(principal));
-        auditRepository.save(new StockAuditEntry(
-                supplier.getTenant(), "Supplier Balance", "Updated supplier balance",
-                supplier.getId(), supplier.getSupplierName(), principal, "")
-                .addChange("Current Balance", previous, request.balance()));
         return StockSupplierResponse.from(supplier);
     }
 
     @Transactional
-    public StockSkuResponse createSku(AuthenticatedUser principal, UpsertStockSkuRequest request) {
+    public StockSkuChangeRequestResponse createSku(
+            AuthenticatedUser principal,
+            UpsertStockSkuRequest request
+    ) {
+        if (skuRepository.existsByTenant_IdAndNameIgnoreCase(principal.tenantId(), request.name().trim())) {
+            throw conflict("STOCK_SKU_EXISTS", "This SKU already exists.");
+        }
+        StockSkuChangeRequest change = skuChangeRequestRepository
+                .findFirstByTenantIdAndChangeTypeAndSkuNameIgnoreCaseOrderByUpdatedAtDesc(
+                        principal.tenantId(), StockSkuChangeType.CREATE,
+                        request.name().trim()
+                )
+                .orElse(null);
+        return submitSkuChange(principal, change, null, StockSkuChangeType.CREATE, request);
+    }
+
+    @Transactional
+    public StockSkuChangeRequestResponse updateSku(
+            AuthenticatedUser principal,
+            UUID skuId,
+            UpsertStockSkuRequest request
+    ) {
+        StockSku sku = sku(skuId, principal.tenantId());
+        if (!sku.getName().equalsIgnoreCase(request.name().trim())
+                && skuRepository.existsByTenant_IdAndNameIgnoreCase(principal.tenantId(), request.name().trim())) {
+            throw conflict("STOCK_SKU_EXISTS", "This SKU already exists.");
+        }
+        StockSkuChangeRequest change = skuChangeRequestRepository
+                .findFirstByTenantIdAndSkuIdOrderByUpdatedAtDesc(principal.tenantId(), skuId)
+                .orElse(null);
+        return submitSkuChange(principal, change, sku, StockSkuChangeType.UPDATE, request);
+    }
+
+    @Transactional
+    public StockSkuChangeRequestResponse deleteSku(AuthenticatedUser principal, UUID skuId) {
+        StockSku sku = sku(skuId, principal.tenantId());
+        if (!sku.isActive()) {
+            throw conflict("STOCK_SKU_INACTIVE", "This SKU is already inactive.");
+        }
+        StockSkuChangeRequest change = skuChangeRequestRepository
+                .findFirstByTenantIdAndSkuIdOrderByUpdatedAtDesc(principal.tenantId(), skuId)
+                .orElse(null);
+        return submitSkuChange(principal, change, sku, StockSkuChangeType.DELETE, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<StockSkuChangeRequestResponse> listSkuChangeRequests(
+            AuthenticatedUser principal
+    ) {
+        return skuChangeRequestRepository.findAllByTenantIdOrderByUpdatedAtDesc(principal.tenantId())
+                .stream()
+                .map(request -> skuChangeResponse(principal.tenantId(), request))
+                .toList();
+    }
+
+    @Transactional
+    public StockSkuChangeRequestResponse reviewSkuChange(
+            AuthenticatedUser principal,
+            UUID requestId,
+            ReviewStockRecordRequest request
+    ) {
+        StockSkuChangeRequest change = skuChangeRequestRepository
+                .findLockedByIdAndTenantId(requestId, principal.tenantId())
+                .orElseThrow(() -> notFound(
+                        "STOCK_SKU_CHANGE_NOT_FOUND", "SKU change request not found."
+                ));
+        StockWorkflowStatus next;
+        try {
+            next = StockWorkflowStatus.fromReviewAction(request.status());
+        } catch (IllegalArgumentException exception) {
+            throw badRequest("INVALID_REVIEW_STATUS", exception.getMessage());
+        }
+        if (change.getWorkflowStatus() != StockWorkflowStatus.SUBMITTED) {
+            throw conflict(
+                    "STOCK_SKU_CHANGE_NOT_REVIEWABLE",
+                    "Only a submitted SKU change can be reviewed."
+            );
+        }
+        if (next == StockWorkflowStatus.DONE) {
+            applySkuChange(principal, change);
+        }
+        try {
+            change.review(next, request.note(), principal.userId());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw conflict("STOCK_SKU_CHANGE_NOT_REVIEWABLE", exception.getMessage());
+        }
+        workflowActivityService.recordTransition(
+                principal, "Stock", "SKU change", change.getId(), change.getSkuName(),
+                StockWorkflowStatus.SUBMITTED, next,
+                "/api/v1/stock/sku-change-requests/" + change.getId()
+        );
+        return skuChangeResponse(principal.tenantId(), change);
+    }
+
+    private StockSkuChangeRequestResponse submitSkuChange(
+            AuthenticatedUser principal,
+            StockSkuChangeRequest existing,
+            StockSku sku,
+            StockSkuChangeType type,
+            UpsertStockSkuRequest request
+    ) {
+        String skuName = request == null ? sku.getName() : request.name().trim();
+        String payload = request == null ? "{}" : writeSkuPayload(request);
+        StockWorkflowStatus previous = existing == null ? null : existing.getWorkflowStatus();
+        StockSkuChangeRequest change;
+        try {
+            if (existing == null) {
+                change = new StockSkuChangeRequest(
+                        principal.tenantId(), sku == null ? null : sku.getId(), type,
+                        skuName, payload, principal.userId()
+                );
+            } else {
+                existing.submit(
+                        sku == null ? null : sku.getId(), type, skuName, payload, principal.userId()
+                );
+                change = existing;
+            }
+        } catch (IllegalStateException exception) {
+            throw conflict("STOCK_SKU_CHANGE_ALREADY_SUBMITTED", exception.getMessage());
+        }
+        change = skuChangeRequestRepository.saveAndFlush(change);
+        StockWorkflowStatus eventPrevious = previous == StockWorkflowStatus.PENDING
+                ? StockWorkflowStatus.PENDING
+                : null;
+        workflowActivityService.recordTransition(
+                principal, "Stock", "SKU change", change.getId(), skuName,
+                eventPrevious, StockWorkflowStatus.SUBMITTED,
+                "/api/v1/stock/sku-change-requests/" + change.getId()
+        );
+        return skuChangeResponse(principal.tenantId(), change);
+    }
+
+    private void applySkuChange(AuthenticatedUser principal, StockSkuChangeRequest change) {
+        switch (change.getChangeType()) {
+            case CREATE -> change.attachSku(createSkuNow(principal, readSkuPayload(change)).getId());
+            case UPDATE -> updateSkuNow(
+                    principal,
+                    requireSkuId(change),
+                    readSkuPayload(change)
+            );
+            case DELETE -> sku(requireSkuId(change), principal.tenantId()).deactivate(actor(principal));
+        }
+    }
+
+    private StockSku createSkuNow(AuthenticatedUser principal, UpsertStockSkuRequest request) {
         if (skuRepository.existsByTenant_IdAndNameIgnoreCase(principal.tenantId(), request.name().trim())) {
             throw conflict("STOCK_SKU_EXISTS", "This SKU already exists.");
         }
@@ -456,8 +578,7 @@ public class StockService {
         UserAccount actor = actor(principal);
         StockTag tag1 = tag(request.tag1Id(), principal.tenantId());
         StockTag tag2 = tag(request.tag2Id(), principal.tenantId());
-        String photoPath = stockPhotoPath(request.photoPath());
-        StockSku sku = skuRepository.save(new StockSku(
+        return skuRepository.save(new StockSku(
                 tenant, request.name(), tag1, tag2, request.unit(),
                 request.minimumBalanceValue(), request.maximumBalanceValue(),
                 request.currentBalanceValue(), request.recoveryPercent(),
@@ -467,27 +588,15 @@ public class StockService {
                 request.receivingChecklist(), request.stockCheckFrequencyDays(),
                 parseResetTime(request.resetTime()), request.active(), request.coolingPeriod(), actor
         ));
-        auditRepository.save(new StockAuditEntry(
-                tenant, "SKU", "Created SKU", sku.getId(), sku.getName(), principal, "")
-                .addChange("Name", "-", sku.getName())
-                .addChange("Unit", "-", sku.getUnit())
-                .addChange("Current Balance", "-", sku.getCurrentBalanceValue()));
-        return StockSkuResponse.from(sku, photoPath);
     }
 
-    @Transactional
-    public StockSkuResponse updateSku(
+    private StockSku updateSkuNow(
             AuthenticatedUser principal,
             UUID skuId,
             UpsertStockSkuRequest request
     ) {
         StockSku sku = sku(skuId, principal.tenantId());
         String oldName = sku.getName();
-        BigDecimal oldBalance = sku.getCurrentBalanceValue();
-        String oldPhotoPath = photoPath(
-                sku,
-                skuPhotoPaths(principal.tenantId(), List.of(sku))
-        );
         if (!oldName.equalsIgnoreCase(request.name().trim())
                 && skuRepository.existsByTenant_IdAndNameIgnoreCase(principal.tenantId(), request.name().trim())) {
             throw conflict("STOCK_SKU_EXISTS", "This SKU already exists.");
@@ -496,9 +605,6 @@ public class StockService {
         StockMedia thumbnail = keepThumbnail
                 ? sku.getThumbnailMedia()
                 : skuThumbnail(principal, request.photoPath());
-        String newPhotoPath = keepThumbnail
-                ? oldPhotoPath
-                : stockPhotoPath(request.photoPath());
         StockTag tag1 = tag(request.tag1Id(), principal.tenantId());
         StockTag tag2 = tag(request.tag2Id(), principal.tenantId());
         sku.update(
@@ -512,31 +618,71 @@ public class StockService {
                 parseResetTime(request.resetTime()), request.active(), request.coolingPeriod(),
                 actor(principal)
         );
-        auditRepository.save(new StockAuditEntry(
-                sku.getTenant(), "SKU", "Edited SKU", sku.getId(), sku.getName(), principal, "")
-                .addChange("Name", oldName, sku.getName())
-                .addChange("Photo", oldPhotoPath, newPhotoPath)
-                .addChange("Current Balance", oldBalance, sku.getCurrentBalanceValue()));
-        return StockSkuResponse.from(sku, newPhotoPath);
+        return sku;
     }
 
-    @Transactional
-    public StockSkuResponse updateSkuBalance(
-            AuthenticatedUser principal,
-            UUID skuId,
-            UpdateStockBalanceRequest request
+    private String writeSkuPayload(UpsertStockSkuRequest request) {
+        try {
+            return objectMapper.writeValueAsString(request);
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "STOCK_SKU_CHANGE_SERIALIZATION_FAILED",
+                    "The SKU change could not be prepared for approval."
+            );
+        }
+    }
+
+    private UpsertStockSkuRequest readSkuPayload(StockSkuChangeRequest change) {
+        try {
+            return objectMapper.readValue(change.getPayloadJson(), UpsertStockSkuRequest.class);
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "STOCK_SKU_CHANGE_INVALID_PAYLOAD",
+                    "The saved SKU change could not be applied."
+            );
+        }
+    }
+
+    private static UUID requireSkuId(StockSkuChangeRequest change) {
+        if (change.getSkuId() == null) {
+            throw conflict(
+                    "STOCK_SKU_CHANGE_MISSING_SKU",
+                    "The SKU for this change request no longer exists."
+            );
+        }
+        return change.getSkuId();
+    }
+
+    private StockSkuChangeRequestResponse skuChangeResponse(
+            UUID tenantId,
+            StockSkuChangeRequest request
     ) {
-        StockSku sku = sku(skuId, principal.tenantId());
-        BigDecimal previous = sku.getCurrentBalanceValue();
-        sku.updateBalance(request.balance(), actor(principal));
-        auditRepository.save(new StockAuditEntry(
-                sku.getTenant(), "SKU Balance", "Updated balance", sku.getId(),
-                sku.getName(), principal, "")
-                .addChange("Current Balance", previous, request.balance()));
-        return StockSkuResponse.from(
-                sku,
-                photoPath(sku, skuPhotoPaths(principal.tenantId(), List.of(sku)))
+        return new StockSkuChangeRequestResponse(
+                request.getId(),
+                request.getSkuId(),
+                request.getSkuName(),
+                request.getChangeType(),
+                request.getWorkflowStatus(),
+                request.getChangeType() == StockSkuChangeType.DELETE
+                        ? null
+                        : readSkuPayload(request),
+                request.getRequestedByUserId(),
+                userName(tenantId, request.getRequestedByUserId()),
+                request.getSubmittedAt(),
+                request.getReviewedByUserId(),
+                userName(tenantId, request.getReviewedByUserId()),
+                request.getReviewedAt(),
+                request.getReviewNote()
         );
+    }
+
+    private String userName(UUID tenantId, UUID userId) {
+        if (userId == null) return "";
+        return userAccountRepository.findByIdAndTenant_Id(userId, tenantId)
+                .map(UserAccount::getFullName)
+                .orElse("");
     }
 
     @Transactional
@@ -574,11 +720,11 @@ public class StockService {
                 request.stockPhotoName(), request.invoicePhotoName(), previous,
                 request.currentBalanceValue(), request.checkedItems(), request.remarks()
         ));
-        auditRepository.save(new StockAuditEntry(
-                sku.getTenant(), "Stock Count", "Submitted daily count", sku.getId(),
-                sku.getName(), principal, "")
-                .addChange("Current Balance", previous, request.currentBalanceValue())
-                .addChange("Review Status", "-", submission.getReviewStatus()));
+        workflowActivityService.recordTransition(
+                principal, "Stock", "stock count", submission.getId(), sku.getName(),
+                null, StockWorkflowStatus.SUBMITTED,
+                "/api/v1/stock/counts/" + submission.getId()
+        );
         return StockCountSubmissionResponse.from(
                 submission,
                 photoPath(sku, skuPhotoPaths(principal.tenantId(), List.of(sku)))
@@ -599,10 +745,12 @@ public class StockService {
             throw conflict("STOCK_COUNT_ALREADY_REVIEWED", "This stock count has already been reviewed.");
         }
         submission.review(request.status(), request.note(), actor(principal));
-        auditRepository.save(new StockAuditEntry(
-                submission.getTenant(), "Stock Count", "Reviewed daily count",
-                submission.getSku().getId(), submission.getSku().getName(), principal, request.note())
-                .addChange("Review Status", previous, request.status()));
+        workflowActivityService.recordTransition(
+                principal, "Stock", "stock count", submission.getId(),
+                submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,
+                StockWorkflowStatus.fromReviewAction(request.status()),
+                "/api/v1/stock/counts/" + submission.getId()
+        );
         return StockCountSubmissionResponse.from(
                 submission,
                 photoPath(
@@ -660,17 +808,13 @@ public class StockService {
         );
         List<StockCountSubmissionResponse> responses = new ArrayList<>();
         for (StockCountSubmission submission : ordered) {
-            String previous = submission.getReviewStatus();
             submission.review(request.status(), note, reviewer);
-            auditRepository.save(new StockAuditEntry(
-                    submission.getTenant(),
-                    "Stock Count",
-                    "Bulk reviewed daily count",
-                    submission.getSku().getId(),
-                    submission.getSku().getName(),
-                    principal,
-                    note
-            ).addChange("Review Status", previous, request.status()));
+            workflowActivityService.recordTransition(
+                    principal, "Stock", "stock count", submission.getId(),
+                    submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,
+                    StockWorkflowStatus.fromReviewAction(request.status()),
+                    "/api/v1/stock/counts/" + submission.getId()
+            );
             responses.add(StockCountSubmissionResponse.from(
                     submission,
                     photoPath(submission.getSku(), photoPaths)
@@ -729,12 +873,11 @@ public class StockService {
             ));
         }
         StockReceiving saved = receivingRepository.save(receiving);
-        auditRepository.save(new StockAuditEntry(
-                supplier.getTenant(), "Receiving", "Submitted receiving", saved.getId(),
-                supplier.getSupplierName(), principal, "")
-                .addChange("Supplier", "-", supplier.getSupplierName())
-                .addChange("Items", "-", saved.getItems().size())
-                .addChange("Review Status", "-", saved.getReviewStatus()));
+        workflowActivityService.recordTransition(
+                principal, "Stock", "stock receiving", saved.getId(),
+                supplier.getSupplierName(), null, StockWorkflowStatus.SUBMITTED,
+                "/api/v1/stock/receivings/" + saved.getId()
+        );
         return StockReceivingResponse.from(saved);
     }
 
@@ -752,49 +895,13 @@ public class StockService {
             throw conflict("STOCK_RECEIVING_ALREADY_REVIEWED", "This receiving record has already been reviewed.");
         }
         receiving.review(request.status(), request.note(), actor(principal));
-        auditRepository.save(new StockAuditEntry(
-                receiving.getTenant(), "Receiving", "Reviewed receiving", receiving.getId(),
-                receiving.getSupplier().getSupplierName(), principal, request.note())
-                .addChange("Review Status", previous, request.status()));
-        return StockReceivingResponse.from(receiving);
-    }
-
-    @Transactional(readOnly = true)
-    public PageResponse<StockAuditEntryResponse> audit(
-            AuthenticatedUser principal,
-            LocalDate from,
-            LocalDate to,
-            boolean mine,
-            int page,
-            int size
-    ) {
-        LocalDate resolvedFrom = from == null ? LocalDate.now(ZONE_ID).minusDays(29) : from;
-        LocalDate resolvedTo = to == null ? LocalDate.now(ZONE_ID) : to;
-        if (resolvedTo.isBefore(resolvedFrom)) {
-            throw badRequest("INVALID_DATE_RANGE", "The audit end date must not be before the start date.");
-        }
-        Instant fromInclusive = resolvedFrom.atStartOfDay(ZONE_ID).toInstant();
-        Instant toExclusive = resolvedTo.plusDays(1).atStartOfDay(ZONE_ID).toInstant();
-        boolean currentUserOnly = mine || !principal.isHead();
-        if (currentUserOnly) {
-            return PageResponse.from(
-                    auditRepository.findAllByTenant_IdAndActorEmployeeIdAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtDesc(
-                            principal.tenantId(),
-                            principal.employeeId(),
-                            fromInclusive,
-                            toExclusive,
-                            pageRequest(page, size)
-                    ),
-                    StockAuditEntryResponse::from
-            );
-        }
-        return PageResponse.from(
-                auditRepository.findAllByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtDesc(
-                        principal.tenantId(), fromInclusive, toExclusive,
-                        pageRequest(page, size)
-                ),
-                StockAuditEntryResponse::from
+        workflowActivityService.recordTransition(
+                principal, "Stock", "stock receiving", receiving.getId(),
+                receiving.getSupplier().getSupplierName(), StockWorkflowStatus.SUBMITTED,
+                StockWorkflowStatus.fromReviewAction(request.status()),
+                "/api/v1/stock/receivings/" + receiving.getId()
         );
+        return StockReceivingResponse.from(receiving);
     }
 
     @Transactional(readOnly = true)
@@ -825,9 +932,18 @@ public class StockService {
                         fromInclusive,
                         toExclusive
                 );
+        long skuChangeTotal = skuChangeRequestRepository
+                .countByTenantIdAndUpdatedAtGreaterThanEqualAndUpdatedAtLessThan(
+                        principal.tenantId(), fromInclusive, toExclusive
+                );
+        long skuChangePending = skuChangeRequestRepository
+                .countByTenantIdAndWorkflowStatusAndUpdatedAtGreaterThanEqualAndUpdatedAtLessThan(
+                        principal.tenantId(), StockWorkflowStatus.SUBMITTED,
+                        fromInclusive, toExclusive
+                );
 
-        long total = countTotal + receivingTotal;
-        long pending = countPending + receivingPending;
+        long total = countTotal + receivingTotal + skuChangeTotal;
+        long pending = countPending + receivingPending + skuChangePending;
         return new StockReviewSummaryResponse(pending, total - pending, total);
     }
 
@@ -1019,19 +1135,6 @@ public class StockService {
         return List.copyOf(users);
     }
 
-    private static String userLabels(List<UserAccount> users) {
-        if (users == null || users.isEmpty()) return "None";
-        List<String> labels = users.stream()
-                .map(user -> user.getFullName() + " (" + user.getEmployeeId() + ")")
-                .sorted(String.CASE_INSENSITIVE_ORDER)
-                .toList();
-        String visible = String.join(", ", labels.stream().limit(5).toList());
-        return labels.size() <= 5
-                ? visible
-                : visible + " (and " + (labels.size() - 5) + " more; "
-                        + labels.size() + " total)";
-    }
-
     private StockSupplier supplier(UUID id, UUID tenantId) {
         return supplierRepository.findByIdAndTenant_Id(id, tenantId)
                 .orElseThrow(() -> notFound("STOCK_SUPPLIER_NOT_FOUND", "Supplier not found."));
@@ -1102,11 +1205,6 @@ public class StockService {
                         "The uploaded stock thumbnail was not found."
                 ));
         return mediaRepository.getReferenceById(media.id());
-    }
-
-    private static String stockPhotoPath(String storageKey) {
-        String value = storageKey == null ? "" : storageKey.trim();
-        return value.startsWith(StockMedia.SKU_IMPORT_PLACEHOLDER_PREFIX) ? "" : value;
     }
 
     private static Instant countCycleStartedAt(StockSku sku, Instant now) {

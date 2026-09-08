@@ -6,8 +6,6 @@ import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
-import com.eastapp.backend.stock.StockAuditEntry;
-import com.eastapp.backend.stock.StockAuditEntryRepository;
 import com.eastapp.backend.stock.StockMedia;
 import com.eastapp.backend.stock.StockMediaRepository;
 import com.eastapp.backend.stock.StockSku;
@@ -18,6 +16,7 @@ import com.eastapp.backend.stock.StockTag;
 import com.eastapp.backend.stock.StockTagRepository;
 import com.eastapp.backend.stock.api.StockSkuCsvImportResponse;
 import com.eastapp.backend.stock.api.StockSkuCsvPreviewResponse;
+import com.eastapp.backend.stock.api.UpsertStockSkuRequest;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.csv.CSVFormat;
@@ -93,8 +92,8 @@ public class StockSkuCsvService {
     private final StockTagRepository tagRepository;
     private final StockSupplierRepository supplierRepository;
     private final StockSkuRepository skuRepository;
-    private final StockAuditEntryRepository auditRepository;
     private final StockMediaRepository mediaRepository;
+    private final StockService stockService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public StockSkuCsvService(
@@ -103,16 +102,16 @@ public class StockSkuCsvService {
             StockTagRepository tagRepository,
             StockSupplierRepository supplierRepository,
             StockSkuRepository skuRepository,
-            StockAuditEntryRepository auditRepository,
-            StockMediaRepository mediaRepository
+            StockMediaRepository mediaRepository,
+            StockService stockService
     ) {
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
         this.tagRepository = tagRepository;
         this.supplierRepository = supplierRepository;
         this.skuRepository = skuRepository;
-        this.auditRepository = auditRepository;
         this.mediaRepository = mediaRepository;
+        this.stockService = stockService;
     }
 
     @Transactional(readOnly = true)
@@ -229,7 +228,7 @@ public class StockSkuCsvService {
             if (!row.tag1().isBlank()) {
                 tag1 = tagsByName.get(normalise(row.tag1()));
                 if (tag1 == null) {
-                    tag1 = tagRepository.save(new StockTag(tenant, row.tag1(), actor));
+                    tag1 = tagRepository.saveAndFlush(new StockTag(tenant, row.tag1(), actor));
                     tagsByName.put(normalise(row.tag1()), tag1);
                     createdTags += 1;
                 }
@@ -239,7 +238,7 @@ public class StockSkuCsvService {
             if (!row.tag2().isBlank()) {
                 tag2 = tagsByName.get(normalise(row.tag2()));
                 if (tag2 == null) {
-                    tag2 = tagRepository.save(new StockTag(tenant, row.tag2(), actor));
+                    tag2 = tagRepository.saveAndFlush(new StockTag(tenant, row.tag2(), actor));
                     tagsByName.put(normalise(row.tag2()), tag2);
                     createdTags += 1;
                 }
@@ -255,11 +254,10 @@ public class StockSkuCsvService {
                 }
             }
 
-            StockSku sku = skuRepository.save(new StockSku(
-                    tenant,
+            stockService.createSku(principal, new UpsertStockSkuRequest(
                     row.name(),
-                    tag1,
-                    tag2,
+                    tag1 == null ? null : tag1.getId(),
+                    tag2 == null ? null : tag2.getId(),
                     row.unit(),
                     row.minimumBalance(),
                     row.maximumBalance(),
@@ -267,25 +265,15 @@ public class StockSkuCsvService {
                     row.recoveryPercent(),
                     row.minimumPrice(),
                     row.maximumPrice(),
-                    suppliers,
-                    noImage,
+                    suppliers.stream().map(StockSupplier::getId).toList(),
+                    noImage.getStorageKey(),
                     List.of(),
                     row.receivingChecklist(),
                     row.frequencyDays(),
-                    row.resetTime(),
+                    row.resetTime().format(TIME_FORMAT),
                     row.active(),
-                    row.coolingPeriod(),
-                    actor
+                    row.coolingPeriod()
             ));
-            auditRepository.save(new StockAuditEntry(
-                    tenant,
-                    "SKU",
-                    "Imported SKU from CSV",
-                    sku.getId(),
-                    sku.getName(),
-                    principal,
-                    "Image, assignees and current balance were not imported."
-            ).addChange("Name", "-", sku.getName()));
             importedRows += 1;
         }
 

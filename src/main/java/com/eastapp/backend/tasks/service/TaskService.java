@@ -1,6 +1,7 @@
 package com.eastapp.backend.tasks.service;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.activity.service.WorkflowActivityService;
 import com.eastapp.backend.auth.permission.SystemPermission;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.knowledge.KnowledgeSop;
@@ -17,8 +18,6 @@ import com.eastapp.backend.reports.service.ReportMediaService;
 import com.eastapp.backend.stock.StockTag;
 import com.eastapp.backend.stock.StockTagAssigneeRepository;
 import com.eastapp.backend.stock.StockTagRepository;
-import com.eastapp.backend.tasks.TaskAuditEntry;
-import com.eastapp.backend.tasks.TaskAuditEntryRepository;
 import com.eastapp.backend.tasks.TaskPhoto;
 import com.eastapp.backend.tasks.TaskPhotoRepository;
 import com.eastapp.backend.tasks.TaskRecord;
@@ -31,7 +30,6 @@ import com.eastapp.backend.tasks.TaskTemplate;
 import com.eastapp.backend.tasks.TaskTemplateChecklistItem;
 import com.eastapp.backend.tasks.TaskTemplateChecklistItemRepository;
 import com.eastapp.backend.tasks.TaskTemplateRepository;
-import com.eastapp.backend.tasks.api.TaskAuditResponse;
 import com.eastapp.backend.tasks.api.TaskChecklistItemResponse;
 import com.eastapp.backend.tasks.api.TaskListResponse;
 import com.eastapp.backend.tasks.api.TaskOverviewResponse;
@@ -71,7 +69,7 @@ public class TaskService {
     private final TaskRecordRepository recordRepository;
     private final TaskRecordChecklistItemRepository recordChecklistRepository;
     private final TaskPhotoRepository photoRepository;
-    private final TaskAuditEntryRepository auditRepository;
+    private final WorkflowActivityService workflowActivityService;
     private final KnowledgeSopRepository knowledgeSopRepository;
     private final StockTagRepository tagRepository;
     private final StockTagAssigneeRepository tagAssigneeRepository;
@@ -88,7 +86,7 @@ public class TaskService {
             TaskRecordRepository recordRepository,
             TaskRecordChecklistItemRepository recordChecklistRepository,
             TaskPhotoRepository photoRepository,
-            TaskAuditEntryRepository auditRepository,
+            WorkflowActivityService workflowActivityService,
             KnowledgeSopRepository knowledgeSopRepository,
             StockTagRepository tagRepository,
             StockTagAssigneeRepository tagAssigneeRepository,
@@ -104,7 +102,7 @@ public class TaskService {
         this.recordRepository = recordRepository;
         this.recordChecklistRepository = recordChecklistRepository;
         this.photoRepository = photoRepository;
-        this.auditRepository = auditRepository;
+        this.workflowActivityService = workflowActivityService;
         this.knowledgeSopRepository = knowledgeSopRepository;
         this.tagRepository = tagRepository;
         this.tagAssigneeRepository = tagAssigneeRepository;
@@ -472,12 +470,11 @@ public class TaskService {
         photoRepository.saveAllAndFlush(selectedPhotos);
 
         record.submit(principal.userId(), principal.systemRole(), submittedAt);
-        auditRepository.save(new TaskAuditEntry(
-                principal.tenantId(), record.getTemplateId(), recordId, principal.userId(),
-                "TASK_SUBMITTED",
-                "Final evidence stored: " + checks.size() + " checklist item(s), "
-                        + selectedPhotos.size() + " photo(s); task submitted for rating"
-        ));
+        workflowActivityService.recordTransition(
+                principal, "Task", "task", recordId, record.getTitle(),
+                TaskStatus.PENDING, TaskStatus.SUBMITTED,
+                "/api/v1/tasks/records/" + recordId
+        );
         return toRecordResponse(principal, record);
     }
 
@@ -500,10 +497,11 @@ public class TaskService {
             );
         }
         record.rate(request.rating(), request.comment(), principal.userId(), Instant.now());
-        auditRepository.save(new TaskAuditEntry(
-                principal.tenantId(), record.getTemplateId(), recordId, principal.userId(),
-                "TASK_RATED", request.rating() + " star(s): " + request.comment().trim()
-        ));
+        workflowActivityService.recordTransition(
+                principal, "Task", "task", recordId, record.getTitle(),
+                TaskStatus.SUBMITTED, TaskStatus.DONE,
+                "/api/v1/tasks/records/" + recordId
+        );
         return toRecordResponse(principal, record);
     }
 
@@ -656,8 +654,7 @@ public class TaskService {
                 person(tenantId, template.getCreatedByUserId()),
                 person(tenantId, template.getUpdatedByUserId()),
                 template.getCreatedAt(),
-                template.getUpdatedAt(),
-                List.of()
+                template.getUpdatedAt()
         );
     }
 
@@ -707,20 +704,6 @@ public class TaskService {
                         .thenComparing(TaskPhoto::getId)
         ));
 
-        Map<UUID, List<TaskAuditEntry>> activityByRecord = new HashMap<>();
-        for (TaskAuditEntry entry : auditRepository
-                .findAllByTenantIdAndRecordIdIn(tenantId, recordIds)) {
-            activityByRecord.computeIfAbsent(entry.getRecordId(), ignored -> new ArrayList<>())
-                    .add(entry);
-        }
-        activityByRecord.values().forEach(items -> items.sort(
-                Comparator.comparing(
-                                TaskAuditEntry::getOccurredAt,
-                                Comparator.nullsLast(Comparator.naturalOrder())
-                        )
-                        .thenComparing(TaskAuditEntry::getId)
-        ));
-
         List<UUID> mediaIds = photosByRecord.values().stream()
                 .flatMap(List::stream)
                 .map(TaskPhoto::getPhotoMediaId)
@@ -749,10 +732,6 @@ public class TaskService {
                 .flatMap(List::stream)
                 .map(TaskPhoto::getSubmittedByUserId)
                 .forEach(userIds::add);
-        activityByRecord.values().stream()
-                .flatMap(List::stream)
-                .map(TaskAuditEntry::getActorUserId)
-                .forEach(userIds::add);
         Map<UUID, UserAccount> usersById = userIds.isEmpty()
                 ? Map.of()
                 : userRepository.findAllByTenant_IdAndIdIn(tenantId, userIds)
@@ -778,7 +757,6 @@ public class TaskService {
                     record,
                     checks,
                     photos,
-                    activityByRecord.getOrDefault(record.getId(), List.of()),
                     storageKeyByMediaId,
                     usersById,
                     assignedTagIds,
@@ -793,7 +771,6 @@ public class TaskService {
             TaskRecord record,
             List<TaskRecordChecklistItem> checks,
             List<TaskPhoto> photos,
-            List<TaskAuditEntry> activity,
             Map<UUID, String> storageKeyByMediaId,
             Map<UUID, UserAccount> usersById,
             Set<UUID> assignedTagIds,
@@ -835,9 +812,6 @@ public class TaskService {
                     );
                 })
                 .toList();
-        List<TaskAuditResponse> activityResponses = activity.stream()
-                .map(entry -> toAuditResponse(usersById, entry))
-                .toList();
         return new TaskRecordResponse(
                 record.getId(),
                 record.getTemplateId(),
@@ -863,8 +837,7 @@ public class TaskService {
                 record.getRatedAt(),
                 canContribute,
                 canContribute && requirementsMet,
-                canRate,
-                activityResponses
+                canRate
         );
     }
 
@@ -1032,32 +1005,6 @@ public class TaskService {
                 user.getFullName(),
                 user.getEmployeeId(),
                 user.getRole().getSystemKey()
-        );
-    }
-
-    private TaskAuditResponse toAuditResponse(
-            UUID tenantId,
-            TaskAuditEntry entry
-    ) {
-        return new TaskAuditResponse(
-                entry.getId(),
-                entry.getAction(),
-                entry.getDetails(),
-                person(tenantId, entry.getActorUserId()),
-                entry.getOccurredAt()
-        );
-    }
-
-    private TaskAuditResponse toAuditResponse(
-            Map<UUID, UserAccount> usersById,
-            TaskAuditEntry entry
-    ) {
-        return new TaskAuditResponse(
-                entry.getId(),
-                entry.getAction(),
-                entry.getDetails(),
-                person(usersById, entry.getActorUserId()),
-                entry.getOccurredAt()
         );
     }
 

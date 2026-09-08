@@ -1,6 +1,5 @@
 package com.eastapp.backend.attendance.api;
 
-import com.eastapp.backend.activity.tracking.ActivityTracked;
 import com.eastapp.backend.attendance.AttendanceReportPeriod;
 import com.eastapp.backend.attendance.service.AttendanceQrCodeService;
 import com.eastapp.backend.attendance.service.AttendanceService;
@@ -36,7 +35,6 @@ public class AttendanceController {
         this.attendanceQrCodeService = attendanceQrCodeService;
     }
 
-    @ActivityTracked(module = "Attendance", action = "recorded", entity = "attendance event")
     @PostMapping("/events")
     ResponseEntity<AttendanceEventResponse> create(
             @AuthenticationPrincipal AuthenticatedUser principal,

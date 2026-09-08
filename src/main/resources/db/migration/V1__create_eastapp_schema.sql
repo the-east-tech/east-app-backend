@@ -348,6 +348,47 @@ CREATE TABLE stock_skus (
 CREATE INDEX ix_stock_skus_tenant_tag1 ON stock_skus (tenant_id, tag1_id);
 CREATE INDEX ix_stock_skus_tenant_tag2 ON stock_skus (tenant_id, tag2_id);
 
+CREATE TABLE stock_sku_change_requests (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    sku_id UUID,
+    change_type VARCHAR(16) NOT NULL,
+    workflow_status VARCHAR(16) NOT NULL,
+    sku_name VARCHAR(120) NOT NULL,
+    payload_json TEXT NOT NULL,
+    requested_by_user_id UUID NOT NULL,
+    submitted_at TIMESTAMPTZ NOT NULL,
+    reviewed_by_user_id UUID,
+    reviewed_at TIMESTAMPTZ,
+    review_note VARCHAR(1000) NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_stock_sku_changes_tenant
+        FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_sku_changes_sku_same_tenant
+        FOREIGN KEY (tenant_id, sku_id)
+        REFERENCES stock_skus (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_sku_changes_requester_same_tenant
+        FOREIGN KEY (tenant_id, requested_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_sku_changes_reviewer_same_tenant
+        FOREIGN KEY (tenant_id, reviewed_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT ck_stock_sku_changes_type
+        CHECK (change_type IN ('CREATE', 'UPDATE', 'DELETE')),
+    CONSTRAINT ck_stock_sku_changes_status
+        CHECK (workflow_status IN ('PENDING', 'SUBMITTED', 'DONE')),
+    CONSTRAINT uq_stock_sku_changes_tenant_id_id UNIQUE (tenant_id, id)
+);
+CREATE INDEX ix_stock_sku_changes_tenant_status_time
+    ON stock_sku_change_requests (tenant_id, workflow_status, updated_at DESC);
+CREATE UNIQUE INDEX uq_stock_sku_changes_tenant_sku
+    ON stock_sku_change_requests (tenant_id, sku_id)
+    WHERE sku_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_stock_sku_changes_pending_create_name
+    ON stock_sku_change_requests (tenant_id, LOWER(sku_name))
+    WHERE sku_id IS NULL AND change_type = 'CREATE';
+
 CREATE TABLE stock_sku_suppliers (
     sku_id UUID NOT NULL,
     supplier_id UUID NOT NULL,
@@ -480,37 +521,6 @@ CREATE TABLE stock_receiving_items (
     CONSTRAINT fk_stock_receiving_items_sku FOREIGN KEY (sku_id)
         REFERENCES stock_skus (id) ON DELETE RESTRICT,
     CONSTRAINT uq_stock_receiving_items_position UNIQUE (receiving_id, position)
-);
-
-CREATE TABLE stock_audit_entries (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    tenant_id UUID NOT NULL,
-    module VARCHAR(80) NOT NULL,
-    action VARCHAR(120) NOT NULL,
-    item_id UUID,
-    item_name VARCHAR(160) NOT NULL,
-    actor_name VARCHAR(120) NOT NULL,
-    actor_employee_id VARCHAR(32) NOT NULL,
-    actor_role VARCHAR(80) NOT NULL,
-    captured_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    note VARCHAR(1000) NOT NULL DEFAULT '',
-    CONSTRAINT fk_stock_audit_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_audit_tenant_id_id UNIQUE (tenant_id, id)
-);
-CREATE INDEX ix_stock_audit_tenant_captured_at ON stock_audit_entries (tenant_id, captured_at DESC);
-CREATE INDEX ix_stock_audit_tenant_actor_captured_at
-    ON stock_audit_entries (tenant_id, actor_employee_id, captured_at DESC);
-
-CREATE TABLE stock_audit_entry_changes (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    stock_audit_entry_id UUID NOT NULL,
-    position INTEGER NOT NULL,
-    field_name VARCHAR(120) NOT NULL,
-    old_value VARCHAR(1000) NOT NULL,
-    new_value VARCHAR(1000) NOT NULL,
-    CONSTRAINT fk_stock_audit_entry_changes_entry FOREIGN KEY (stock_audit_entry_id)
-        REFERENCES stock_audit_entries (id) ON DELETE CASCADE,
-    CONSTRAINT uq_stock_audit_entry_changes_position UNIQUE (stock_audit_entry_id, position)
 );
 
 CREATE TABLE knowledge_sops (
@@ -677,6 +687,9 @@ CREATE TABLE business_reports (
     reviewed_by_user_id UUID,
     reviewed_at TIMESTAMPTZ,
     review_note VARCHAR(500),
+    amended_by_user_id UUID,
+    amended_at TIMESTAMPTZ,
+    amend_reason VARCHAR(500),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_business_reports_tenant
@@ -686,6 +699,9 @@ CREATE TABLE business_reports (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_business_reports_reviewer_same_tenant
         FOREIGN KEY (tenant_id, reviewed_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_business_reports_amender_same_tenant
+        FOREIGN KEY (tenant_id, amended_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_business_reports_tenant_id_id UNIQUE (tenant_id, id)
 );
@@ -974,28 +990,3 @@ CREATE TABLE task_photos (
 );
 CREATE INDEX ix_task_photos_tenant_record_time
     ON task_photos (tenant_id, record_id, submitted_at, id);
-
-CREATE TABLE task_audit_entries (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    tenant_id UUID NOT NULL,
-    template_id UUID,
-    record_id UUID,
-    actor_user_id UUID NOT NULL,
-    action VARCHAR(48) NOT NULL,
-    details VARCHAR(1200) NOT NULL DEFAULT '',
-    occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_task_audit_template_same_tenant
-        FOREIGN KEY (tenant_id, template_id)
-        REFERENCES task_templates (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT fk_task_audit_record_same_tenant
-        FOREIGN KEY (tenant_id, record_id)
-        REFERENCES task_records (tenant_id, id) ON DELETE CASCADE,
-    CONSTRAINT fk_task_audit_actor_same_tenant
-        FOREIGN KEY (tenant_id, actor_user_id)
-        REFERENCES users (tenant_id, id) ON DELETE RESTRICT
-);
-CREATE INDEX ix_task_audit_tenant_record_time
-    ON task_audit_entries (tenant_id, record_id, occurred_at, id);
-CREATE INDEX ix_task_audit_tenant_template_time
-    ON task_audit_entries (tenant_id, template_id, occurred_at, id)
-    WHERE record_id IS NULL;
