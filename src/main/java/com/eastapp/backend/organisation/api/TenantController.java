@@ -1,6 +1,5 @@
 package com.eastapp.backend.organisation.api;
 
-import com.eastapp.backend.activity.tracking.ActivityTracked;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.organisation.service.TenantService;
 import jakarta.validation.Valid;
@@ -35,7 +34,6 @@ public class TenantController {
         return tenantService.list(principal);
     }
 
-    @ActivityTracked(module = "Business", action = "created", entity = "business")
     @PostMapping
     @PreAuthorize("hasRole('OWNER')")
     ResponseEntity<TenantResponse> create(
@@ -46,7 +44,6 @@ public class TenantController {
                 .body(tenantService.create(principal, request));
     }
 
-    @ActivityTracked(module = "Business", action = "updated", entity = "business", targetPathVariable = "tenantId")
     @PatchMapping("/{tenantId}")
     TenantResponse update(
             @AuthenticationPrincipal AuthenticatedUser principal,

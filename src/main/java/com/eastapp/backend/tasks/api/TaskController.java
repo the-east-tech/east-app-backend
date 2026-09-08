@@ -1,12 +1,9 @@
 package com.eastapp.backend.tasks.api;
 
-import com.eastapp.backend.activity.tracking.ActivityTracked;
-import com.eastapp.backend.activity.tracking.ActivityEventContext;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.tasks.TaskStatus;
 import com.eastapp.backend.tasks.service.TaskService;
 import jakarta.validation.Valid;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -122,7 +119,6 @@ public class TaskController {
         return service.record(principal, recordId);
     }
 
-    @ActivityTracked(module = "Task", action = "submitted", entity = "task", targetPathVariable = "recordId")
     @PostMapping(
             value = "/records/{recordId}/submit",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
@@ -132,66 +128,23 @@ public class TaskController {
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID recordId,
             @RequestParam(defaultValue = "") String completedChecklistItemIds,
-            @RequestPart(value = "photos", required = false) List<MultipartFile> photos,
-            HttpServletRequest httpRequest
+            @RequestPart(value = "photos", required = false) List<MultipartFile> photos
     ) {
-        TaskRecordResponse submitted = service.submit(
+        return service.submit(
                 principal,
                 recordId,
                 completedChecklistItemIds,
                 photos == null ? List.of() : photos
         );
-        ActivityEventContext.attach(
-                httpRequest,
-                submitted.id(),
-                submitted.title(),
-                submissionDetail(submitted)
-        );
-        return submitted;
     }
 
-    @ActivityTracked(module = "Task", action = "rated", entity = "task", targetPathVariable = "recordId")
     @PostMapping("/records/{recordId}/rate")
     @PreAuthorize("hasAuthority('PERMISSION_TASK_RATE')")
     TaskRecordResponse rate(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID recordId,
-            @Valid @RequestBody RateTaskRequest request,
-            HttpServletRequest httpRequest
+            @Valid @RequestBody RateTaskRequest request
     ) {
-        TaskRecordResponse rated = service.rate(principal, recordId, request);
-        ActivityEventContext.attach(
-                httpRequest,
-                rated.id(),
-                rated.title(),
-                ratingDetail(rated)
-        );
-        return rated;
-    }
-
-    private static String submissionDetail(TaskRecordResponse record) {
-        long completedChecklist = record.checklistItems().stream()
-                .filter(TaskChecklistItemResponse::completed)
-                .count();
-        String submittedBy = record.submittedBy() == null
-                ? "-"
-                : record.submittedBy().fullName()
-                        + " (" + record.submittedBy().employeeId() + ")";
-        return "Task date: " + record.taskDate()
-                + "\nTag: " + record.tagName()
-                + "\nSubmitted by: " + submittedBy
-                + "\nPhotos: " + record.photoCount() + "/" + record.requiredPhotoCount()
-                + "\nChecklist: " + completedChecklist + "/" + record.checklistItems().size();
-    }
-
-    private static String ratingDetail(TaskRecordResponse record) {
-        String submittedBy = record.submittedBy() == null
-                ? "-"
-                : record.submittedBy().fullName()
-                        + " (" + record.submittedBy().employeeId() + ")";
-        return "Task date: " + record.taskDate()
-                + "\nEmployee: " + submittedBy
-                + "\nRating: " + record.rating() + "/5"
-                + "\nComment: " + record.ratingComment();
+        return service.rate(principal, recordId, request);
     }
 }

@@ -4,8 +4,6 @@ import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
-import com.eastapp.backend.stock.StockAuditEntry;
-import com.eastapp.backend.stock.StockAuditEntryRepository;
 import com.eastapp.backend.stock.StockSupplier;
 import com.eastapp.backend.stock.StockSupplierRepository;
 import com.eastapp.backend.stock.api.MarkSupplierOrderedRequest;
@@ -23,16 +21,13 @@ import java.util.UUID;
 public class StockPurchaseService {
     private final StockSupplierRepository supplierRepository;
     private final UserAccountRepository userRepository;
-    private final StockAuditEntryRepository auditRepository;
 
     public StockPurchaseService(
             StockSupplierRepository supplierRepository,
-            UserAccountRepository userRepository,
-            StockAuditEntryRepository auditRepository
+            UserAccountRepository userRepository
     ) {
         this.supplierRepository = supplierRepository;
         this.userRepository = userRepository;
-        this.auditRepository = auditRepository;
     }
 
     @Transactional(readOnly = true)
@@ -50,12 +45,7 @@ public class StockPurchaseService {
             UpdatePurchaseMessageTemplateRequest request
     ) {
         StockSupplier supplier = supplierForUpdate(principal, supplierId);
-        String before = supplier.getPurchaseMessageTemplate();
         supplier.updatePurchaseMessageTemplate(request.messageTemplate());
-        auditRepository.save(new StockAuditEntry(
-                supplier.getTenant(), "Purchase", "Updated supplier message template",
-                supplier.getId(), supplier.getSupplierName(), principal, "")
-                .addChange("Message Template", before, supplier.getPurchaseMessageTemplate()));
         return StockPurchaseSupplierResponse.from(supplier);
     }
 
@@ -72,11 +62,6 @@ public class StockPurchaseService {
         } catch (IllegalStateException exception) {
             throw new ApiException(HttpStatus.CONFLICT, "STOCK_ORDER_ALREADY_ACTIVE", exception.getMessage());
         }
-        auditRepository.save(new StockAuditEntry(
-                supplier.getTenant(), "Purchase", "Order marked done",
-                supplier.getId(), supplier.getSupplierName(), principal, "")
-                .addChange("Order State", StockSupplier.ORDER_NONE, supplier.getOrderState())
-                .addChange("Order Message", "-", supplier.getOrderedMessage()));
         return StockPurchaseSupplierResponse.from(supplier);
     }
 

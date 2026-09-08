@@ -1,5 +1,6 @@
 package com.eastapp.backend.reports.service;
 
+import com.eastapp.backend.activity.service.WorkflowActivityService;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.auth.permission.RolePermissionPolicy;
 import com.eastapp.backend.auth.permission.SystemPermission;
@@ -27,6 +28,7 @@ import com.eastapp.backend.reports.WasteReportDetail;
 import com.eastapp.backend.reports.WasteReportDetailRepository;
 import com.eastapp.backend.reports.api.AddDailyPhotoRequest;
 import com.eastapp.backend.reports.api.AddVoidBillRequest;
+import com.eastapp.backend.reports.api.AmendSalesReportRequest;
 import com.eastapp.backend.reports.api.ApprovalReportResponse;
 import com.eastapp.backend.reports.api.ComplaintOverviewResponse;
 import com.eastapp.backend.reports.api.ComplaintReportResponse;
@@ -108,6 +110,7 @@ public class BusinessReportService {
     private final StockSkuRepository skuRepository;
     private final ReportProperties properties;
     private final TaskService taskService;
+    private final WorkflowActivityService workflowActivityService;
 
     public BusinessReportService(
             BusinessReportRepository reportRepository,
@@ -123,7 +126,8 @@ public class BusinessReportService {
             StockCountSubmissionRepository stockCountRepository,
             StockSkuRepository skuRepository,
             ReportProperties properties,
-            TaskService taskService
+            TaskService taskService,
+            WorkflowActivityService workflowActivityService
     ) {
         this.reportRepository = reportRepository;
         this.salesRepository = salesRepository;
@@ -139,6 +143,7 @@ public class BusinessReportService {
         this.skuRepository = skuRepository;
         this.properties = properties;
         this.taskService = taskService;
+        this.workflowActivityService = workflowActivityService;
     }
 
     @Transactional
@@ -479,6 +484,55 @@ public class BusinessReportService {
             throw locked(exception.getMessage());
         }
         reportRepository.save(report);
+        recordReportTransition(
+                principal, report, ReportWorkflowStatus.PENDING,
+                ReportWorkflowStatus.SUBMITTED
+        );
+        return toSalesResponse(report, userNames(principal.tenantId()));
+    }
+
+    @Transactional
+    public SalesReportResponse amendSales(
+            AuthenticatedUser principal,
+            UUID reportId,
+            AmendSalesReportRequest request
+    ) {
+        requireSalesAccess(principal);
+        if (!isSeniorManagement(principal.systemRole())) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "SALES_AMEND_ACCESS_DENIED",
+                    "Only Owner or Head can amend an approved Sales report."
+            );
+        }
+        BusinessReport report = reportRepository.findLockedByIdAndTenantId(
+                reportId, principal.tenantId()
+        ).orElseThrow(() -> new ApiException(
+                HttpStatus.NOT_FOUND, "REPORT_NOT_FOUND", "Report was not found."
+        ));
+        if (report.getReportType() != BusinessReportType.SALES) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "REPORT_TYPE_MISMATCH",
+                    "Only a Sales report can be amended here."
+            );
+        }
+        try {
+            report.amend(principal.userId(), request.reason());
+        } catch (IllegalStateException exception) {
+            throw locked(exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "INVALID_AMEND_REASON",
+                    exception.getMessage()
+            );
+        }
+        reportRepository.save(report);
+        recordReportTransition(
+                principal, report, ReportWorkflowStatus.DONE,
+                ReportWorkflowStatus.PENDING
+        );
         return toSalesResponse(report, userNames(principal.tenantId()));
     }
 
@@ -522,6 +576,9 @@ public class BusinessReportService {
         ));
         report.submit();
         reportRepository.save(report);
+        recordReportTransition(
+                principal, report, null, ReportWorkflowStatus.SUBMITTED
+        );
         return toWasteResponse(
                 report,
                 detail,
@@ -640,6 +697,10 @@ public class BusinessReportService {
             throw locked(exception.getMessage());
         }
         reportRepository.save(report);
+        recordReportTransition(
+                principal, report, ReportWorkflowStatus.PENDING,
+                ReportWorkflowStatus.SUBMITTED
+        );
         return toDailyPhotoResponse(report, userName(report.getSubmittedByUserId(), userNames(principal.tenantId())));
     }
 
@@ -670,6 +731,9 @@ public class BusinessReportService {
         ));
         report.markCompleteWithoutApproval();
         reportRepository.save(report);
+        recordReportTransition(
+                principal, report, null, ReportWorkflowStatus.DONE
+        );
         return toComplaintResponse(
                 report,
                 detail,
@@ -836,6 +900,10 @@ public class BusinessReportService {
             );
         }
         reportRepository.saveAndFlush(report);
+        recordReportTransition(
+                principal, report, ReportWorkflowStatus.SUBMITTED,
+                report.getWorkflowStatus()
+        );
         return approvalsForSingle(report, userNames(principal.tenantId()));
     }
 
@@ -1292,6 +1360,9 @@ public class BusinessReportService {
                 report.getSubmittedAt(),
                 userNameNullable(report.getReviewedByUserId(), names),
                 report.getReviewNote(),
+                userNameNullable(report.getAmendedByUserId(), names),
+                report.getAmendedAt(),
+                report.getAmendReason(),
                 List.copyOf(voidResponses)
         );
     }
@@ -1301,7 +1372,8 @@ public class BusinessReportService {
         return new SalesReportResponse(
                 null, date, ReportWorkflowStatus.DRAFT,
                 zero, null, "", zero, zero, zero, zero, zero, zero, 0, zero,
-                BigDecimal.ZERO.setScale(1), null, null, null, null, List.of()
+                BigDecimal.ZERO.setScale(1), null, null, null, null,
+                null, null, null, List.of()
         );
     }
 
@@ -1625,6 +1697,31 @@ public class BusinessReportService {
         if (!principal.hasPermission(SystemPermission.REPORT_REVIEW)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "REPORT_REVIEW_ACCESS_DENIED", "Only Owner, Head or Manager can review reports.");
         }
+    }
+
+    private void recordReportTransition(
+            AuthenticatedUser principal,
+            BusinessReport report,
+            ReportWorkflowStatus previous,
+            ReportWorkflowStatus next
+    ) {
+        String module = switch (report.getReportType()) {
+            case SALES -> "Sales";
+            case WASTE -> "Waste";
+            case DAILY_PHOTO -> "Daily Photo";
+            case COMPLAINT -> "Complaint";
+        };
+        String entityType = module.toLowerCase() + " report";
+        workflowActivityService.recordTransition(
+                principal,
+                module,
+                entityType,
+                report.getId(),
+                report.getReportDate().toString(),
+                previous,
+                next,
+                "/api/v1/reports/" + report.getId()
+        );
     }
 
     private boolean isManagement(SystemRole role) {

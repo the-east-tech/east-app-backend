@@ -270,6 +270,11 @@ public class StockSku {
         this.lastUpdatedBy = Objects.requireNonNull(actor, "actor must not be null");
     }
 
+    public void deactivate(UserAccount actor) {
+        active = false;
+        lastUpdatedBy = Objects.requireNonNull(actor, "actor must not be null");
+    }
+
     public UUID getId() { return id; }
     public Tenant getTenant() { return tenant; }
     public String getName() { return name; }

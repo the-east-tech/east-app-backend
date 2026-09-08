@@ -52,7 +52,7 @@ public class ActivityService {
         this.notificationProperties = notificationProperties;
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.MANDATORY)
     public void record(
             AuthenticatedUser actor,
             String module,
