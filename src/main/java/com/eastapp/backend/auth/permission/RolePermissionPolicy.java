@@ -52,20 +52,13 @@ public final class RolePermissionPolicy {
                         SystemPermission.TASK_CONTRIBUTE
                 ))
         );
-        grants.put(
-                SystemRole.STAFF_1,
-                immutable(EnumSet.of(
-                        SystemPermission.TASK_VIEW,
-                        SystemPermission.TASK_CONTRIBUTE
-                ))
-        );
-        grants.put(
-                SystemRole.STAFF_2,
-                immutable(EnumSet.of(
-                        SystemPermission.TASK_VIEW,
-                        SystemPermission.TASK_CONTRIBUTE
-                ))
-        );
+        Set<SystemPermission> staffPermissions = immutable(EnumSet.of(
+                SystemPermission.TASK_VIEW,
+                SystemPermission.TASK_CONTRIBUTE
+        ));
+        grants.put(SystemRole.SENIOR_STAFF, staffPermissions);
+        grants.put(SystemRole.STAFF, staffPermissions);
+        grants.put(SystemRole.PART_TIME, staffPermissions);
 
         return Collections.unmodifiableMap(grants);
     }
