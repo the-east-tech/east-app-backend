@@ -298,7 +298,11 @@ public class StockSku {
     public List<String> getAssignedStaffNames() { return assignedStaffNames; }
     public List<String> getReceivingChecklist() { return receivingChecklist; }
     public StockCheckSchedule getStockCheckSchedule() { return stockCheckSchedule; }
-    public Integer getStockCheckDay() { return stockCheckDay; }
+    public Integer getStockCheckDay() {
+        return stockCheckSchedule == StockCheckSchedule.MONTHLY && stockCheckDay == null
+                ? 31
+                : stockCheckDay;
+    }
     public boolean isActive() { return active; }
     public boolean isCoolingPeriod() { return coolingPeriod; }
     public UserAccount getLastUpdatedBy() { return lastUpdatedBy; }
@@ -322,16 +326,17 @@ public class StockSku {
             Integer day
     ) {
         if (schedule == StockCheckSchedule.DAILY) return null;
-        if (day == null) {
-            throw new IllegalArgumentException("stockCheckDay is required for weekly or monthly stock checks");
+        if (schedule == StockCheckSchedule.WEEKLY) {
+            if (day == null || day < 1 || day > 7) {
+                throw new IllegalArgumentException("stockCheckDay must be between 1 and 7 for weekly stock checks");
+            }
+            return day;
         }
-        int maximum = schedule == StockCheckSchedule.WEEKLY ? 7 : 31;
-        if (day < 1 || day > maximum) {
-            throw new IllegalArgumentException(
-                    "stockCheckDay must be between 1 and " + maximum
-            );
+        if (day == null) return null;
+        if (day < 1 || day > 31) {
+            throw new IllegalArgumentException("stockCheckDay must be between 1 and 28 or use last day");
         }
-        return day;
+        return day > 28 ? null : day;
     }
 
     private static String text(String value) {
