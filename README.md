@@ -44,8 +44,9 @@ OWNER
 HEAD
 MANAGER
 SUPERVISOR
-STAFF_1
-STAFF_2
+SENIOR_STAFF
+STAFF
+PART_TIME
 ```
 
 ### Tenants
@@ -60,7 +61,7 @@ STAFF_2
 ### People
 
 - Users
-- Fixed roles only: Owner, Head, Manager, Supervisor, Staff1 and Staff2
+- Fixed roles only: Owner, Head, Manager, Supervisor, Senior Staff, Staff and Part Time
 - Password reset
 - Tenant-specific employee IDs
 - Attendance audit and reporting
@@ -85,7 +86,7 @@ Attendance no longer stores face-detection or face-photo data. Attendance events
 - SKUs
 - Tags
 - Suppliers
-- Daily stock counts
+- Scheduled stock checks: Daily, Weekly by weekday, or Monthly by day of month
 - Receiving records
 - Media metadata
 - Approval and rejection workflow
@@ -142,7 +143,7 @@ When the provider is disabled or its credentials are absent, EastApp can still r
 - Five latest Stock Audit Trail records performed by the current logged-in user
 - Current logged-in user's real accumulated point total
 - Current-business leaderboard
-- Today's combined Daily Count and Receiving review summary
+- Today's combined Stock Check and Receiving review summary
 - `Pending Review` count
 - `Done` count, where both Approved and Rejected records are considered done
 - Approvals opens Stock → Review and returns to Home on Back
@@ -300,7 +301,7 @@ EastApp currently uses opaque session tokens rather than JWT.
 | Create/assign Head | Yes | Yes | No | No |
 | Create/assign Manager | Yes | Yes | No | No |
 | Create/assign Supervisor | Yes | Yes | Yes | No |
-| Create/assign Staff1 / Staff2 | Yes | Yes | Yes | No |
+| Create/assign Senior Staff / Staff / Part Time | Yes | Yes | Yes | No |
 | Stock Audit Trail screen | Yes | Yes | No | No |
 | Home own Stock activity | Yes | Yes | Yes | Yes |
 | Home today's review summary | Yes | Yes | Yes | No |
@@ -308,7 +309,7 @@ EastApp currently uses opaque session tokens rather than JWT.
 | View Knowledge SOP | Yes | Yes | Yes | Yes |
 | Cross-business SKU copy | Yes | No | No | No |
 
-User visibility follows the fixed hierarchy: Owner sees all users, Head cannot see Owner users, and Manager cannot see Owner or Head users. Supervisor and Staff roles cannot access user management. Owners share access across all tenants; all other roles remain in their active tenant and cannot access tenant management.
+User visibility follows the fixed hierarchy: Owner sees all users, Head cannot see Owner users, and Manager cannot see Owner or Head users. Supervisor, Senior Staff, Staff and Part Time roles cannot access user management. Owners share access across all tenants; all other roles remain in their active tenant and cannot access tenant management.
 
 ## Caching strategy
 
@@ -476,7 +477,7 @@ The clean V1 baseline includes the tenant-scoped reporting workflow used by the 
 - Void Bills are append-only evidence entries with a compulsory photo, bill number, reason and amount. Bill numbers are unique per Sales report without case sensitivity.
 - Inventory Intelligence is calculated from active SKU balances, limits and price ranges; no duplicate inventory form is stored.
 - Waste records include photo evidence and estimated loss, then enter the approval workflow.
-- Every active Manager, Supervisor, Staff 1 and Staff 2 user is expected to submit at least five Daily Photos. Owner and Head are excluded from that requirement.
+- Every active Manager, Supervisor, Senior Staff, Staff and Part Time user is expected to submit at least five Daily Photos. Owner and Head are excluded from that requirement.
 - Complaints track customer profile, action, compensation and Open/Resolved status without a separate approval step.
 - Owner, Head, Manager and Supervisor can view business analytics. Only Owner, Head or Manager can approve reports; Manager cannot approve their own submission.
 - Report evidence media can only be attached by the user account that uploaded it.
@@ -490,7 +491,6 @@ eastapp:
     daily-photo-minimum: 5
 ```
 
-## V4 attendance evidence and atomic Daily Count review
+## V4 attendance evidence and atomic Stock Check review
 
-
-Daily Count bulk review now uses one transactional endpoint, `PATCH /api/v1/stock/counts/bulk-review`. The service validates every selected record before changing any of them, so an invalid or previously reviewed record rolls back the whole batch.
+Stock Check bulk review uses one transactional endpoint, `PATCH /api/v1/stock/counts/bulk-review`. The service validates every selected record before changing any of them, so an invalid or previously reviewed record rolls back the whole batch.
