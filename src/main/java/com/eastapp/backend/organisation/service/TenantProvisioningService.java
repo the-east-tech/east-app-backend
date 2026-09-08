@@ -62,8 +62,9 @@ public class TenantProvisioningService {
                 new Role(tenant, SystemRole.HEAD, "Head"),
                 new Role(tenant, SystemRole.MANAGER, "Manager"),
                 new Role(tenant, SystemRole.SUPERVISOR, "Supervisor"),
-                new Role(tenant, SystemRole.STAFF_1, "Staff1"),
-                new Role(tenant, SystemRole.STAFF_2, "Staff2")
+                new Role(tenant, SystemRole.SENIOR_STAFF, "Senior Staff"),
+                new Role(tenant, SystemRole.STAFF, "Staff"),
+                new Role(tenant, SystemRole.PART_TIME, "Part Time")
         );
         roleRepository.saveAll(roles);
         Role ownerRole = roles.getFirst();
