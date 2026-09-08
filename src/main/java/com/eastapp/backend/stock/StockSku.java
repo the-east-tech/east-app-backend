@@ -6,6 +6,8 @@ import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -21,7 +23,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -101,11 +102,12 @@ public class StockSku {
     @Column(name = "checklist_item", nullable = false, length = 300)
     private List<String> receivingChecklist = new ArrayList<>();
 
-    @Column(name = "stock_check_frequency_days", nullable = false)
-    private int stockCheckFrequencyDays;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stock_check_schedule", nullable = false, length = 16)
+    private StockCheckSchedule stockCheckSchedule;
 
-    @Column(name = "reset_time", nullable = false)
-    private LocalTime resetTime;
+    @Column(name = "stock_check_day")
+    private Integer stockCheckDay;
 
     @Column(nullable = false)
     private boolean active;
@@ -148,8 +150,8 @@ public class StockSku {
             StockMedia thumbnailMedia,
             List<String> assignedStaffNames,
             List<String> receivingChecklist,
-            int stockCheckFrequencyDays,
-            LocalTime resetTime,
+            StockCheckSchedule stockCheckSchedule,
+            Integer stockCheckDay,
             boolean active,
             boolean coolingPeriod,
             UserAccount actor
@@ -161,7 +163,7 @@ public class StockSku {
                 minimumBalanceValue, maximumBalanceValue, currentBalanceValue,
                 recoveryPercent, minimumPriceRm, maximumPriceRm,
                 suppliers, thumbnailMedia, assignedStaffNames, receivingChecklist,
-                stockCheckFrequencyDays, resetTime, active, coolingPeriod, actor
+                stockCheckSchedule, stockCheckDay, active, coolingPeriod, actor
         );
     }
 
@@ -180,8 +182,8 @@ public class StockSku {
             StockMedia thumbnailMedia,
             List<String> assignedStaffNames,
             List<String> receivingChecklist,
-            int stockCheckFrequencyDays,
-            LocalTime resetTime,
+            StockCheckSchedule stockCheckSchedule,
+            Integer stockCheckDay,
             boolean active,
             boolean coolingPeriod,
             UserAccount actor
@@ -191,7 +193,7 @@ public class StockSku {
                 minimumBalanceValue, maximumBalanceValue, currentBalanceValue,
                 recoveryPercent, minimumPriceRm, maximumPriceRm,
                 suppliers, thumbnailMedia, assignedStaffNames, receivingChecklist,
-                stockCheckFrequencyDays, resetTime, active, coolingPeriod, actor
+                stockCheckSchedule, stockCheckDay, active, coolingPeriod, actor
         );
     }
 
@@ -210,8 +212,8 @@ public class StockSku {
             StockMedia thumbnailMedia,
             List<String> assignedStaffNames,
             List<String> receivingChecklist,
-            int stockCheckFrequencyDays,
-            LocalTime resetTime,
+            StockCheckSchedule stockCheckSchedule,
+            Integer stockCheckDay,
             boolean active,
             boolean coolingPeriod,
             UserAccount actor
@@ -255,11 +257,11 @@ public class StockSku {
                     .filter(item -> !item.isEmpty())
                     .forEach(this.receivingChecklist::add);
         }
-        if (stockCheckFrequencyDays < 1) {
-            throw new IllegalArgumentException("stockCheckFrequencyDays must be positive");
-        }
-        this.stockCheckFrequencyDays = stockCheckFrequencyDays;
-        this.resetTime = Objects.requireNonNull(resetTime, "resetTime must not be null");
+        this.stockCheckSchedule = Objects.requireNonNull(
+                stockCheckSchedule,
+                "stockCheckSchedule must not be null"
+        );
+        this.stockCheckDay = normaliseStockCheckDay(stockCheckSchedule, stockCheckDay);
         this.active = active;
         this.coolingPeriod = coolingPeriod;
         this.lastUpdatedBy = Objects.requireNonNull(actor, "actor must not be null");
@@ -295,8 +297,8 @@ public class StockSku {
     public UUID getThumbnailMediaId() { return thumbnailMedia.getId(); }
     public List<String> getAssignedStaffNames() { return assignedStaffNames; }
     public List<String> getReceivingChecklist() { return receivingChecklist; }
-    public int getStockCheckFrequencyDays() { return stockCheckFrequencyDays; }
-    public LocalTime getResetTime() { return resetTime; }
+    public StockCheckSchedule getStockCheckSchedule() { return stockCheckSchedule; }
+    public Integer getStockCheckDay() { return stockCheckDay; }
     public boolean isActive() { return active; }
     public boolean isCoolingPeriod() { return coolingPeriod; }
     public UserAccount getLastUpdatedBy() { return lastUpdatedBy; }
@@ -313,6 +315,23 @@ public class StockSku {
             throw new IllegalArgumentException(field + " must belong to the SKU tenant");
         }
         return tag;
+    }
+
+    private static Integer normaliseStockCheckDay(
+            StockCheckSchedule schedule,
+            Integer day
+    ) {
+        if (schedule == StockCheckSchedule.DAILY) return null;
+        if (day == null) {
+            throw new IllegalArgumentException("stockCheckDay is required for weekly or monthly stock checks");
+        }
+        int maximum = schedule == StockCheckSchedule.WEEKLY ? 7 : 31;
+        if (day < 1 || day > maximum) {
+            throw new IllegalArgumentException(
+                    "stockCheckDay must be between 1 and " + maximum
+            );
+        }
+        return day;
     }
 
     private static String text(String value) {
