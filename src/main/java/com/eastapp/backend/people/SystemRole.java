@@ -5,8 +5,9 @@ public enum SystemRole {
     HEAD(2),
     MANAGER(3),
     SUPERVISOR(4),
-    STAFF_1(5),
-    STAFF_2(6);
+    SENIOR_STAFF(5),
+    STAFF(6),
+    PART_TIME(7);
 
     private final int rank;
 
