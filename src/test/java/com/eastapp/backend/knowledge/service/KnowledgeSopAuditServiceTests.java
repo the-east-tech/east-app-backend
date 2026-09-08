@@ -60,7 +60,7 @@ class KnowledgeSopAuditServiceTests {
         when(userRepository.findByIdAndTenant_Id(USER_ID, TENANT_ID)).thenReturn(Optional.of(user));
         when(tenantRepository.findById(TENANT_ID)).thenReturn(Optional.of(tenant));
 
-        service().record(principal(SystemRole.STAFF_2), SOP_ID, request(17));
+        service().record(principal(SystemRole.PART_TIME), SOP_ID, request(17));
 
         ArgumentCaptor<KnowledgeSopWatchSession> saved =
                 ArgumentCaptor.forClass(KnowledgeSopWatchSession.class);
@@ -81,7 +81,7 @@ class KnowledgeSopAuditServiceTests {
         when(user.getId()).thenReturn(USER_ID);
         when(sop.getId()).thenReturn(SOP_ID);
 
-        service().record(principal(SystemRole.STAFF_1), SOP_ID, request(42));
+        service().record(principal(SystemRole.SENIOR_STAFF), SOP_ID, request(42));
 
         verify(existing).recordCumulativePlayedSeconds(
                 org.mockito.ArgumentMatchers.eq(42L),
