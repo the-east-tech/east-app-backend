@@ -1,5 +1,6 @@
 package com.eastapp.backend.stock.api;
 
+import com.eastapp.backend.stock.StockCheckSchedule;
 import com.eastapp.backend.stock.StockSku;
 import java.math.BigDecimal;
 import java.util.List;
@@ -23,8 +24,8 @@ public record StockSkuResponse(
         String photoPath,
         List<String> assignedStaffNames,
         List<String> receivingChecklist,
-        int stockCheckFrequencyDays,
-        String resetTime,
+        StockCheckSchedule stockCheckSchedule,
+        Integer stockCheckDay,
         String lastUpdatedAt,
         String lastUpdatedBy,
         boolean active,
@@ -42,7 +43,7 @@ public record StockSkuResponse(
                 item.getSuppliers().stream().map(supplier -> supplier.getId()).toList(),
                 photoPath, List.copyOf(item.getAssignedStaffNames()),
                 List.copyOf(item.getReceivingChecklist()),
-                item.getStockCheckFrequencyDays(), item.getResetTime().toString(),
+                item.getStockCheckSchedule(), item.getStockCheckDay(),
                 StockResponseSupport.label(item.getUpdatedAt()),
                 item.getLastUpdatedBy().getEmployeeId(), item.isActive(), item.isCoolingPeriod()
         );
