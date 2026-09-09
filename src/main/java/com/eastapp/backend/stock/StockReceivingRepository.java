@@ -53,4 +53,6 @@ public interface StockReceivingRepository extends JpaRepository<StockReceiving, 
             Instant fromInclusive,
             Instant toExclusive
     );
+
+    long countByTenant_IdAndReviewStatus(UUID tenantId, String reviewStatus);
 }
