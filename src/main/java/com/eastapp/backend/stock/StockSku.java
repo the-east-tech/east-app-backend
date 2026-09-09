@@ -23,6 +23,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -109,6 +110,9 @@ public class StockSku {
     @Column(name = "stock_check_day")
     private Integer stockCheckDay;
 
+    @Column(name = "stock_check_date")
+    private LocalDate stockCheckDate;
+
     @Column(nullable = false)
     private boolean active;
 
@@ -152,6 +156,7 @@ public class StockSku {
             List<String> receivingChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
+            LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod,
             UserAccount actor
@@ -163,7 +168,7 @@ public class StockSku {
                 minimumBalanceValue, maximumBalanceValue, currentBalanceValue,
                 recoveryPercent, minimumPriceRm, maximumPriceRm,
                 suppliers, thumbnailMedia, assignedStaffNames, receivingChecklist,
-                stockCheckSchedule, stockCheckDay, active, coolingPeriod, actor
+                stockCheckSchedule, stockCheckDay, stockCheckDate, active, coolingPeriod, actor
         );
     }
 
@@ -184,6 +189,7 @@ public class StockSku {
             List<String> receivingChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
+            LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod,
             UserAccount actor
@@ -193,7 +199,7 @@ public class StockSku {
                 minimumBalanceValue, maximumBalanceValue, currentBalanceValue,
                 recoveryPercent, minimumPriceRm, maximumPriceRm,
                 suppliers, thumbnailMedia, assignedStaffNames, receivingChecklist,
-                stockCheckSchedule, stockCheckDay, active, coolingPeriod, actor
+                stockCheckSchedule, stockCheckDay, stockCheckDate, active, coolingPeriod, actor
         );
     }
 
@@ -214,6 +220,7 @@ public class StockSku {
             List<String> receivingChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
+            LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod,
             UserAccount actor
@@ -262,6 +269,7 @@ public class StockSku {
                 "stockCheckSchedule must not be null"
         );
         this.stockCheckDay = normaliseStockCheckDay(stockCheckSchedule, stockCheckDay);
+        this.stockCheckDate = normaliseStockCheckDate(stockCheckSchedule, stockCheckDate);
         this.active = active;
         this.coolingPeriod = coolingPeriod;
         this.lastUpdatedBy = Objects.requireNonNull(actor, "actor must not be null");
@@ -298,11 +306,8 @@ public class StockSku {
     public List<String> getAssignedStaffNames() { return assignedStaffNames; }
     public List<String> getReceivingChecklist() { return receivingChecklist; }
     public StockCheckSchedule getStockCheckSchedule() { return stockCheckSchedule; }
-    public Integer getStockCheckDay() {
-        return stockCheckSchedule == StockCheckSchedule.MONTHLY && stockCheckDay == null
-                ? 31
-                : stockCheckDay;
-    }
+    public Integer getStockCheckDay() { return stockCheckDay; }
+    public LocalDate getStockCheckDate() { return stockCheckDate; }
     public boolean isActive() { return active; }
     public boolean isCoolingPeriod() { return coolingPeriod; }
     public UserAccount getLastUpdatedBy() { return lastUpdatedBy; }
@@ -325,7 +330,9 @@ public class StockSku {
             StockCheckSchedule schedule,
             Integer day
     ) {
-        if (schedule == StockCheckSchedule.DAILY) return null;
+        if (schedule == StockCheckSchedule.DAILY || schedule == StockCheckSchedule.AD_HOC) {
+            return null;
+        }
         if (schedule == StockCheckSchedule.WEEKLY) {
             if (day == null || day < 1 || day > 7) {
                 throw new IllegalArgumentException("stockCheckDay must be between 1 and 7 for weekly stock checks");
@@ -337,6 +344,16 @@ public class StockSku {
             throw new IllegalArgumentException("stockCheckDay must be between 1 and 28 or use last day");
         }
         return day > 28 ? null : day;
+    }
+
+    private static LocalDate normaliseStockCheckDate(
+            StockCheckSchedule schedule,
+            LocalDate date
+    ) {
+        if (schedule == StockCheckSchedule.AD_HOC) {
+            return Objects.requireNonNull(date, "stockCheckDate must not be null for ad hoc stock checks");
+        }
+        return null;
     }
 
     private static String text(String value) {

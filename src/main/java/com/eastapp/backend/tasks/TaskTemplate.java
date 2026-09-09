@@ -13,7 +13,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -48,11 +47,10 @@ public class TaskTemplate {
     @Column(name = "schedule_type", nullable = false, length = 16)
     private TaskScheduleType scheduleType;
 
-    @Column(name = "first_task_date", nullable = false)
+    // Internal reference used to encode the selected weekday/month day.
+    // For AD_HOC this is the actual task date.
+    @Column(name = "schedule_reference_date", nullable = false)
     private LocalDate firstTaskDate;
-
-    @Column(name = "end_date")
-    private LocalDate endDate;
 
     @Column(nullable = false)
     private boolean active;
@@ -83,7 +81,7 @@ public class TaskTemplate {
             int requiredPhotoCount,
             TaskScheduleType scheduleType,
             LocalDate firstTaskDate,
-            LocalDate endDate,
+            LocalDate ignoredEndDate,
             boolean active,
             UUID actorUserId
     ) {
@@ -91,7 +89,7 @@ public class TaskTemplate {
         this.createdByUserId = Objects.requireNonNull(actorUserId, "actorUserId must not be null");
         update(
                 tagId, linkedSopId, title, instruction, requiredPhotoCount,
-                scheduleType, firstTaskDate, endDate, active, actorUserId
+                scheduleType, firstTaskDate, ignoredEndDate, active, actorUserId
         );
     }
 
@@ -103,7 +101,7 @@ public class TaskTemplate {
             int requiredPhotoCount,
             TaskScheduleType scheduleType,
             LocalDate firstTaskDate,
-            LocalDate endDate,
+            LocalDate ignoredEndDate,
             boolean active,
             UUID actorUserId
     ) {
@@ -117,10 +115,6 @@ public class TaskTemplate {
         this.requiredPhotoCount = requiredPhotoCount;
         this.scheduleType = Objects.requireNonNull(scheduleType, "scheduleType must not be null");
         this.firstTaskDate = Objects.requireNonNull(firstTaskDate, "firstTaskDate must not be null");
-        if (endDate != null && endDate.isBefore(firstTaskDate)) {
-            throw new IllegalArgumentException("endDate must not be before firstTaskDate");
-        }
-        this.endDate = endDate;
         this.active = active;
         this.updatedByUserId = Objects.requireNonNull(actorUserId, "actorUserId must not be null");
     }
@@ -134,7 +128,7 @@ public class TaskTemplate {
     public int getRequiredPhotoCount() { return requiredPhotoCount; }
     public TaskScheduleType getScheduleType() { return scheduleType; }
     public LocalDate getFirstTaskDate() { return firstTaskDate; }
-    public LocalDate getEndDate() { return endDate; }
+    public LocalDate getEndDate() { return null; }
     public boolean isActive() { return active; }
     public UUID getCreatedByUserId() { return createdByUserId; }
     public UUID getUpdatedByUserId() { return updatedByUserId; }
@@ -143,17 +137,16 @@ public class TaskTemplate {
 
     public boolean isScheduledFor(LocalDate date) {
         Objects.requireNonNull(date, "date must not be null");
-        if (date.isBefore(firstTaskDate) || endDate != null && date.isAfter(endDate)) {
-            return false;
-        }
-        long elapsedDays = ChronoUnit.DAYS.between(firstTaskDate, date);
         return switch (scheduleType) {
             case AD_HOC -> date.equals(firstTaskDate);
             case DAILY -> true;
-            case WEEKLY -> elapsedDays % 7 == 0;
-            case BIWEEKLY -> elapsedDays % 14 == 0;
-            case MONTHLY -> date.getDayOfMonth()
-                    == Math.min(firstTaskDate.getDayOfMonth(), date.lengthOfMonth());
+            case WEEKLY -> date.getDayOfWeek() == firstTaskDate.getDayOfWeek();
+            case MONTHLY -> {
+                int referenceDay = firstTaskDate.getDayOfMonth();
+                yield referenceDay > 28
+                        ? date.getDayOfMonth() == date.lengthOfMonth()
+                        : date.getDayOfMonth() == referenceDay;
+            }
         };
     }
 
