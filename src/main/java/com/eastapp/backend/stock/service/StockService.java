@@ -982,6 +982,10 @@ public class StockService {
                 ),
                 skuChangeRequestRepository.countByTenantIdAndWorkflowStatus(
                         principal.tenantId(), StockWorkflowStatus.SUBMITTED
+                ),
+                supplierRepository.countByTenant_IdAndOrderStateIn(
+                        principal.tenantId(),
+                        List.of(StockSupplier.ORDERED, StockSupplier.ORDER_CORRECTION_REQUIRED)
                 )
         );
     }

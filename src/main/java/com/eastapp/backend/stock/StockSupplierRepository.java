@@ -50,4 +50,6 @@ public interface StockSupplierRepository extends JpaRepository<StockSupplier, UU
     );
 
     boolean existsByTenant_IdAndSupplierNameIgnoreCase(UUID tenantId, String supplierName);
+
+    long countByTenant_IdAndOrderStateIn(UUID tenantId, Collection<String> orderStates);
 }
