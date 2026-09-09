@@ -24,7 +24,6 @@ import com.eastapp.backend.tasks.TaskRecord;
 import com.eastapp.backend.tasks.TaskRecordChecklistItem;
 import com.eastapp.backend.tasks.TaskRecordChecklistItemRepository;
 import com.eastapp.backend.tasks.TaskRecordRepository;
-import com.eastapp.backend.tasks.TaskScheduleType;
 import com.eastapp.backend.tasks.TaskStatus;
 import com.eastapp.backend.tasks.TaskTemplate;
 import com.eastapp.backend.tasks.TaskTemplateChecklistItem;
@@ -140,7 +139,6 @@ public class TaskService {
             UpsertTaskTemplateRequest request
     ) {
         requireManagement(principal);
-        validateTemplateSchedule(request);
         StockTag tag = requireTag(principal.tenantId(), request.tagId());
         KnowledgeSop linkedSop = requireLinkedSopOrNull(
                 principal.tenantId(), request.linkedSopId()
@@ -154,7 +152,6 @@ public class TaskService {
                 request.requiredPhotoCount(),
                 request.scheduleType(),
                 request.firstTaskDate(),
-                request.endDate(),
                 request.active(),
                 principal.userId()
         ));
@@ -177,7 +174,6 @@ public class TaskService {
             UpsertTaskTemplateRequest request
     ) {
         requireManagement(principal);
-        validateTemplateSchedule(request);
         TaskTemplate template = requireTemplate(principal.tenantId(), templateId);
         StockTag previousTag = requireTag(principal.tenantId(), template.getTagId());
         // Freeze today's version before changing the template. Edits affect the
@@ -199,7 +195,6 @@ public class TaskService {
                 request.requiredPhotoCount(),
                 request.scheduleType(),
                 request.firstTaskDate(),
-                request.endDate(),
                 request.active(),
                 principal.userId()
         );
@@ -648,7 +643,6 @@ public class TaskService {
                 template.getRequiredPhotoCount(),
                 template.getScheduleType(),
                 template.getFirstTaskDate(),
-                template.getEndDate(),
                 checks,
                 template.isActive(),
                 person(tenantId, template.getCreatedByUserId()),
@@ -1025,22 +1019,6 @@ public class TaskService {
                     HttpStatus.FORBIDDEN,
                     "TASK_MANAGEMENT_REQUIRED",
                     "Only Owner, Head or Manager may manage task templates."
-            );
-        }
-    }
-
-    private void validateTemplateSchedule(UpsertTaskTemplateRequest request) {
-        if (request.endDate() != null && request.endDate().isBefore(request.firstTaskDate())) {
-            throw badRequest(
-                    "TASK_END_DATE_INVALID",
-                    "End date must not be before the first task date."
-            );
-        }
-        if (request.scheduleType() == TaskScheduleType.AD_HOC
-                && request.endDate() != null) {
-            throw badRequest(
-                    "TASK_END_DATE_NOT_ALLOWED",
-                    "An ad hoc task does not need an end date."
             );
         }
     }

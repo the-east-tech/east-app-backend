@@ -20,15 +20,15 @@ public interface StockReceivingRepository extends JpaRepository<StockReceiving, 
             select receiving
             from StockReceiving receiving
             where receiving.tenant.id = :tenantId
-              and (:filterByReviewStatus = false or receiving.reviewStatus = :reviewStatus)
+              and (:filterByWorkflowStatus = false or receiving.workflowStatus = :workflowStatus)
               and (:filterByFrom = false or receiving.capturedAt >= :fromInclusive)
               and (:filterByTo = false or receiving.capturedAt < :toExclusive)
             order by receiving.capturedAt desc, receiving.id desc
             """)
     Page<StockReceiving> searchByTenant(
             @Param("tenantId") UUID tenantId,
-            @Param("filterByReviewStatus") boolean filterByReviewStatus,
-            @Param("reviewStatus") String reviewStatus,
+            @Param("filterByWorkflowStatus") boolean filterByWorkflowStatus,
+            @Param("workflowStatus") StockWorkflowStatus workflowStatus,
             @Param("filterByFrom") boolean filterByFrom,
             @Param("fromInclusive") Instant fromInclusive,
             @Param("filterByTo") boolean filterByTo,
@@ -47,12 +47,12 @@ public interface StockReceivingRepository extends JpaRepository<StockReceiving, 
             Instant toExclusive
     );
 
-    long countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+    long countByTenant_IdAndWorkflowStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
             UUID tenantId,
-            String reviewStatus,
+            StockWorkflowStatus workflowStatus,
             Instant fromInclusive,
             Instant toExclusive
     );
 
-    long countByTenant_IdAndReviewStatus(UUID tenantId, String reviewStatus);
+    long countByTenant_IdAndWorkflowStatus(UUID tenantId, StockWorkflowStatus workflowStatus);
 }

@@ -1011,9 +1011,9 @@ public class BusinessReportService {
                 .map(StockSku::getId)
                 .collect(Collectors.toSet());
         List<StockCountSubmission> approvedCounts = stockCountRepository
-                .findAllByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtAsc(
+                .findAllByTenant_IdAndWorkflowStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtAsc(
                         tenantId,
-                        StockWorkflowStatus.DONE.name(),
+                        StockWorkflowStatus.DONE,
                         fromInclusive,
                         toExclusive
                 );

@@ -18,7 +18,6 @@ public record TaskTemplateResponse(
         int requiredPhotoCount,
         TaskScheduleType scheduleType,
         LocalDate firstTaskDate,
-        LocalDate endDate,
         List<String> checklistItems,
         boolean active,
         TaskPersonResponse createdBy,

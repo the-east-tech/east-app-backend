@@ -1,6 +1,7 @@
 package com.eastapp.backend.stock.api;
 
 import com.eastapp.backend.stock.StockCountSubmission;
+import com.eastapp.backend.stock.StockWorkflowStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
@@ -26,8 +27,7 @@ public record StockCountSubmissionResponse(
         boolean belowMinimumBalance,
         Map<String, Boolean> checkedItems,
         Map<String, String> remarks,
-        String reviewStatus,
-        String workflowStatus,
+        StockWorkflowStatus workflowStatus,
         String reviewedBy,
         String reviewedAt,
         String reviewNote
@@ -46,7 +46,7 @@ public record StockCountSubmissionResponse(
                 item.getStockPhotoName(), item.getInvoicePhotoName(),
                 item.getPreviousBalanceValue(), item.getCurrentBalanceValue(),
                 item.isBelowMinimumBalance(), Map.copyOf(item.getCheckedItems()),
-                Map.copyOf(item.getRemarks()), item.getReviewStatus(), item.getWorkflowStatus(),
+                Map.copyOf(item.getRemarks()), item.getWorkflowStatus(),
                 item.getReviewedBy() == null ? "" : item.getReviewedBy().getEmployeeId(),
                 StockResponseSupport.label(item.getReviewedAt()), item.getReviewNote()
         );

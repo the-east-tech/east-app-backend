@@ -79,10 +79,7 @@ public class ActivityService {
         ));
 
         List<UserAccount> recipients = userRepository
-                .findAllByTenant_IdAndActiveTrueOrderByIdentity_FullNameAsc(actor.tenantId())
-                .stream()
-                .filter(user -> !user.getId().equals(actor.userId()))
-                .toList();
+                .findAllByTenant_IdAndActiveTrueOrderByIdentity_FullNameAsc(actor.tenantId());
         if (recipients.isEmpty()) return;
 
         List<UserNotification> notifications = recipients.stream()

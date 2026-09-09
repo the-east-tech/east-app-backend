@@ -70,6 +70,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -223,7 +224,7 @@ public class StockService {
     public PageResponse<StockCountSubmissionResponse> listCounts(
             AuthenticatedUser principal,
             boolean mine,
-            String reviewStatus,
+            StockWorkflowStatus workflowStatus,
             LocalDate from,
             LocalDate to,
             int page,
@@ -232,13 +233,13 @@ public class StockService {
         DateRange range = dateRange(from, to);
         boolean filterBySubmittedBy = mine || !principal.isHead() && !principal.isManager();
         UUID submittedByUserId = principal.userId();
-        String resolvedReviewStatus = reviewStatus(reviewStatus);
         Page<StockCountSubmission> source = countRepository.searchByTenant(
                 principal.tenantId(),
                 filterBySubmittedBy,
                 submittedByUserId,
-                resolvedReviewStatus != null,
-                resolvedReviewStatus == null ? "" : resolvedReviewStatus,
+                workflowStatus != null,
+                workflowStatus,
+                StockWorkflowStatus.PENDING,
                 range.filterByFrom(),
                 range.fromInclusive(),
                 range.filterByTo(),
@@ -263,19 +264,18 @@ public class StockService {
     @Transactional(readOnly = true)
     public PageResponse<StockReceivingResponse> listReceivings(
             AuthenticatedUser principal,
-            String reviewStatus,
+            StockWorkflowStatus workflowStatus,
             LocalDate from,
             LocalDate to,
             int page,
             int size
     ) {
         DateRange range = dateRange(from, to);
-        String resolvedReviewStatus = reviewStatus(reviewStatus);
         return PageResponse.from(
                 receivingRepository.searchByTenant(
                         principal.tenantId(),
-                        resolvedReviewStatus != null,
-                        resolvedReviewStatus == null ? "" : resolvedReviewStatus,
+                        workflowStatus != null,
+                        workflowStatus,
                         range.filterByFrom(),
                         range.fromInclusive(),
                         range.filterByTo(),
@@ -473,9 +473,22 @@ public class StockService {
     public List<StockSkuChangeRequestResponse> listSkuChangeRequests(
             AuthenticatedUser principal
     ) {
-        return skuChangeRequestRepository.findAllByTenantIdOrderByUpdatedAtDesc(principal.tenantId())
+        List<StockSkuChangeRequest> requests = skuChangeRequestRepository
+                .findAllByTenantIdOrderByUpdatedAtDesc(principal.tenantId());
+        Set<UUID> userIds = requests.stream()
+                .flatMap(request -> java.util.stream.Stream.of(
+                        request.getRequestedByUserId(), request.getReviewedByUserId()
+                ))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> userNames = userIds.isEmpty()
+                ? Map.of()
+                : userAccountRepository.findAllByTenant_IdAndIdIn(principal.tenantId(), userIds)
+                        .stream()
+                        .collect(Collectors.toMap(UserAccount::getId, UserAccount::getFullName));
+        return requests
                 .stream()
-                .map(request -> skuChangeResponse(principal.tenantId(), request))
+                .map(request -> skuChangeResponse(request, userNames))
                 .toList();
     }
 
@@ -490,12 +503,7 @@ public class StockService {
                 .orElseThrow(() -> notFound(
                         "STOCK_SKU_CHANGE_NOT_FOUND", "SKU change request not found."
                 ));
-        StockWorkflowStatus next;
-        try {
-            next = StockWorkflowStatus.fromReviewAction(request.status());
-        } catch (IllegalArgumentException exception) {
-            throw badRequest("INVALID_REVIEW_STATUS", exception.getMessage());
-        }
+        StockWorkflowStatus next = requireReviewDecision(request.status());
         if (change.getWorkflowStatus() != StockWorkflowStatus.SUBMITTED) {
             throw conflict(
                     "STOCK_SKU_CHANGE_NOT_REVIEWABLE",
@@ -545,12 +553,9 @@ public class StockService {
             throw conflict("STOCK_SKU_CHANGE_ALREADY_SUBMITTED", exception.getMessage());
         }
         change = skuChangeRequestRepository.saveAndFlush(change);
-        StockWorkflowStatus eventPrevious = previous == StockWorkflowStatus.PENDING
-                ? StockWorkflowStatus.PENDING
-                : null;
         workflowActivityService.recordTransition(
                 principal, "Stock", "SKU change", change.getId(), skuName,
-                eventPrevious, StockWorkflowStatus.SUBMITTED,
+                previous, StockWorkflowStatus.SUBMITTED,
                 "/api/v1/stock/sku-change-requests/" + change.getId()
         );
         return skuChangeResponse(principal.tenantId(), change);
@@ -610,7 +615,7 @@ public class StockService {
         sku.update(
                 request.name(), tag1, tag2, request.unit(),
                 request.minimumBalanceValue(), request.maximumBalanceValue(),
-                request.currentBalanceValue(), request.recoveryPercent(),
+                sku.getCurrentBalanceValue(), request.recoveryPercent(),
                 request.minimumPriceRm(), request.maximumPriceRm(),
                 suppliers(principal.tenantId(), request.supplierIds()),
                 thumbnail, request.assignedStaffNames(),
@@ -660,6 +665,23 @@ public class StockService {
             UUID tenantId,
             StockSkuChangeRequest request
     ) {
+        Set<UUID> userIds = java.util.stream.Stream.of(
+                        request.getRequestedByUserId(), request.getReviewedByUserId()
+                )
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> userNames = userIds.isEmpty()
+                ? Map.of()
+                : userAccountRepository.findAllByTenant_IdAndIdIn(tenantId, userIds)
+                        .stream()
+                        .collect(Collectors.toMap(UserAccount::getId, UserAccount::getFullName));
+        return skuChangeResponse(request, userNames);
+    }
+
+    private StockSkuChangeRequestResponse skuChangeResponse(
+            StockSkuChangeRequest request,
+            Map<UUID, String> userNames
+    ) {
         return new StockSkuChangeRequestResponse(
                 request.getId(),
                 request.getSkuId(),
@@ -670,20 +692,13 @@ public class StockService {
                         ? null
                         : readSkuPayload(request),
                 request.getRequestedByUserId(),
-                userName(tenantId, request.getRequestedByUserId()),
+                userNames.getOrDefault(request.getRequestedByUserId(), ""),
                 request.getSubmittedAt(),
                 request.getReviewedByUserId(),
-                userName(tenantId, request.getReviewedByUserId()),
+                userNames.getOrDefault(request.getReviewedByUserId(), ""),
                 request.getReviewedAt(),
                 request.getReviewNote()
         );
-    }
-
-    private String userName(UUID tenantId, UUID userId) {
-        if (userId == null) return "";
-        return userAccountRepository.findByIdAndTenant_Id(userId, tenantId)
-                .map(UserAccount::getFullName)
-                .orElse("");
     }
 
     @Transactional
@@ -712,11 +727,11 @@ public class StockService {
             );
         }
         Instant cycleStartedAt = countCycleStartedAt(sku, now);
-        if (countRepository.existsByTenant_IdAndSku_IdAndCountCycleStartedAtAndReviewStatusNot(
+        if (countRepository.existsByTenant_IdAndSku_IdAndCountCycleStartedAtAndWorkflowStatusNot(
                 principal.tenantId(),
                 sku.getId(),
                 cycleStartedAt,
-                StockWorkflowStatus.PENDING.name()
+                StockWorkflowStatus.PENDING
         )) {
             throw conflict(
                     "STOCK_COUNT_ALREADY_SUBMITTED",
@@ -750,15 +765,15 @@ public class StockService {
         StockCountSubmission submission = countRepository
                 .findByIdAndTenant_Id(submissionId, principal.tenantId())
                 .orElseThrow(() -> notFound("STOCK_COUNT_NOT_FOUND", "Stock count not found."));
-        String previous = submission.getReviewStatus();
-        if (!"Pending Review".equals(previous)) {
+        if (submission.getWorkflowStatus() != StockWorkflowStatus.SUBMITTED) {
             throw conflict("STOCK_COUNT_ALREADY_REVIEWED", "This stock count has already been reviewed.");
         }
-        submission.review(request.status(), request.note(), actor(principal));
+        StockWorkflowStatus next = requireReviewDecision(request.status());
+        submission.review(next, request.note(), actor(principal));
         workflowActivityService.recordTransition(
                 principal, "Stock", "stock count", submission.getId(),
                 submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,
-                StockWorkflowStatus.fromReviewAction(request.status()),
+                next,
                 "/api/v1/stock/counts/" + submission.getId()
         );
         return StockCountSubmissionResponse.from(
@@ -802,7 +817,7 @@ public class StockService {
                 .toList();
 
         for (StockCountSubmission submission : ordered) {
-            if (!"Pending Review".equals(submission.getReviewStatus())) {
+            if (submission.getWorkflowStatus() != StockWorkflowStatus.SUBMITTED) {
                 throw conflict(
                         "STOCK_COUNT_ALREADY_REVIEWED",
                         "At least one selected stock check has already been reviewed. No records were changed."
@@ -811,6 +826,7 @@ public class StockService {
         }
 
         UserAccount reviewer = actor(principal);
+        StockWorkflowStatus next = requireReviewDecision(request.status());
         String note = request.note() == null ? "" : request.note().trim();
         Map<UUID, String> photoPaths = skuPhotoPaths(
                 principal.tenantId(),
@@ -818,11 +834,11 @@ public class StockService {
         );
         List<StockCountSubmissionResponse> responses = new ArrayList<>();
         for (StockCountSubmission submission : ordered) {
-            submission.review(request.status(), note, reviewer);
+            submission.review(next, note, reviewer);
             workflowActivityService.recordTransition(
                     principal, "Stock", "stock count", submission.getId(),
                     submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,
-                    StockWorkflowStatus.fromReviewAction(request.status()),
+                    next,
                     "/api/v1/stock/counts/" + submission.getId()
             );
             responses.add(StockCountSubmissionResponse.from(
@@ -900,15 +916,15 @@ public class StockService {
         StockReceiving receiving = receivingRepository
                 .findByIdAndTenant_Id(receivingId, principal.tenantId())
                 .orElseThrow(() -> notFound("STOCK_RECEIVING_NOT_FOUND", "Receiving record not found."));
-        String previous = receiving.getReviewStatus();
-        if (!"Pending Review".equals(previous)) {
+        if (receiving.getWorkflowStatus() != StockWorkflowStatus.SUBMITTED) {
             throw conflict("STOCK_RECEIVING_ALREADY_REVIEWED", "This receiving record has already been reviewed.");
         }
-        receiving.review(request.status(), request.note(), actor(principal));
+        StockWorkflowStatus next = requireReviewDecision(request.status());
+        receiving.review(next, request.note(), actor(principal));
         workflowActivityService.recordTransition(
                 principal, "Stock", "stock receiving", receiving.getId(),
                 receiving.getSupplier().getSupplierName(), StockWorkflowStatus.SUBMITTED,
-                StockWorkflowStatus.fromReviewAction(request.status()),
+                next,
                 "/api/v1/stock/receivings/" + receiving.getId()
         );
         return StockReceivingResponse.from(receiving);
@@ -929,16 +945,16 @@ public class StockService {
                         principal.tenantId(), fromInclusive, toExclusive
                 );
         long countPending = countRepository
-                .countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+                .countByTenant_IdAndWorkflowStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
                         principal.tenantId(),
-                        StockWorkflowStatus.SUBMITTED.name(),
+                        StockWorkflowStatus.SUBMITTED,
                         fromInclusive,
                         toExclusive
                 );
         long receivingPending = receivingRepository
-                .countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+                .countByTenant_IdAndWorkflowStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
                         principal.tenantId(),
-                        StockWorkflowStatus.SUBMITTED.name(),
+                        StockWorkflowStatus.SUBMITTED,
                         fromInclusive,
                         toExclusive
                 );
@@ -954,7 +970,20 @@ public class StockService {
 
         long total = countTotal + receivingTotal + skuChangeTotal;
         long pending = countPending + receivingPending + skuChangePending;
-        return new StockReviewSummaryResponse(pending, total - pending, total);
+        return new StockReviewSummaryResponse(
+                pending,
+                total - pending,
+                total,
+                countRepository.countByTenant_IdAndWorkflowStatus(
+                        principal.tenantId(), StockWorkflowStatus.SUBMITTED
+                ),
+                receivingRepository.countByTenant_IdAndWorkflowStatus(
+                        principal.tenantId(), StockWorkflowStatus.SUBMITTED
+                ),
+                skuChangeRequestRepository.countByTenantIdAndWorkflowStatus(
+                        principal.tenantId(), StockWorkflowStatus.SUBMITTED
+                )
+        );
     }
 
     private static PageRequest pageRequest(int page, int size) {
@@ -965,16 +994,14 @@ public class StockService {
         return search == null ? "" : search.trim();
     }
 
-    private static String reviewStatus(String value) {
-        if (value == null || value.isBlank()) return null;
-        try {
-            return StockWorkflowStatus.canonicalFilter(value);
-        } catch (IllegalArgumentException exception) {
-            throw badRequest(
-                    "INVALID_REVIEW_STATUS",
-                    "Review status must be Pending Review, Approved or Rejected."
-            );
+    private static StockWorkflowStatus requireReviewDecision(StockWorkflowStatus status) {
+        if (status == StockWorkflowStatus.DONE || status == StockWorkflowStatus.PENDING) {
+            return status;
         }
+        throw badRequest(
+                "INVALID_WORKFLOW_STATUS",
+                "Workflow status must be DONE or PENDING."
+        );
     }
 
     private static DateRange dateRange(LocalDate from, LocalDate to) {

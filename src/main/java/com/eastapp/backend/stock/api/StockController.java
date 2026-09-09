@@ -2,8 +2,8 @@ package com.eastapp.backend.stock.api;
 
 import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.stock.StockWorkflowStatus;
 import com.eastapp.backend.stock.service.StockMediaService;
-import com.eastapp.backend.stock.service.StockReviewSummaryService;
 import com.eastapp.backend.stock.service.StockService;
 import com.eastapp.backend.stock.service.StockSkuCsvService;
 import jakarta.validation.Valid;
@@ -37,18 +37,15 @@ public class StockController {
     private final StockService stockService;
     private final StockMediaService stockMediaService;
     private final StockSkuCsvService stockSkuCsvService;
-    private final StockReviewSummaryService stockReviewSummaryService;
 
     public StockController(
             StockService stockService,
             StockMediaService stockMediaService,
-            StockSkuCsvService stockSkuCsvService,
-            StockReviewSummaryService stockReviewSummaryService
+            StockSkuCsvService stockSkuCsvService
     ) {
         this.stockService = stockService;
         this.stockMediaService = stockMediaService;
         this.stockSkuCsvService = stockSkuCsvService;
-        this.stockReviewSummaryService = stockReviewSummaryService;
     }
 
 
@@ -178,26 +175,26 @@ public class StockController {
     PageResponse<StockCountSubmissionResponse> counts(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(defaultValue = "false") boolean mine,
-            @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) StockWorkflowStatus workflowStatus,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
-        return stockService.listCounts(principal, mine, reviewStatus, from, to, page, size);
+        return stockService.listCounts(principal, mine, workflowStatus, from, to, page, size);
     }
 
     @GetMapping("/receivings")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     PageResponse<StockReceivingResponse> receivings(
             @AuthenticationPrincipal AuthenticatedUser principal,
-            @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) StockWorkflowStatus workflowStatus,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
-        return stockService.listReceivings(principal, reviewStatus, from, to, page, size);
+        return stockService.listReceivings(principal, workflowStatus, from, to, page, size);
     }
 
     @PostMapping("/tags")
@@ -365,10 +362,7 @@ public class StockController {
     StockReviewSummaryResponse todayReviewSummary(
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
-        return stockReviewSummaryService.withOutstanding(
-                principal,
-                stockService.todayReviewSummary(principal)
-        );
+        return stockService.todayReviewSummary(principal);
     }
 
 }

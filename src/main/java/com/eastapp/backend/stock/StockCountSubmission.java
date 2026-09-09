@@ -6,6 +6,8 @@ import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -64,7 +66,8 @@ public class StockCountSubmission {
     @Column(name = "remark_value", nullable = false, length = 1000)
     private Map<String, String> remarks = new LinkedHashMap<>();
     @Column(name = "review_status", nullable = false, length = 24)
-    private String reviewStatus = StockWorkflowStatus.SUBMITTED.name();
+    @Enumerated(EnumType.STRING)
+    private StockWorkflowStatus workflowStatus = StockWorkflowStatus.SUBMITTED;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by_user_id")
     private UserAccount reviewedBy;
@@ -97,20 +100,21 @@ public class StockCountSubmission {
         this.belowMinimumBalance = currentBalanceValue.compareTo(sku.getMinimumBalanceValue()) < 0;
         if (checkedItems != null) this.checkedItems.putAll(checkedItems);
         if (remarks != null) remarks.forEach((key, value) -> this.remarks.put(key, text(value)));
-        this.reviewStatus = StockWorkflowStatus.SUBMITTED.name();
+        this.workflowStatus = StockWorkflowStatus.SUBMITTED;
     }
 
-    public void review(String status, String note, UserAccount actor) {
-        StockWorkflowStatus current = StockWorkflowStatus.fromStored(reviewStatus);
-        if (current != StockWorkflowStatus.SUBMITTED) {
+    public void review(StockWorkflowStatus next, String note, UserAccount actor) {
+        if (workflowStatus != StockWorkflowStatus.SUBMITTED) {
             throw new IllegalStateException("Only a submitted stock count may be reviewed.");
         }
-        StockWorkflowStatus next = StockWorkflowStatus.fromReviewAction(status);
+        if (next != StockWorkflowStatus.DONE && next != StockWorkflowStatus.PENDING) {
+            throw new IllegalArgumentException("Stock count status must be DONE or PENDING.");
+        }
         UserAccount reviewer = Objects.requireNonNull(actor);
         if (next == StockWorkflowStatus.PENDING) {
             sku.updateBalance(previousBalanceValue, reviewer);
         }
-        this.reviewStatus = next.name();
+        this.workflowStatus = next;
         this.reviewNote = text(note);
         this.reviewedBy = reviewer;
         this.reviewedAt = Instant.now();
@@ -129,8 +133,7 @@ public class StockCountSubmission {
     public boolean isBelowMinimumBalance() { return belowMinimumBalance; }
     public Map<String, Boolean> getCheckedItems() { return checkedItems; }
     public Map<String, String> getRemarks() { return remarks; }
-    public String getReviewStatus() { return StockWorkflowStatus.fromStored(reviewStatus).legacyLabel(); }
-    public String getWorkflowStatus() { return StockWorkflowStatus.fromStored(reviewStatus).name(); }
+    public StockWorkflowStatus getWorkflowStatus() { return workflowStatus; }
     public UserAccount getReviewedBy() { return reviewedBy; }
     public Instant getReviewedAt() { return reviewedAt; }
     public String getReviewNote() { return reviewNote; }
