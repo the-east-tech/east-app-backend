@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,6 +30,7 @@ public record UpsertStockSkuRequest(
         List<@Size(max = 300) String> receivingChecklist,
         @NotNull StockCheckSchedule stockCheckSchedule,
         Integer stockCheckDay,
+        LocalDate stockCheckDate,
         boolean active,
         boolean coolingPeriod
 ) {}

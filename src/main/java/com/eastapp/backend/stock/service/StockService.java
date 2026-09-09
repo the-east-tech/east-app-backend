@@ -402,7 +402,7 @@ public class StockService {
         boolean inUse = skuRepository.existsByTenant_IdAndSuppliers_Id(
                 principal.tenantId(), supplierId)
                 || receivingRepository.existsByTenant_IdAndSupplier_Id(
-                principal.tenantId(), supplierId);
+                        principal.tenantId(), supplierId);
         if (inUse) {
             throw conflict(
                     "STOCK_SUPPLIER_IN_USE",
@@ -585,7 +585,8 @@ public class StockService {
                 suppliers(principal.tenantId(), request.supplierIds()),
                 thumbnail, request.assignedStaffNames(),
                 request.receivingChecklist(), request.stockCheckSchedule(),
-                request.stockCheckDay(), request.active(), request.coolingPeriod(), actor
+                request.stockCheckDay(), request.stockCheckDate(),
+                request.active(), request.coolingPeriod(), actor
         ));
     }
 
@@ -614,7 +615,8 @@ public class StockService {
                 suppliers(principal.tenantId(), request.supplierIds()),
                 thumbnail, request.assignedStaffNames(),
                 request.receivingChecklist(), request.stockCheckSchedule(),
-                request.stockCheckDay(), request.active(), request.coolingPeriod(),
+                request.stockCheckDay(), request.stockCheckDate(),
+                request.active(), request.coolingPeriod(),
                 actor(principal)
         );
         return sku;
@@ -700,7 +702,16 @@ public class StockService {
                     "This SKU is not assigned to the current user."
             );
         }
-        Instant cycleStartedAt = countCycleStartedAt(sku, Instant.now());
+        Instant now = Instant.now();
+        LocalDate today = now.atZone(ZONE_ID).toLocalDate();
+        if (sku.getStockCheckSchedule() == StockCheckSchedule.AD_HOC
+                && today.isBefore(sku.getStockCheckDate())) {
+            throw conflict(
+                    "STOCK_CHECK_NOT_DUE",
+                    "This ad hoc stock check is not due yet."
+            );
+        }
+        Instant cycleStartedAt = countCycleStartedAt(sku, now);
         if (countRepository.existsByTenant_IdAndSku_IdAndCountCycleStartedAtAndReviewStatusNot(
                 principal.tenantId(),
                 sku.getId(),
@@ -1209,13 +1220,14 @@ public class StockService {
     private static Instant countCycleStartedAt(StockSku sku, Instant now) {
         LocalDate today = now.atZone(ZONE_ID).toLocalDate();
         LocalDate cycleDate = switch (sku.getStockCheckSchedule()) {
+            case AD_HOC -> sku.getStockCheckDate();
             case DAILY -> today;
             case WEEKLY -> today.minusDays(Math.floorMod(
                     today.getDayOfWeek().getValue() - sku.getStockCheckDay(),
                     7
             ));
             case MONTHLY -> {
-                int day = sku.getStockCheckDay();
+                int day = sku.getStockCheckDay() == null ? 31 : sku.getStockCheckDay();
                 YearMonth month = YearMonth.from(today);
                 LocalDate candidate = monthlyStockCheckDate(month, day);
                 if (candidate.isAfter(today)) {

@@ -1,4 +1,4 @@
--- EastApp clean reset-per-release schema (v118).
+-- EastApp clean reset-per-release schema (v120).
 -- This V1 contains the complete schema for a brand-new EastApp database.
 -- While the reset-per-release policy is active, merge every schema change into
 -- this file, keep V1 as the only migration, and reset the database each release.
@@ -326,6 +326,7 @@ CREATE TABLE stock_skus (
     thumbnail_media_id UUID NOT NULL,
     stock_check_schedule VARCHAR(16) NOT NULL DEFAULT 'DAILY',
     stock_check_day INTEGER,
+    stock_check_date DATE,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     cooling_period BOOLEAN NOT NULL DEFAULT TRUE,
     last_updated_by_user_id UUID NOT NULL,
@@ -597,7 +598,6 @@ CREATE TABLE translation_cache (
 -- ============================================================================
 -- User points
 -- ============================================================================
-
 -- Immutable tenant-scoped point adjustment ledger.
 
 CREATE TABLE user_point_adjustments (
@@ -697,11 +697,9 @@ CREATE TABLE business_reports (
     CONSTRAINT fk_business_reports_submitter_same_tenant
         FOREIGN KEY (tenant_id, submitted_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT fk_business_reports_reviewer_same_tenant
-        FOREIGN KEY (tenant_id, reviewed_by_user_id)
+    CONSTRAINT fk_business_reports_reviewer_same_tenant FOREIGN KEY (tenant_id, reviewed_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT fk_business_reports_amender_same_tenant
-        FOREIGN KEY (tenant_id, amended_by_user_id)
+    CONSTRAINT fk_business_reports_amender_same_tenant FOREIGN KEY (tenant_id, amended_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_business_reports_tenant_id_id UNIQUE (tenant_id, id)
 );
@@ -861,8 +859,7 @@ CREATE TABLE task_templates (
     instruction VARCHAR(1000) NOT NULL DEFAULT '',
     required_photo_count INTEGER NOT NULL,
     schedule_type VARCHAR(16) NOT NULL,
-    first_task_date DATE NOT NULL,
-    end_date DATE,
+    schedule_reference_date DATE NOT NULL,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_by_user_id UUID NOT NULL,
     updated_by_user_id UUID NOT NULL,
@@ -884,7 +881,7 @@ CREATE TABLE task_templates (
     CONSTRAINT uq_task_templates_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE INDEX ix_task_templates_tenant_active_tag
-    ON task_templates (tenant_id, active, first_task_date, end_date, tag_id, lower(title));
+    ON task_templates (tenant_id, active, schedule_type, schedule_reference_date, tag_id, lower(title));
 CREATE INDEX ix_task_templates_tenant_linked_sop
     ON task_templates (tenant_id, linked_sop_id)
     WHERE linked_sop_id IS NOT NULL;

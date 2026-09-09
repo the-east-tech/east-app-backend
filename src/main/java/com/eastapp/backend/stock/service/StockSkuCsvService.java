@@ -38,6 +38,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -53,7 +54,7 @@ import java.util.UUID;
 @Service
 public class StockSkuCsvService {
     private static final String FORMAT_NAME = "EASTAPP_SKU_CSV";
-    private static final int FORMAT_VERSION = 2;
+    private static final int FORMAT_VERSION = 3;
     private static final String LANGUAGES = "ENGLISH|CHINESE";
     private static final int MAX_FILE_BYTES = 2 * 1024 * 1024;
     private static final int MAX_ROWS = 1_000;
@@ -80,6 +81,7 @@ public class StockSkuCsvService {
             "receiving_checklist",
             "stock_check_schedule",
             "stock_check_day",
+            "stock_check_date",
             "active",
             "cooling_period"
     );
@@ -147,6 +149,7 @@ public class StockSkuCsvService {
                             objectMapper.writeValueAsString(sku.getReceivingChecklist()),
                             sku.getStockCheckSchedule().name(),
                             sku.getStockCheckDay() == null ? "" : sku.getStockCheckDay(),
+                            sku.getStockCheckDate() == null ? "" : sku.getStockCheckDate(),
                             sku.isActive(),
                             sku.isCoolingPeriod()
                     );
@@ -268,6 +271,7 @@ public class StockSkuCsvService {
                     row.receivingChecklist(),
                     row.stockCheckSchedule(),
                     row.stockCheckDay(),
+                    row.stockCheckDate(),
                     row.active(),
                     row.coolingPeriod()
             ));
@@ -410,15 +414,38 @@ public class StockSkuCsvService {
                     requiredText(record, "stock_check_schedule", 16).toUpperCase(Locale.ROOT)
             );
         } catch (IllegalArgumentException exception) {
-            throw invalid("stock_check_schedule must be DAILY, WEEKLY or MONTHLY.");
+            throw invalid("stock_check_schedule must be AD_HOC, DAILY, WEEKLY or MONTHLY.");
         }
+        String dayText = text(record, "stock_check_day");
+        String dateText = text(record, "stock_check_date");
         Integer stockCheckDay = null;
-        if (stockCheckSchedule == StockCheckSchedule.WEEKLY) {
-            stockCheckDay = integer(record, "stock_check_day", 1, 7);
-        } else if (stockCheckSchedule == StockCheckSchedule.MONTHLY) {
-            stockCheckDay = integer(record, "stock_check_day", 1, 31);
-        } else if (!text(record, "stock_check_day").isEmpty()) {
-            throw invalid("stock_check_day must be blank for DAILY.");
+        LocalDate stockCheckDate = null;
+        switch (stockCheckSchedule) {
+            case AD_HOC -> {
+                if (!dayText.isEmpty()) {
+                    throw invalid("stock_check_day must be blank for AD_HOC.");
+                }
+                stockCheckDate = localDate(record, "stock_check_date");
+            }
+            case DAILY -> {
+                if (!dayText.isEmpty() || !dateText.isEmpty()) {
+                    throw invalid("stock_check_day and stock_check_date must be blank for DAILY.");
+                }
+            }
+            case WEEKLY -> {
+                stockCheckDay = integer(record, "stock_check_day", 1, 7);
+                if (!dateText.isEmpty()) {
+                    throw invalid("stock_check_date must be blank for WEEKLY.");
+                }
+            }
+            case MONTHLY -> {
+                if (!dayText.isEmpty()) {
+                    stockCheckDay = integer(record, "stock_check_day", 1, 28);
+                }
+                if (!dateText.isEmpty()) {
+                    throw invalid("stock_check_date must be blank for MONTHLY.");
+                }
+            }
         }
         return new ParsedSku(
                 name,
@@ -434,6 +461,7 @@ public class StockSkuCsvService {
                 checklist,
                 stockCheckSchedule,
                 stockCheckDay,
+                stockCheckDate,
                 bool(record, "active"),
                 bool(record, "cooling_period")
         );
@@ -560,6 +588,14 @@ public class StockSkuCsvService {
         }
     }
 
+    private static LocalDate localDate(CSVRecord record, String header) {
+        try {
+            return LocalDate.parse(requiredText(record, header, 10));
+        } catch (DateTimeParseException exception) {
+            throw invalid(header + " must use YYYY-MM-DD format.");
+        }
+    }
+
     private static boolean bool(CSVRecord record, String header) {
         String value = requiredText(record, header, 5);
         if ("true".equalsIgnoreCase(value)) return true;
@@ -629,6 +665,7 @@ public class StockSkuCsvService {
             List<String> receivingChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
+            LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod
     ) {}
