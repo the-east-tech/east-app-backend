@@ -1,6 +1,7 @@
 package com.eastapp.backend.stock.api;
 
 import com.eastapp.backend.stock.StockReceiving;
+import com.eastapp.backend.stock.StockWorkflowStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -15,8 +16,7 @@ public record StockReceivingResponse(
         String invoicePhotoName,
         String goodsPhotoName,
         List<StockReceivingItemResponse> items,
-        String reviewStatus,
-        String workflowStatus,
+        StockWorkflowStatus workflowStatus,
         String reviewedBy,
         String reviewedAt,
         String reviewNote
@@ -27,7 +27,7 @@ public record StockReceivingResponse(
                 item.getReceivedBy().getEmployeeId(), StockResponseSupport.label(item.getCapturedAt()),
                 item.getCapturedAt(), item.getInvoicePhotoName(), item.getGoodsPhotoName(),
                 item.getItems().stream().map(StockReceivingItemResponse::from).toList(),
-                item.getReviewStatus(), item.getWorkflowStatus(),
+                item.getWorkflowStatus(),
                 item.getReviewedBy() == null ? "" : item.getReviewedBy().getEmployeeId(),
                 StockResponseSupport.label(item.getReviewedAt()), item.getReviewNote()
         );

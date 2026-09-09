@@ -81,7 +81,6 @@ public class TaskTemplate {
             int requiredPhotoCount,
             TaskScheduleType scheduleType,
             LocalDate firstTaskDate,
-            LocalDate ignoredEndDate,
             boolean active,
             UUID actorUserId
     ) {
@@ -89,7 +88,7 @@ public class TaskTemplate {
         this.createdByUserId = Objects.requireNonNull(actorUserId, "actorUserId must not be null");
         update(
                 tagId, linkedSopId, title, instruction, requiredPhotoCount,
-                scheduleType, firstTaskDate, ignoredEndDate, active, actorUserId
+                scheduleType, firstTaskDate, active, actorUserId
         );
     }
 
@@ -101,7 +100,6 @@ public class TaskTemplate {
             int requiredPhotoCount,
             TaskScheduleType scheduleType,
             LocalDate firstTaskDate,
-            LocalDate ignoredEndDate,
             boolean active,
             UUID actorUserId
     ) {
@@ -128,7 +126,6 @@ public class TaskTemplate {
     public int getRequiredPhotoCount() { return requiredPhotoCount; }
     public TaskScheduleType getScheduleType() { return scheduleType; }
     public LocalDate getFirstTaskDate() { return firstTaskDate; }
-    public LocalDate getEndDate() { return null; }
     public boolean isActive() { return active; }
     public UUID getCreatedByUserId() { return createdByUserId; }
     public UUID getUpdatedByUserId() { return updatedByUserId; }

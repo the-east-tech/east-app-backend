@@ -5,6 +5,8 @@ import com.eastapp.backend.people.UserAccount;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -49,7 +51,8 @@ public class StockReceiving {
     @OrderBy("position ASC")
     private List<StockReceivingItem> items = new ArrayList<>();
     @Column(name = "review_status", nullable = false, length = 24)
-    private String reviewStatus = StockWorkflowStatus.SUBMITTED.name();
+    @Enumerated(EnumType.STRING)
+    private StockWorkflowStatus workflowStatus = StockWorkflowStatus.SUBMITTED;
     @Column(name = "order_reference", updatable = false)
     private UUID orderReference;
     @ManyToOne(fetch = FetchType.LAZY)
@@ -76,7 +79,7 @@ public class StockReceiving {
         this.capturedAt = Objects.requireNonNull(capturedAt);
         this.invoicePhotoName = text(invoicePhotoName);
         this.goodsPhotoName = text(goodsPhotoName);
-        this.reviewStatus = StockWorkflowStatus.SUBMITTED.name();
+        this.workflowStatus = StockWorkflowStatus.SUBMITTED;
         this.orderReference = supplier.beginReceiving();
     }
 
@@ -85,12 +88,13 @@ public class StockReceiving {
         items.add(item);
     }
 
-    public void review(String status, String note, UserAccount actor) {
-        StockWorkflowStatus current = StockWorkflowStatus.fromStored(reviewStatus);
-        if (current != StockWorkflowStatus.SUBMITTED) {
+    public void review(StockWorkflowStatus next, String note, UserAccount actor) {
+        if (workflowStatus != StockWorkflowStatus.SUBMITTED) {
             throw new IllegalStateException("Only a submitted receiving record may be reviewed.");
         }
-        StockWorkflowStatus next = StockWorkflowStatus.fromReviewAction(status);
+        if (next != StockWorkflowStatus.DONE && next != StockWorkflowStatus.PENDING) {
+            throw new IllegalArgumentException("Stock receiving status must be DONE or PENDING.");
+        }
         UserAccount reviewer = Objects.requireNonNull(actor);
         if (next == StockWorkflowStatus.PENDING) {
             for (StockReceivingItem item : items) {
@@ -100,7 +104,7 @@ public class StockReceiving {
                 sku.updateBalance(reverted, reviewer);
             }
         }
-        this.reviewStatus = next.name();
+        this.workflowStatus = next;
         this.reviewNote = text(note);
         this.reviewedBy = reviewer;
         this.reviewedAt = Instant.now();
@@ -115,8 +119,7 @@ public class StockReceiving {
     public String getInvoicePhotoName() { return invoicePhotoName; }
     public String getGoodsPhotoName() { return goodsPhotoName; }
     public List<StockReceivingItem> getItems() { return items; }
-    public String getReviewStatus() { return StockWorkflowStatus.fromStored(reviewStatus).legacyLabel(); }
-    public String getWorkflowStatus() { return StockWorkflowStatus.fromStored(reviewStatus).name(); }
+    public StockWorkflowStatus getWorkflowStatus() { return workflowStatus; }
     public UUID getOrderReference() { return orderReference; }
     public UserAccount getReviewedBy() { return reviewedBy; }
     public Instant getReviewedAt() { return reviewedAt; }

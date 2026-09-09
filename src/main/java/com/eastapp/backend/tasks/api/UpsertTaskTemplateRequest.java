@@ -19,7 +19,6 @@ public record UpsertTaskTemplateRequest(
         @Min(1) @Max(40) int requiredPhotoCount,
         @NotNull TaskScheduleType scheduleType,
         @NotNull LocalDate firstTaskDate,
-        LocalDate endDate,
         @NotNull @Size(min = 1, max = 5)
         List<@NotBlank @Size(max = 300) String> checklistItems,
         boolean active

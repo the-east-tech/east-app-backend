@@ -26,8 +26,8 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             where submission.tenant.id = :tenantId
               and (:filterBySubmittedBy = false or submission.submittedBy.id = :submittedByUserId)
               and (
-                    (:filterByReviewStatus = false and submission.reviewStatus <> 'PENDING')
-                    or (:filterByReviewStatus = true and submission.reviewStatus = :reviewStatus)
+                    (:filterByWorkflowStatus = false and submission.workflowStatus <> :pendingStatus)
+                    or (:filterByWorkflowStatus = true and submission.workflowStatus = :workflowStatus)
                   )
               and (:filterByFrom = false or submission.capturedAt >= :fromInclusive)
               and (:filterByTo = false or submission.capturedAt < :toExclusive)
@@ -37,8 +37,9 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             @Param("tenantId") UUID tenantId,
             @Param("filterBySubmittedBy") boolean filterBySubmittedBy,
             @Param("submittedByUserId") UUID submittedByUserId,
-            @Param("filterByReviewStatus") boolean filterByReviewStatus,
-            @Param("reviewStatus") String reviewStatus,
+            @Param("filterByWorkflowStatus") boolean filterByWorkflowStatus,
+            @Param("workflowStatus") StockWorkflowStatus workflowStatus,
+            @Param("pendingStatus") StockWorkflowStatus pendingStatus,
             @Param("filterByFrom") boolean filterByFrom,
             @Param("fromInclusive") Instant fromInclusive,
             @Param("filterByTo") boolean filterByTo,
@@ -46,11 +47,11 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             Pageable pageable
     );
 
-    boolean existsByTenant_IdAndSku_IdAndCountCycleStartedAtAndReviewStatusNot(
+    boolean existsByTenant_IdAndSku_IdAndCountCycleStartedAtAndWorkflowStatusNot(
             UUID tenantId,
             UUID skuId,
             Instant countCycleStartedAt,
-            String excludedReviewStatus
+            StockWorkflowStatus excludedWorkflowStatus
     );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -61,9 +62,9 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
     Optional<StockCountSubmission> findByIdAndTenant_Id(UUID id, UUID tenantId);
 
     @EntityGraph(attributePaths = {"tenant", "sku", "submittedBy", "reviewedBy"})
-    List<StockCountSubmission> findAllByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtAsc(
+    List<StockCountSubmission> findAllByTenant_IdAndWorkflowStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtAsc(
             UUID tenantId,
-            String reviewStatus,
+            StockWorkflowStatus workflowStatus,
             Instant fromInclusive,
             Instant toExclusive
     );
@@ -74,12 +75,12 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             Instant toExclusive
     );
 
-    long countByTenant_IdAndReviewStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
+    long countByTenant_IdAndWorkflowStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
             UUID tenantId,
-            String reviewStatus,
+            StockWorkflowStatus workflowStatus,
             Instant fromInclusive,
             Instant toExclusive
     );
 
-    long countByTenant_IdAndReviewStatus(UUID tenantId, String reviewStatus);
+    long countByTenant_IdAndWorkflowStatus(UUID tenantId, StockWorkflowStatus workflowStatus);
 }
