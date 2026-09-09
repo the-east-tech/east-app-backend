@@ -182,6 +182,7 @@ public class BusinessReportService {
                     0,
                     0,
                     0,
+                    0,
                     List.of()
             );
         }
@@ -261,6 +262,12 @@ public class BusinessReportService {
                         BusinessReportType.SALES,
                         ReportWorkflowStatus.SUBMITTED
                 ));
+        int pendingWasteApprovals = Math.toIntExact(reportRepository
+                .countByTenantIdAndReportTypeAndWorkflowStatus(
+                        principal.tenantId(),
+                        BusinessReportType.WASTE,
+                        ReportWorkflowStatus.SUBMITTED
+                ));
         int pendingTaskApprovals = principal.hasPermission(SystemPermission.TASK_RATE)
                 ? taskService.pendingApprovalCount(principal)
                 : 0;
@@ -289,6 +296,7 @@ public class BusinessReportService {
                 complaints,
                 pendingApprovals,
                 pendingSalesApprovals,
+                pendingWasteApprovals,
                 pendingTaskApprovals,
                 trend
         );
