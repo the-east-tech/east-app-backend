@@ -80,4 +80,6 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             Instant fromInclusive,
             Instant toExclusive
     );
+
+    long countByTenant_IdAndReviewStatus(UUID tenantId, String reviewStatus);
 }

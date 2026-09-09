@@ -3,6 +3,7 @@ package com.eastapp.backend.stock.api;
 import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.stock.service.StockMediaService;
+import com.eastapp.backend.stock.service.StockReviewSummaryService;
 import com.eastapp.backend.stock.service.StockService;
 import com.eastapp.backend.stock.service.StockSkuCsvService;
 import jakarta.validation.Valid;
@@ -36,15 +37,18 @@ public class StockController {
     private final StockService stockService;
     private final StockMediaService stockMediaService;
     private final StockSkuCsvService stockSkuCsvService;
+    private final StockReviewSummaryService stockReviewSummaryService;
 
     public StockController(
             StockService stockService,
             StockMediaService stockMediaService,
-            StockSkuCsvService stockSkuCsvService
+            StockSkuCsvService stockSkuCsvService,
+            StockReviewSummaryService stockReviewSummaryService
     ) {
         this.stockService = stockService;
         this.stockMediaService = stockMediaService;
         this.stockSkuCsvService = stockSkuCsvService;
+        this.stockReviewSummaryService = stockReviewSummaryService;
     }
 
 
@@ -361,7 +365,10 @@ public class StockController {
     StockReviewSummaryResponse todayReviewSummary(
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
-        return stockService.todayReviewSummary(principal);
+        return stockReviewSummaryService.withOutstanding(
+                principal,
+                stockService.todayReviewSummary(principal)
+        );
     }
 
 }

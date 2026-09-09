@@ -48,4 +48,9 @@ public interface StockSkuChangeRequestRepository
             Instant fromInclusive,
             Instant toExclusive
     );
+
+    long countByTenantIdAndWorkflowStatus(
+            UUID tenantId,
+            StockWorkflowStatus workflowStatus
+    );
 }
