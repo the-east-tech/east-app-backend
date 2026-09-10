@@ -40,6 +40,7 @@ public class UserPointsService {
         List<UserAccount> activeUsers = userRepository
                 .findAllByTenant_IdAndActiveTrueOrderByIdentity_FullNameAsc(principal.tenantId())
                 .stream()
+                .filter(user -> user.getRole().getSystemKey() != SystemRole.ADMIN)
                 .filter(user -> user.getRole().getSystemKey() != SystemRole.OWNER)
                 .toList();
         Map<UUID, Long> totals = totalsByUser(principal.tenantId());
@@ -103,7 +104,8 @@ public class UserPointsService {
 
         UserAccount recipient = userRepository.findByIdAndTenant_Id(request.userId(), principal.tenantId())
                 .orElseThrow(() -> notFound("USER_NOT_FOUND", "The selected user was not found."));
-        if (recipient.getRole().getSystemKey() == SystemRole.OWNER) {
+        if (recipient.getRole().getSystemKey() == SystemRole.ADMIN
+                || recipient.getRole().getSystemKey() == SystemRole.OWNER) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,
                     "OWNER_POINTS_NOT_APPLICABLE",

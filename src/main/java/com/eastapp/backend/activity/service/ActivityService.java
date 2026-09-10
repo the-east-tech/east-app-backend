@@ -14,6 +14,7 @@ import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
+import com.eastapp.backend.people.SystemRole;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -63,12 +64,13 @@ public class ActivityService {
             UUID targetId,
             String route
     ) {
+        boolean hiddenAdmin = actor.systemRole() == SystemRole.ADMIN;
         ActivityEvent event = eventRepository.saveAndFlush(new ActivityEvent(
                 actor.tenantId(),
                 actor.userId(),
-                actor.fullName(),
-                actor.employeeId(),
-                actor.systemRole().name(),
+                hiddenAdmin ? "System" : actor.fullName(),
+                hiddenAdmin ? "-" : actor.employeeId(),
+                hiddenAdmin ? "SYSTEM" : actor.systemRole().name(),
                 module,
                 action,
                 entityType,

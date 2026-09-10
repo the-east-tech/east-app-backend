@@ -18,9 +18,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -82,28 +80,27 @@ public class TenantService {
         assertUnique(companyCode, prefix);
 
         UserAccount creator = currentActor(actor);
-        Map<UUID, UserAccount> existingOwnersByIdentity = new LinkedHashMap<>();
-        userAccountRepository
-                .findAllByRole_SystemKeyAndActiveTrueOrderByCreatedAtAsc(SystemRole.OWNER)
-                .stream()
-                .filter(user -> user.getIdentity().isActive())
-                .filter(user -> user.getTenant().isActive())
-                .filter(user -> user.getRole().isActive())
-                .forEach(user -> existingOwnersByIdentity.putIfAbsent(
-                        user.getIdentity().getId(), user
-                ));
-
         TenantProvisioningService.ProvisionedTenant provisioned = tenantProvisioningService.provision(
                 companyCode, request.businessName(), prefix,
                 googlePlace,
                 creator.getIdentity(), creator.getFullName(), creator.getPhoneE164(),
                 creator.getProfilePhotoKey(), creator.getBirthDate(),
-                creator.getStartDate(), creator.getEndDate()
+                creator.getStartDate(), creator.getEndDate(),
+                actor.isAdmin() ? SystemRole.ADMIN : SystemRole.OWNER
         );
 
-        existingOwnersByIdentity.values().stream()
-                .filter(owner -> !owner.getIdentity().getId().equals(creator.getIdentity().getId()))
-                .forEach(owner -> tenantProvisioningService.addOwnerContext(provisioned, owner));
+        if (!actor.isAdmin()) {
+            userAccountRepository
+                    .findAllByRole_SystemKeyAndActiveTrueOrderByCreatedAtAsc(SystemRole.ADMIN)
+                    .stream()
+                    .filter(user -> user.getIdentity().isActive())
+                    .filter(user -> user.getTenant().isActive())
+                    .filter(user -> user.getRole().isActive())
+                    .findFirst()
+                    .ifPresent(admin -> tenantProvisioningService.addAdminContext(
+                            provisioned.tenant(), admin
+                    ));
+        }
 
         return TenantResponse.from(provisioned.tenant());
     }

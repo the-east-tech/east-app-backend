@@ -15,7 +15,7 @@ public class TaskAccessPolicy {
         if (!RolePermissionPolicy.allows(reviewerRole, SystemPermission.TASK_RATE)) {
             return false;
         }
-        if (reviewerRole == SystemRole.OWNER) return true;
+        if (reviewerRole == SystemRole.ADMIN || reviewerRole == SystemRole.OWNER) return true;
         return submitterRole != null && reviewerRole.rank() < submitterRole.rank();
     }
 }

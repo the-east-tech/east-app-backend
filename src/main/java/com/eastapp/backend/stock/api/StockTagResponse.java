@@ -23,7 +23,7 @@ public record StockTagResponse(
         return new StockTagResponse(
                 item.getId(),
                 item.getTag(),
-                item.getCreatedBy().getEmployeeId(),
+                StockResponseSupport.employeeId(item.getCreatedBy()),
                 StockResponseSupport.label(item.getCreatedAt()),
                 StockResponseSupport.label(item.getUpdatedAt()),
                 List.copyOf(assignedUsers)

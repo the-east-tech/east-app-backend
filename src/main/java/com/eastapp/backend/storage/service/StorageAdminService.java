@@ -1,11 +1,8 @@
 package com.eastapp.backend.storage.service;
 
-import com.eastapp.backend.auth.LoginIdentityRepository;
+import com.eastapp.backend.auth.permission.SystemPermission;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
-import com.eastapp.backend.organisation.TenantRepository;
-import com.eastapp.backend.people.UserAccount;
-import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.storage.api.StorageCleanupResponse;
 import com.eastapp.backend.storage.api.StorageOverviewResponse;
 import org.springframework.http.HttpStatus;
@@ -21,8 +18,6 @@ import java.util.Set;
 
 @Service
 public class StorageAdminService {
-    private static final String ADMIN_EMPLOYEE_ID = "E0001";
-    private static final String ADMIN_PHONE = "+60166016488";
     private static final String UNUSED_STOCK_MEDIA = """
             not exists (
                 select 1 from stock_skus sku
@@ -162,20 +157,9 @@ public class StorageAdminService {
     );
 
     private final JdbcTemplate jdbcTemplate;
-    private final LoginIdentityRepository loginIdentityRepository;
-    private final TenantRepository tenantRepository;
-    private final UserAccountRepository userAccountRepository;
 
-    public StorageAdminService(
-            JdbcTemplate jdbcTemplate,
-            LoginIdentityRepository loginIdentityRepository,
-            TenantRepository tenantRepository,
-            UserAccountRepository userAccountRepository
-    ) {
+    public StorageAdminService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        this.loginIdentityRepository = loginIdentityRepository;
-        this.tenantRepository = tenantRepository;
-        this.userAccountRepository = userAccountRepository;
     }
 
     @Transactional(readOnly = true)
@@ -384,24 +368,7 @@ public class StorageAdminService {
     }
 
     private void assertStorageAdmin(AuthenticatedUser principal) {
-        UserAccount actor = userAccountRepository
-                .findByIdAndTenant_Id(principal.userId(), principal.tenantId())
-                .orElseThrow(() -> forbidden());
-        UserAccount founder = userAccountRepository
-                .findFirstByTenant_IdOrderByCreatedAtAscIdAsc(principal.tenantId())
-                .orElseThrow(() -> forbidden());
-        var initialIdentity = loginIdentityRepository
-                .findFirstByOrderByCreatedAtAscIdAsc()
-                .orElseThrow(() -> forbidden());
-        var initialTenant = tenantRepository
-                .findFirstByOrderByCreatedAtAscIdAsc()
-                .orElseThrow(() -> forbidden());
-        if (!principal.isOwner()
-                || !actor.getId().equals(founder.getId())
-                || !actor.getIdentity().getId().equals(initialIdentity.getId())
-                || !actor.getTenant().getId().equals(initialTenant.getId())
-                || !ADMIN_EMPLOYEE_ID.equals(actor.getEmployeeId())
-                || !ADMIN_PHONE.equals(actor.getPhoneE164())) {
+        if (!principal.hasPermission(SystemPermission.STORAGE_ADMIN)) {
             throw forbidden();
         }
     }

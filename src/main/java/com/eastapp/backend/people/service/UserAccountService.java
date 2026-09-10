@@ -10,7 +10,6 @@ import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.organisation.service.EmployeeIdService;
-import com.eastapp.backend.organisation.service.TenantProvisioningService;
 import com.eastapp.backend.people.Role;
 import com.eastapp.backend.people.RoleRepository;
 import com.eastapp.backend.people.SystemRole;
@@ -42,7 +41,6 @@ public class UserAccountService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmployeeIdService employeeIdService;
-    private final TenantProvisioningService tenantProvisioningService;
 
     public UserAccountService(
             UserAccountRepository userAccountRepository,
@@ -51,8 +49,7 @@ public class UserAccountService {
             TenantRepository tenantRepository,
             RoleRepository roleRepository,
             PasswordEncoder passwordEncoder,
-            EmployeeIdService employeeIdService,
-            TenantProvisioningService tenantProvisioningService
+            EmployeeIdService employeeIdService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.loginIdentityRepository = loginIdentityRepository;
@@ -61,7 +58,6 @@ public class UserAccountService {
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.employeeIdService = employeeIdService;
-        this.tenantProvisioningService = tenantProvisioningService;
     }
 
     @Transactional(readOnly = true)
@@ -122,12 +118,6 @@ public class UserAccountService {
         );
         membership = userAccountRepository.save(membership);
 
-        if (role.getSystemKey() == SystemRole.OWNER) {
-            UserAccount sourceOwner = membership;
-            tenantRepository.findAllByActiveTrueOrderByBusinessNameAsc().stream()
-                    .filter(other -> !other.getId().equals(tenantId))
-                    .forEach(other -> tenantProvisioningService.addOwnerContext(other, sourceOwner));
-        }
         return UserResponse.from(membership);
     }
 
@@ -135,6 +125,9 @@ public class UserAccountService {
     public UserResponse update(AuthenticatedUser actor, UUID userId, UpdateUserRequest request) {
         UserAccount target = findVisibleUser(actor, userId);
         assertActorMayManageUser(actor, target);
+        if (target.getRole().getSystemKey() == SystemRole.ADMIN) {
+            throw conflict("ADMIN_ACCOUNT_PROTECTED", "The founding administrator cannot be changed here.");
+        }
 
         Role newRole = findActiveRole(actor.tenantId(), request.roleId());
         assertRoleMayBeAssigned(actor, newRole);
@@ -165,11 +158,6 @@ public class UserAccountService {
             revokeSessions(target.getId());
         }
 
-        if (newRole.getSystemKey() == SystemRole.OWNER) {
-            tenantRepository.findAllByActiveTrueOrderByBusinessNameAsc().stream()
-                    .filter(tenant -> !tenant.getId().equals(target.getTenant().getId()))
-                    .forEach(tenant -> tenantProvisioningService.addOwnerContext(tenant, target));
-        }
         return UserResponse.from(target);
     }
 
@@ -183,6 +171,7 @@ public class UserAccountService {
 
     private static List<SystemRole> visibleRoles(AuthenticatedUser actor) {
         return Arrays.stream(SystemRole.values())
+                .filter(role -> role != SystemRole.ADMIN)
                 .filter(actor.systemRole()::canView)
                 .toList();
     }
@@ -255,7 +244,8 @@ public class UserAccountService {
     }
 
     private static void assertRoleMayBeAssigned(AuthenticatedUser actor, Role role) {
-        if (!actor.systemRole().canAssign(role.getSystemKey())) {
+        if (role.getSystemKey() == SystemRole.ADMIN
+                || !actor.systemRole().canAssign(role.getSystemKey())) {
             throw forbidden("ROLE_ASSIGNMENT_DENIED", "The selected role is not assignable by the current user.");
         }
     }
@@ -273,7 +263,7 @@ public class UserAccountService {
 
     private static void assertOwnerAccountRemainsOwner(Role newRole, boolean active) {
         if (newRole.getSystemKey() != SystemRole.OWNER || !active) {
-            throw conflict("OWNER_ACCOUNT_PROTECTED", "Owner access is system-wide and cannot be demoted or deactivated here.");
+            throw conflict("OWNER_ACCOUNT_PROTECTED", "Owner access cannot be demoted or deactivated here.");
         }
     }
 
