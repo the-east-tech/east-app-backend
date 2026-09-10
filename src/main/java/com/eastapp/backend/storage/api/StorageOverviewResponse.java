@@ -1,32 +1,28 @@
 package com.eastapp.backend.storage.api;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 public record StorageOverviewResponse(
         Instant measuredAt,
         long databaseBytes,
         long applicationTablesBytes,
-        List<TableUsage> tables,
-        List<CleanupAction> cleanupActions
+        List<TableUsage> tables
 ) {
     public record TableUsage(
             String tableName,
             String group,
             String dataUse,
-            long estimatedRows,
+            long rowCount,
+            LocalDate oldestDate,
+            LocalDate latestDate,
             long dataBytes,
             long indexBytes,
-            long totalBytes
-    ) {
-    }
-
-    public record CleanupAction(
-            String key,
-            String title,
-            String description,
-            int retentionDays,
-            long currentBytes
+            long totalBytes,
+            boolean deleteAllowed,
+            long deletableRows,
+            String deleteDescription
     ) {
     }
 }

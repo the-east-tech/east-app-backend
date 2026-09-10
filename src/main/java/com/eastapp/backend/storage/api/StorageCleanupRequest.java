@@ -1,4 +1,9 @@
 package com.eastapp.backend.storage.api;
 
-public record StorageCleanupRequest(boolean confirmed) {
+import jakarta.validation.constraints.Min;
+
+public record StorageCleanupRequest(
+        boolean confirmed,
+        @Min(1) int rowCount
+) {
 }

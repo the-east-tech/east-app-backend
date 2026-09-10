@@ -2,6 +2,7 @@ package com.eastapp.backend.storage.api;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.storage.service.StorageAdminService;
+import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,8 +31,13 @@ public class StorageAdminController {
     StorageCleanupResponse cleanup(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable String key,
-            @RequestBody StorageCleanupRequest request
+            @Valid @RequestBody StorageCleanupRequest request
     ) {
-        return storageAdminService.cleanup(principal, key, request.confirmed());
+        return storageAdminService.cleanup(
+                principal,
+                key,
+                request.confirmed(),
+                request.rowCount()
+        );
     }
 }
