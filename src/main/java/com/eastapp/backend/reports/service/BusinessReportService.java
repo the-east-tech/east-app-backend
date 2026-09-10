@@ -1618,7 +1618,9 @@ public class BusinessReportService {
         return userRepository.findAllByTenant_IdOrderByIdentity_FullNameAsc(tenantId)
                 .stream().collect(Collectors.toMap(
                         UserAccount::getId,
-                        UserAccount::getFullName,
+                        user -> user.getRole().getSystemKey() == SystemRole.ADMIN
+                                ? "System"
+                                : user.getFullName(),
                         (left, right) -> left,
                         LinkedHashMap::new
                 ));
@@ -1652,7 +1654,9 @@ public class BusinessReportService {
 
     private boolean requiresDailyPhotos(UserAccount user) {
         SystemRole role = user.getRole().getSystemKey();
-        return role != SystemRole.OWNER && role != SystemRole.HEAD;
+        return role != SystemRole.ADMIN
+                && role != SystemRole.OWNER
+                && role != SystemRole.HEAD;
     }
 
     private BusinessReport requireReport(
@@ -1740,7 +1744,9 @@ public class BusinessReportService {
     }
 
     private boolean isSeniorManagement(SystemRole role) {
-        return role == SystemRole.OWNER || role == SystemRole.HEAD;
+        return role == SystemRole.ADMIN
+                || role == SystemRole.OWNER
+                || role == SystemRole.HEAD;
     }
 
     private void validateEditableDate(AuthenticatedUser principal, LocalDate reportDate) {

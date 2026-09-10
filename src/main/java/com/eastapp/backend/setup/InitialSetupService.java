@@ -6,6 +6,7 @@ import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.organisation.service.TenantProvisioningService;
+import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.places.GooglePlaceDetails;
 import com.eastapp.backend.places.service.GooglePlacesService;
 import com.eastapp.backend.setup.api.CompleteInitialSetupRequest;
@@ -144,16 +145,17 @@ public class InitialSetupService {
                 null,
                 null,
                 null,
-                null
+                null,
+                SystemRole.ADMIN
         );
 
         setupCodeService.invalidate();
         log.info("EastApp initial setup completed businessCode={} employeeId={}",
-                provisioned.tenant().getCompanyCode(), provisioned.owner().getEmployeeId());
+                provisioned.tenant().getCompanyCode(), provisioned.creator().getEmployeeId());
         return new CompleteInitialSetupResponse(
                 provisioned.tenant().getCompanyCode(),
                 provisioned.tenant().getBusinessName(),
-                provisioned.owner().getEmployeeId()
+                provisioned.creator().getEmployeeId()
         );
     }
 

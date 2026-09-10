@@ -1,5 +1,8 @@
 package com.eastapp.backend.stock.api;
 
+import com.eastapp.backend.people.SystemRole;
+import com.eastapp.backend.people.UserAccount;
+
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -14,5 +17,12 @@ final class StockResponseSupport {
 
     static String label(Instant value) {
         return value == null ? "" : LABEL.format(value);
+    }
+
+    static String employeeId(UserAccount user) {
+        if (user == null) return "";
+        return user.getRole().getSystemKey() == SystemRole.ADMIN
+                ? "System"
+                : user.getEmployeeId();
     }
 }

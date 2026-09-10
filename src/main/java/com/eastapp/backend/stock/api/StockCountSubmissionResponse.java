@@ -41,13 +41,13 @@ public record StockCountSubmissionResponse(
                 item.getSku().getName(), item.getSku().getUnit(),
                 item.getSku().getCategory(), item.getSku().getLocation(), skuPhotoPath,
                 item.getSku().getMinimumBalanceValue(), item.getSku().getMaximumBalanceValue(),
-                item.getSubmittedBy().getEmployeeId(),
+                StockResponseSupport.employeeId(item.getSubmittedBy()),
                 StockResponseSupport.label(item.getCapturedAt()), item.getCapturedAt(),
                 item.getStockPhotoName(), item.getInvoicePhotoName(),
                 item.getPreviousBalanceValue(), item.getCurrentBalanceValue(),
                 item.isBelowMinimumBalance(), Map.copyOf(item.getCheckedItems()),
                 Map.copyOf(item.getRemarks()), item.getWorkflowStatus(),
-                item.getReviewedBy() == null ? "" : item.getReviewedBy().getEmployeeId(),
+                StockResponseSupport.employeeId(item.getReviewedBy()),
                 StockResponseSupport.label(item.getReviewedAt()), item.getReviewNote()
         );
     }

@@ -47,7 +47,7 @@ public record StockSkuResponse(
                 List.copyOf(item.getReceivingChecklist()),
                 item.getStockCheckSchedule(), item.getStockCheckDay(), item.getStockCheckDate(),
                 StockResponseSupport.label(item.getUpdatedAt()),
-                item.getLastUpdatedBy().getEmployeeId(), item.isActive(), item.isCoolingPeriod()
+                StockResponseSupport.employeeId(item.getLastUpdatedBy()), item.isActive(), item.isCoolingPeriod()
         );
     }
 }

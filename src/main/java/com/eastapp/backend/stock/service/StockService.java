@@ -5,6 +5,7 @@ import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
+import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.activity.service.WorkflowActivityService;
 import com.eastapp.backend.common.error.ApiException;
@@ -485,7 +486,7 @@ public class StockService {
                 ? Map.of()
                 : userAccountRepository.findAllByTenant_IdAndIdIn(principal.tenantId(), userIds)
                         .stream()
-                        .collect(Collectors.toMap(UserAccount::getId, UserAccount::getFullName));
+                        .collect(Collectors.toMap(UserAccount::getId, StockService::publicUserName));
         return requests
                 .stream()
                 .map(request -> skuChangeResponse(request, userNames))
@@ -674,7 +675,7 @@ public class StockService {
                 ? Map.of()
                 : userAccountRepository.findAllByTenant_IdAndIdIn(tenantId, userIds)
                         .stream()
-                        .collect(Collectors.toMap(UserAccount::getId, UserAccount::getFullName));
+                        .collect(Collectors.toMap(UserAccount::getId, StockService::publicUserName));
         return skuChangeResponse(request, userNames);
     }
 
@@ -1096,6 +1097,7 @@ public class StockService {
                 ? Map.of()
                 : userAccountRepository.findAllByTenant_IdAndIdIn(tenantId, userIds)
                         .stream()
+                        .filter(user -> user.getRole().getSystemKey() != SystemRole.ADMIN)
                         .collect(Collectors.toMap(UserAccount::getId, user -> user));
         Map<UUID, List<UserAccount>> result = new LinkedHashMap<>();
         for (StockTagAssignee assignment : assignments) {
@@ -1127,6 +1129,7 @@ public class StockService {
                 ? Map.of()
                 : userAccountRepository.findAllByTenant_IdAndIdIn(tenantId, uniqueIds)
                         .stream()
+                        .filter(user -> user.getRole().getSystemKey() != SystemRole.ADMIN)
                         .collect(Collectors.toMap(UserAccount::getId, user -> user));
         if (usersById.size() != uniqueIds.size()) {
             throw notFound(
@@ -1216,6 +1219,12 @@ public class StockService {
 
     private static String photoPath(StockSku sku, Map<UUID, String> photoPaths) {
         return photoPaths.getOrDefault(sku.getThumbnailMediaId(), "");
+    }
+
+    private static String publicUserName(UserAccount user) {
+        return user.getRole().getSystemKey() == SystemRole.ADMIN
+                ? "System"
+                : user.getFullName();
     }
 
     private void requireReceivingPhoto(UUID tenantId, String storageKey, String label) {

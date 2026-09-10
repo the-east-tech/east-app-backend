@@ -3,6 +3,7 @@ package com.eastapp.backend.people.service;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.people.Role;
 import com.eastapp.backend.people.RoleRepository;
+import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.people.api.RoleResponse;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ public class RoleService {
         return roleRepository.findAllByTenant_IdOrderByNameAsc(tenantId)
                 .stream()
                 .filter(Role::isActive)
+                .filter(role -> role.getSystemKey() != SystemRole.ADMIN)
                 .filter(role -> actor.systemRole().canView(role.getSystemKey()))
                 .sorted((left, right) -> Integer.compare(left.getSystemKey().rank(), right.getSystemKey().rank()))
                 .map(role -> RoleResponse.from(role, counts.getOrDefault(role.getId(), 0L)))
@@ -45,6 +47,7 @@ public class RoleService {
         return roleRepository.findAllByTenant_IdOrderByNameAsc(actor.tenantId())
                 .stream()
                 .filter(Role::isActive)
+                .filter(role -> role.getSystemKey() != SystemRole.ADMIN)
                 .filter(role -> actor.systemRole().canAssign(role.getSystemKey()))
                 .sorted((left, right) -> Integer.compare(left.getSystemKey().rank(), right.getSystemKey().rank()))
                 .map(role -> RoleResponse.from(role, 0))

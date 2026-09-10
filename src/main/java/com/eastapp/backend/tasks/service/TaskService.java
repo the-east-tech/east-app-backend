@@ -994,11 +994,12 @@ public class TaskService {
     }
 
     private TaskPersonResponse person(UserAccount user) {
+        boolean hiddenAdmin = user.getRole().getSystemKey() == SystemRole.ADMIN;
         return new TaskPersonResponse(
                 user.getId(),
-                user.getFullName(),
-                user.getEmployeeId(),
-                user.getRole().getSystemKey()
+                hiddenAdmin ? "System" : user.getFullName(),
+                hiddenAdmin ? "-" : user.getEmployeeId(),
+                hiddenAdmin ? SystemRole.OWNER : user.getRole().getSystemKey()
         );
     }
 

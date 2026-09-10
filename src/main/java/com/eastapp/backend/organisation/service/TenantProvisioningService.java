@@ -38,13 +38,14 @@ public class TenantProvisioningService {
             String businessName,
             String employeeIdPrefix,
             GooglePlaceDetails googlePlace,
-            LoginIdentity ownerIdentity,
-            String ownerFullName,
-            String ownerPhoneE164,
+            LoginIdentity creatorIdentity,
+            String creatorFullName,
+            String creatorPhoneE164,
             String profilePhotoKey,
             LocalDate birthDate,
             LocalDate startDate,
-            LocalDate endDate
+            LocalDate endDate,
+            SystemRole creatorRole
     ) {
         Tenant tenant = new Tenant(companyCode, businessName, employeeIdPrefix);
         tenant.configureGoogleLocation(
@@ -58,6 +59,7 @@ public class TenantProvisioningService {
         tenant = tenantRepository.save(tenant);
 
         List<Role> roles = List.of(
+                new Role(tenant, SystemRole.ADMIN, "Admin"),
                 new Role(tenant, SystemRole.OWNER, "Owner"),
                 new Role(tenant, SystemRole.HEAD, "Head"),
                 new Role(tenant, SystemRole.MANAGER, "Manager"),
@@ -67,94 +69,85 @@ public class TenantProvisioningService {
                 new Role(tenant, SystemRole.PART_TIME, "Part Time")
         );
         roleRepository.saveAll(roles);
-        Role ownerRole = roles.getFirst();
+        Role role = roles.stream()
+                .filter(candidate -> candidate.getSystemKey() == creatorRole)
+                .findFirst()
+                .orElseThrow();
 
-        UserAccount owner = createOwnerContext(
+        UserAccount creator = createContext(
                 tenant,
-                ownerRole,
-                ownerIdentity,
-                ownerFullName,
-                ownerPhoneE164,
+                role,
+                creatorIdentity,
+                creatorFullName,
+                creatorPhoneE164,
                 profilePhotoKey,
                 birthDate,
                 startDate,
                 endDate
         );
-        userAccountRepository.saveAndFlush(owner);
+        userAccountRepository.saveAndFlush(creator);
 
-        return new ProvisionedTenant(tenant, ownerRole, owner);
+        return new ProvisionedTenant(tenant, creator);
     }
 
     @Transactional
-    public UserAccount addOwnerContext(
-            ProvisionedTenant provisioned,
-            UserAccount sourceOwner
-    ) {
-        return addOwnerContext(
-                provisioned.tenant(),
-                provisioned.ownerRole(),
-                sourceOwner
-        );
-    }
-
-    @Transactional
-    public UserAccount addOwnerContext(Tenant tenant, UserAccount sourceOwner) {
+    public UserAccount addAdminContext(Tenant tenant, UserAccount sourceAdmin) {
         Tenant lockedTenant = tenantRepository.findLockedById(tenant.getId())
                 .orElseThrow(() -> new IllegalStateException(
-                        "Tenant is unavailable while creating Owner context " + tenant.getId()
+                        "Tenant is unavailable while creating Admin context " + tenant.getId()
                 ));
-        Role ownerRole = roleRepository
-                .findByTenant_IdAndSystemKey(lockedTenant.getId(), SystemRole.OWNER)
+        Role adminRole = roleRepository
+                .findByTenant_IdAndSystemKey(lockedTenant.getId(), SystemRole.ADMIN)
                 .filter(Role::isActive)
                 .orElseThrow(() -> new IllegalStateException(
-                        "Active Owner role is unavailable for tenant " + lockedTenant.getId()
+                        "Active Admin role is unavailable for tenant " + lockedTenant.getId()
                 ));
-        return addOwnerContext(lockedTenant, ownerRole, sourceOwner);
+        return addContext(lockedTenant, adminRole, sourceAdmin);
     }
 
-    private UserAccount addOwnerContext(
+    private UserAccount addContext(
             Tenant tenant,
-            Role ownerRole,
-            UserAccount sourceOwner
+            Role role,
+            UserAccount sourceUser
     ) {
         if (userAccountRepository.existsByIdentity_IdAndTenant_Id(
-                sourceOwner.getIdentity().getId(),
+                sourceUser.getIdentity().getId(),
                 tenant.getId()
         )) {
             UserAccount existing = userAccountRepository.findByTenant_IdAndIdentity_Id(
                     tenant.getId(),
-                    sourceOwner.getIdentity().getId()
+                    sourceUser.getIdentity().getId()
             ).orElseThrow();
-            existing.assignRole(ownerRole);
+            existing.assignRole(role);
             existing.activate();
             existing.updateProfile(
-                    sourceOwner.getFullName(),
-                    sourceOwner.getPhoneE164(),
-                    sourceOwner.getProfilePhotoKey(),
-                    sourceOwner.getBirthDate(),
-                    sourceOwner.getStartDate(),
-                    sourceOwner.getEndDate()
+                    sourceUser.getFullName(),
+                    sourceUser.getPhoneE164(),
+                    sourceUser.getProfilePhotoKey(),
+                    sourceUser.getBirthDate(),
+                    sourceUser.getStartDate(),
+                    sourceUser.getEndDate()
             );
             return existing;
         }
 
-        UserAccount owner = createOwnerContext(
+        UserAccount user = createContext(
                 tenant,
-                ownerRole,
-                sourceOwner.getIdentity(),
-                sourceOwner.getFullName(),
-                sourceOwner.getPhoneE164(),
-                sourceOwner.getProfilePhotoKey(),
-                sourceOwner.getBirthDate(),
-                sourceOwner.getStartDate(),
-                sourceOwner.getEndDate()
+                role,
+                sourceUser.getIdentity(),
+                sourceUser.getFullName(),
+                sourceUser.getPhoneE164(),
+                sourceUser.getProfilePhotoKey(),
+                sourceUser.getBirthDate(),
+                sourceUser.getStartDate(),
+                sourceUser.getEndDate()
         );
-        return userAccountRepository.save(owner);
+        return userAccountRepository.save(user);
     }
 
-    private static UserAccount createOwnerContext(
+    private static UserAccount createContext(
             Tenant tenant,
-            Role ownerRole,
+            Role role,
             LoginIdentity identity,
             String fullName,
             String phoneE164,
@@ -163,13 +156,13 @@ public class TenantProvisioningService {
             LocalDate startDate,
             LocalDate endDate
     ) {
-        UserAccount owner = new UserAccount(
+        UserAccount user = new UserAccount(
                 tenant,
                 identity,
                 tenant.allocateEmployeeId(),
-                ownerRole
+                role
         );
-        owner.updateProfile(
+        user.updateProfile(
                 fullName,
                 phoneE164,
                 profilePhotoKey,
@@ -177,9 +170,9 @@ public class TenantProvisioningService {
                 startDate,
                 endDate
         );
-        return owner;
+        return user;
     }
 
-    public record ProvisionedTenant(Tenant tenant, Role ownerRole, UserAccount owner) {
+    public record ProvisionedTenant(Tenant tenant, UserAccount creator) {
     }
 }

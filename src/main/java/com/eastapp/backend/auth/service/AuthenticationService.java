@@ -98,9 +98,10 @@ public class AuthenticationService {
     public List<CurrentUserResponse> contexts(AuthenticatedUser principal) {
         assertOwner(principal);
         UserSession session = currentSession(principal.sessionId());
+        SystemRole contextRole = principal.isAdmin() ? SystemRole.ADMIN : SystemRole.OWNER;
         return userAccountRepository.findAllContexts(session.getIdentity().getId()).stream()
                 .filter(AuthenticationService::isLoginAllowed)
-                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
+                .filter(user -> user.getRole().getSystemKey() == contextRole)
                 .map(CurrentUserResponse::from)
                 .toList();
     }
@@ -113,7 +114,8 @@ public class AuthenticationService {
                 .findByIdAndIdentity_Id(targetUserId, session.getIdentity().getId())
                 .orElseThrow(AuthenticationService::contextAccessDenied);
         assertLoginAllowed(target);
-        if (target.getRole().getSystemKey() != SystemRole.OWNER) {
+        SystemRole contextRole = principal.isAdmin() ? SystemRole.ADMIN : SystemRole.OWNER;
+        if (target.getRole().getSystemKey() != contextRole) {
             throw contextAccessDenied();
         }
         session.switchContext(target);

@@ -24,11 +24,11 @@ public record StockReceivingResponse(
     public static StockReceivingResponse from(StockReceiving item) {
         return new StockReceivingResponse(
                 item.getId(), item.getSupplier().getId(), item.getSupplier().getSupplierName(),
-                item.getReceivedBy().getEmployeeId(), StockResponseSupport.label(item.getCapturedAt()),
+                StockResponseSupport.employeeId(item.getReceivedBy()), StockResponseSupport.label(item.getCapturedAt()),
                 item.getCapturedAt(), item.getInvoicePhotoName(), item.getGoodsPhotoName(),
                 item.getItems().stream().map(StockReceivingItemResponse::from).toList(),
                 item.getWorkflowStatus(),
-                item.getReviewedBy() == null ? "" : item.getReviewedBy().getEmployeeId(),
+                StockResponseSupport.employeeId(item.getReviewedBy()),
                 StockResponseSupport.label(item.getReviewedAt()), item.getReviewNote()
         );
     }

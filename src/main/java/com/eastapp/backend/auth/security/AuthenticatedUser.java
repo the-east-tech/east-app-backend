@@ -60,6 +60,9 @@ public record AuthenticatedUser(
     public Collection<? extends GrantedAuthority> authorities() {
         List<GrantedAuthority> authorities = new ArrayList<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_" + systemRole.name()));
+        if (isAdmin()) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_OWNER"));
+        }
         permissions.stream()
                 .sorted()
                 .map(permission -> new SimpleGrantedAuthority(permission.authority()))
@@ -72,12 +75,16 @@ public record AuthenticatedUser(
     }
 
     public boolean isOwner() {
-        return systemRole == SystemRole.OWNER;
+        return isAdmin() || systemRole == SystemRole.OWNER;
+    }
+
+    public boolean isAdmin() {
+        return systemRole == SystemRole.ADMIN;
     }
 
     /** Retains the existing management meaning: Owner or Head. */
     public boolean isHead() {
-        return systemRole == SystemRole.OWNER || systemRole == SystemRole.HEAD;
+        return isOwner() || systemRole == SystemRole.HEAD;
     }
 
     public boolean isManager() {

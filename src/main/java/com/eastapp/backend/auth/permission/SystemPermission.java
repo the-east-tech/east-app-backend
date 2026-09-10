@@ -10,7 +10,8 @@ public enum SystemPermission {
     TASK_CONTRIBUTE,
     TASK_VIEW_ALL,
     TASK_MANAGE,
-    TASK_RATE;
+    TASK_RATE,
+    STORAGE_ADMIN;
 
     public String authority() {
         return "PERMISSION_" + name();

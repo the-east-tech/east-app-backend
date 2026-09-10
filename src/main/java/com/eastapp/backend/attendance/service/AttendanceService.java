@@ -20,6 +20,7 @@ import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
+import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.places.service.GooglePlacesService;
 import com.eastapp.backend.auth.UserSession;
 import com.eastapp.backend.auth.UserSessionRepository;
@@ -243,6 +244,7 @@ public class AttendanceService {
         List<UserAccount> users = userAccountRepository
                 .findAllByTenant_IdOrderByIdentity_FullNameAsc(principal.tenantId())
                 .stream()
+                .filter(user -> user.getRole().getSystemKey() != SystemRole.ADMIN)
                 .filter(user -> principal.systemRole().canView(user.getRole().getSystemKey()))
                 .filter(user -> employmentOverlaps(user, dateRange))
                 .toList();
@@ -322,6 +324,7 @@ public class AttendanceService {
 
         UserAccount user = userAccountRepository
                 .findByIdAndTenant_Id(userId, principal.tenantId())
+                .filter(candidate -> candidate.getRole().getSystemKey() != SystemRole.ADMIN)
                 .filter(candidate -> principal.systemRole().canView(candidate.getRole().getSystemKey()))
                 .orElseThrow(() -> notFound("USER_NOT_FOUND", "User not found."));
 

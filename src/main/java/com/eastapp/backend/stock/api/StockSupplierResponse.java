@@ -31,7 +31,7 @@ public record StockSupplierResponse(
                 item.getMinimumBalanceValue(), item.getMaximumBalanceValue(),
                 item.getCurrentBalanceValue(),
                 StockResponseSupport.label(item.getLastBalanceUpdatedAt()),
-                item.getLastBalanceUpdatedBy().getEmployeeId()
+                StockResponseSupport.employeeId(item.getLastBalanceUpdatedBy())
         );
     }
 }

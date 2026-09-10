@@ -10,7 +10,7 @@ import java.util.Set;
 
 /**
  * Code-managed RBAC policy. Roles receive no permissions unless they are
- * explicitly listed here. Owner is the deliberate superuser exception.
+ * explicitly listed here. Admin is the deliberate internal superuser.
  */
 public final class RolePermissionPolicy {
     private static final Map<SystemRole, Set<SystemPermission>> GRANTS = grants();
@@ -33,9 +33,12 @@ public final class RolePermissionPolicy {
         EnumMap<SystemRole, Set<SystemPermission>> grants = new EnumMap<>(SystemRole.class);
 
         grants.put(
-                SystemRole.OWNER,
+                SystemRole.ADMIN,
                 immutable(EnumSet.allOf(SystemPermission.class))
         );
+        EnumSet<SystemPermission> ownerPermissions = EnumSet.allOf(SystemPermission.class);
+        ownerPermissions.remove(SystemPermission.STORAGE_ADMIN);
+        grants.put(SystemRole.OWNER, immutable(ownerPermissions));
         grants.put(
                 SystemRole.HEAD,
                 headManagementPermissions()
