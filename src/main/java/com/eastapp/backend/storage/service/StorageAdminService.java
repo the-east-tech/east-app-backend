@@ -1,6 +1,5 @@
 package com.eastapp.backend.storage.service;
 
-import com.eastapp.backend.activity.service.NotificationRetentionCleanup;
 import com.eastapp.backend.auth.LoginIdentityRepository;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
@@ -14,11 +13,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Date;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,96 +23,159 @@ import java.util.Set;
 public class StorageAdminService {
     private static final String ADMIN_EMPLOYEE_ID = "E0001";
     private static final String ADMIN_PHONE = "+60166016488";
-    private static final int RETENTION_DAYS = 30;
-
-    private static final List<CleanupDefinition> CLEANUP_DEFINITIONS = List.of(
-            new CleanupDefinition(
-                    "activity",
-                    "Activity & notifications",
-                    "Notifications and activity events older than 30 days are eligible for manual deletion.",
-                    Set.of("activity_events", "user_notifications", "push_outbox")
-            ),
-            new CleanupDefinition(
-                    "attendance",
-                    "Attendance history",
-                    "Attendance scans and expired QR codes older than 30 days.",
-                    Set.of("attendance_events", "attendance_qr_codes")
-            ),
-            new CleanupDefinition(
-                    "stock-counts",
-                    "Stock count history",
-                    "Daily count submissions, checks, remarks and unused photos older than 30 days.",
-                    Set.of(
-                            "stock_count_submissions",
-                            "stock_count_submission_checks",
-                            "stock_count_submission_remarks",
-                            "stock_media"
-                    )
-            ),
-            new CleanupDefinition(
-                    "receiving",
-                    "Receiving history",
-                    "Receiving records, items and unused photos older than 30 days.",
-                    Set.of("stock_receivings", "stock_receiving_items", "stock_media")
-            ),
-            new CleanupDefinition(
-                    "tasks",
-                    "Task history",
-                    "Task records, checklist results and unused task photos older than 30 days.",
-                    Set.of("task_records", "task_record_checklist_items", "task_photos", "report_media")
-            ),
-            new CleanupDefinition(
-                    "reports",
-                    "Report history",
-                    "Business reports, details and unused report photos older than 30 days.",
-                    Set.of(
-                            "business_reports",
-                            "sales_report_details",
-                            "sales_void_bills",
-                            "waste_report_details",
-                            "daily_report_photos",
-                            "complaint_report_details",
-                            "report_media"
-                    )
-            ),
-            new CleanupDefinition(
-                    "video-analytics",
-                    "Video analytics",
-                    "SOP viewing sessions last updated more than 30 days ago.",
-                    Set.of("knowledge_sop_watch_sessions")
-            ),
-            new CleanupDefinition(
-                    "sku-approvals",
-                    "Completed SKU approvals",
-                    "Completed SKU create, edit and delete requests older than 30 days.",
-                    Set.of("stock_sku_change_requests")
-            ),
-            new CleanupDefinition(
-                    "unused-media",
-                    "Unused uploads",
-                    "Uploaded images older than 30 days that are not used by any current record.",
-                    Set.of("stock_media", "report_media")
+    private static final String UNUSED_STOCK_MEDIA = """
+            not exists (
+                select 1 from stock_skus sku
+                where sku.tenant_id = candidate.tenant_id
+                  and sku.thumbnail_media_id = candidate.id
             )
+            and not exists (
+                select 1 from stock_count_submissions count_record
+                where count_record.tenant_id = candidate.tenant_id
+                  and (count_record.stock_photo_name = candidate.storage_key
+                       or count_record.invoice_photo_name = candidate.storage_key)
+            )
+            and not exists (
+                select 1 from stock_receivings receiving
+                where receiving.tenant_id = candidate.tenant_id
+                  and (receiving.invoice_photo_name = candidate.storage_key
+                       or receiving.goods_photo_name = candidate.storage_key)
+            )
+            and not exists (
+                select 1 from stock_sku_change_requests request
+                where request.tenant_id = candidate.tenant_id
+                  and request.workflow_status <> 'DONE'
+                  and request.payload_json::jsonb ->> 'photoPath' = candidate.storage_key
+            )
+            """;
+
+    private static final String UNUSED_REPORT_MEDIA = """
+            not exists (
+                select 1 from advertisements advertisement
+                where advertisement.tenant_id = candidate.tenant_id
+                  and advertisement.image_storage_key = candidate.storage_key
+            )
+            and not exists (
+                select 1 from sales_void_bills bill
+                where bill.tenant_id = candidate.tenant_id
+                  and bill.photo_media_id = candidate.id
+            )
+            and not exists (
+                select 1 from waste_report_details waste
+                where waste.tenant_id = candidate.tenant_id
+                  and waste.photo_media_id = candidate.id
+            )
+            and not exists (
+                select 1 from daily_report_photos photo
+                where photo.tenant_id = candidate.tenant_id
+                  and photo.photo_media_id = candidate.id
+            )
+            and not exists (
+                select 1 from complaint_report_details complaint
+                where complaint.tenant_id = candidate.tenant_id
+                  and complaint.photo_media_id = candidate.id
+            )
+            and not exists (
+                select 1 from task_photos task_photo
+                where task_photo.tenant_id = candidate.tenant_id
+                  and task_photo.photo_media_id = candidate.id
+            )
+            """;
+
+    private static final Map<String, CleanupPolicy> CLEANUP_POLICIES = Map.ofEntries(
+            Map.entry("user_sessions", new CleanupPolicy(
+                    "Revoked login sessions not referenced by attendance records.",
+                    "candidate.revoked_at is not null and not exists (select 1 from attendance_events attendance where attendance.user_session_id = candidate.id)",
+                    "candidate.created_at, candidate.id", false
+            )),
+            Map.entry("activity_events", new CleanupPolicy(
+                    "Oldest activity events without an unread notification. Related read notifications are removed first.",
+                    "not exists (select 1 from user_notifications notification where notification.activity_event_id = candidate.id and notification.read_at is null and notification.dismissed_at is null)",
+                    "candidate.occurred_at, candidate.id", false
+            )),
+            Map.entry("user_notifications", new CleanupPolicy(
+                    "Oldest read or dismissed notifications. Related push delivery rows are removed automatically.",
+                    "candidate.read_at is not null or candidate.dismissed_at is not null",
+                    "candidate.created_at, candidate.id", false
+            )),
+            Map.entry("push_devices", new CleanupPolicy(
+                    "Oldest inactive notification devices. Related push delivery rows are removed automatically.",
+                    "not candidate.active", "candidate.created_at, candidate.id", false
+            )),
+            Map.entry("push_outbox", new CleanupPolicy(
+                    "Oldest push deliveries that were sent or have expired.",
+                    "candidate.sent_at is not null or candidate.expires_at < current_timestamp",
+                    "candidate.created_at, candidate.id", false
+            )),
+            Map.entry("attendance_events", new CleanupPolicy(
+                    "Oldest attendance history. QR codes remain until they are no longer referenced.",
+                    "true", "candidate.occurred_at, candidate.id", true
+            )),
+            Map.entry("attendance_qr_codes", new CleanupPolicy(
+                    "Oldest expired or revoked QR codes that are not referenced by attendance history.",
+                    "(candidate.revoked_at is not null or candidate.expires_at < current_timestamp) and not exists (select 1 from attendance_events attendance where attendance.qr_code_id = candidate.id)",
+                    "candidate.created_at, candidate.id", false
+            )),
+            Map.entry("stock_media", new CleanupPolicy(
+                    "Oldest photos that are not referenced by an SKU, stock count, receiving or pending SKU request.",
+                    UNUSED_STOCK_MEDIA, "candidate.created_at, candidate.id", false
+            )),
+            Map.entry("stock_sku_change_requests", new CleanupPolicy(
+                    "Oldest completed SKU approval requests. Pending approval requests remain protected.",
+                    "candidate.workflow_status = 'DONE'", "candidate.updated_at, candidate.id", true
+            )),
+            Map.entry("stock_count_submissions", new CleanupPolicy(
+                    "Oldest completed stock counts. Their checklist and remark rows are removed automatically.",
+                    "candidate.review_status = 'DONE'", "candidate.captured_at, candidate.id", true
+            )),
+            Map.entry("stock_receivings", new CleanupPolicy(
+                    "Oldest completed receiving records. Their item rows are removed automatically.",
+                    "candidate.review_status = 'DONE'", "candidate.captured_at, candidate.id", true
+            )),
+            Map.entry("knowledge_sop_watch_sessions", new CleanupPolicy(
+                    "Oldest SOP video viewing sessions.",
+                    "true", "candidate.started_at, candidate.id", false
+            )),
+            Map.entry("translation_cache", new CleanupPolicy(
+                    "Oldest cached translations. Deleted text is translated and cached again when needed.",
+                    "true", "candidate.created_at, candidate.id", false
+            )),
+            Map.entry("report_media", new CleanupPolicy(
+                    "Oldest photos that are not referenced by a report, task or advertisement.",
+                    UNUSED_REPORT_MEDIA, "candidate.created_at, candidate.id", false
+            )),
+            Map.entry("advertisements", new CleanupPolicy(
+                    "Oldest inactive or expired advertisements. Their unused images can then be removed from report_media.",
+                    "not candidate.active or candidate.ends_at < current_timestamp",
+                    "candidate.created_at, candidate.id", true
+            )),
+            Map.entry("business_reports", new CleanupPolicy(
+                    "Oldest completed reports. Their detail and photo-link rows are removed automatically.",
+                    "candidate.workflow_status = 'DONE'",
+                    "candidate.report_date, candidate.created_at, candidate.id", true
+            )),
+            Map.entry("task_records", new CleanupPolicy(
+                    "Oldest completed tasks. Their checklist and photo-link rows are removed automatically.",
+                    "candidate.status = 'DONE'",
+                    "candidate.task_date, candidate.created_at, candidate.id", true
+            ))
     );
 
     private final JdbcTemplate jdbcTemplate;
     private final LoginIdentityRepository loginIdentityRepository;
     private final TenantRepository tenantRepository;
     private final UserAccountRepository userAccountRepository;
-    private final NotificationRetentionCleanup activityRetentionCleanup;
 
     public StorageAdminService(
             JdbcTemplate jdbcTemplate,
             LoginIdentityRepository loginIdentityRepository,
             TenantRepository tenantRepository,
-            UserAccountRepository userAccountRepository,
-            NotificationRetentionCleanup activityRetentionCleanup
+            UserAccountRepository userAccountRepository
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.loginIdentityRepository = loginIdentityRepository;
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
-        this.activityRetentionCleanup = activityRetentionCleanup;
     }
 
     @Transactional(readOnly = true)
@@ -130,37 +189,20 @@ public class StorageAdminService {
         long applicationBytes = tables.stream()
                 .mapToLong(StorageOverviewResponse.TableUsage::totalBytes)
                 .sum();
-        Map<String, Long> tableBytes = tables.stream().collect(
-                java.util.stream.Collectors.toMap(
-                        StorageOverviewResponse.TableUsage::tableName,
-                        StorageOverviewResponse.TableUsage::totalBytes
-                )
-        );
-        List<StorageOverviewResponse.CleanupAction> actions = CLEANUP_DEFINITIONS.stream()
-                .map(definition -> new StorageOverviewResponse.CleanupAction(
-                        definition.key(),
-                        definition.title(),
-                        definition.description(),
-                        RETENTION_DAYS,
-                        definition.tables().stream().mapToLong(
-                                table -> tableBytes.getOrDefault(table, 0L)
-                        ).sum()
-                ))
-                .toList();
         return new StorageOverviewResponse(
                 Instant.now(),
                 databaseBytes,
                 applicationBytes,
-                tables,
-                actions
+                tables
         );
     }
 
     @Transactional
     public StorageCleanupResponse cleanup(
             AuthenticatedUser principal,
-            String rawKey,
-            boolean confirmed
+            String tableName,
+            boolean confirmed,
+            int requestedRows
     ) {
         assertStorageAdmin(principal);
         if (!confirmed) {
@@ -170,187 +212,175 @@ public class StorageAdminService {
                     "Confirm the permanent deletion first."
             );
         }
+        if (requestedRows < 1) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "CLEANUP_ROW_COUNT_REQUIRED",
+                    "Choose at least one row to delete."
+            );
+        }
+        CleanupPolicy policy = CLEANUP_POLICIES.get(tableName);
+        if (policy == null) {
+            throw new ApiException(
+                    HttpStatus.NOT_FOUND,
+                    "TABLE_CLEANUP_NOT_ALLOWED",
+                    "This table does not support direct cleanup."
+            );
+        }
 
-        CleanupDefinition definition = CLEANUP_DEFINITIONS.stream()
-                .filter(item -> item.key().equals(rawKey))
-                .findFirst()
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        "CLEANUP_CATEGORY_NOT_FOUND",
-                        "Storage cleanup category not found."
-                ));
-
-        Instant now = Instant.now();
-        Instant cutoff = now.minus(java.time.Duration.ofDays(RETENTION_DAYS));
-        int deletedRows = switch (definition.key()) {
-            case "activity" -> activityRetentionCleanup.cleanupExpiredActivityData(now);
-            case "attendance" -> cleanupAttendance(cutoff);
-            case "stock-counts" -> cleanupStockCounts(cutoff);
-            case "receiving" -> cleanupReceiving(cutoff);
-            case "tasks" -> cleanupTasks(cutoff);
-            case "reports" -> cleanupReports(cutoff);
-            case "video-analytics" -> jdbcTemplate.update(
-                    "delete from knowledge_sop_watch_sessions where last_heartbeat_at < ?",
-                    Timestamp.from(cutoff)
-            );
-            case "sku-approvals" -> jdbcTemplate.update(
-                    "delete from stock_sku_change_requests where workflow_status = 'DONE' and updated_at < ?",
-                    Timestamp.from(cutoff)
-            );
-            case "unused-media" -> cleanupUnusedMedia(cutoff);
-            default -> throw new IllegalStateException(
-                    "Unhandled cleanup category " + definition.key()
-            );
-        };
-        return new StorageCleanupResponse(definition.key(), deletedRows, now);
+        int deletedRows;
+        if (tableName.equals("activity_events")) {
+            deletedRows = deleteActivityEvents(policy, requestedRows);
+        } else {
+            if (policy.deleteRelatedActivity()) {
+                deleteRelatedActivity(tableName, policy, requestedRows);
+            }
+            deletedRows = deleteOldest(tableName, policy, requestedRows);
+        }
+        return new StorageCleanupResponse(tableName, deletedRows, Instant.now());
     }
 
     private List<StorageOverviewResponse.TableUsage> loadTableUsage() {
-        return jdbcTemplate.query(
+        List<TableMetadata> metadata = jdbcTemplate.query(
                 """
                 select tables.relname as table_name,
-                       greatest(coalesce(stats.n_live_tup, 0), 0) as estimated_rows,
                        pg_table_size(tables.oid) as data_bytes,
                        pg_indexes_size(tables.oid) as index_bytes,
-                       pg_total_relation_size(tables.oid) as total_bytes
+                       pg_total_relation_size(tables.oid) as total_bytes,
+                       (
+                           select columns.column_name
+                           from information_schema.columns columns
+                           where columns.table_schema = 'public'
+                             and columns.table_name = tables.relname
+                             and columns.data_type in (
+                                 'date',
+                                 'timestamp with time zone',
+                                 'timestamp without time zone'
+                             )
+                           order by case columns.column_name
+                               when 'report_date' then 1
+                               when 'task_date' then 2
+                               when 'occurred_at' then 3
+                               when 'captured_at' then 4
+                               when 'submitted_at' then 5
+                               when 'started_at' then 6
+                               when 'created_at' then 7
+                               when 'installed_on' then 8
+                               when 'updated_at' then 9
+                               else 20
+                           end,
+                           columns.ordinal_position
+                           limit 1
+                       ) as date_column
                 from pg_class tables
                 join pg_namespace namespace on namespace.oid = tables.relnamespace
-                left join pg_stat_user_tables stats on stats.relid = tables.oid
                 where namespace.nspname = 'public'
                   and tables.relkind in ('r', 'p')
                 order by total_bytes desc, table_name
                 """,
-                (resultSet, rowNumber) -> {
-                    String tableName = resultSet.getString("table_name");
-                    return new StorageOverviewResponse.TableUsage(
-                            tableName,
-                            tableGroup(tableName),
-                            tableDataUse(tableName),
-                            resultSet.getLong("estimated_rows"),
-                            resultSet.getLong("data_bytes"),
-                            resultSet.getLong("index_bytes"),
-                            resultSet.getLong("total_bytes")
-                    );
-                }
+                (resultSet, rowNumber) -> new TableMetadata(
+                        resultSet.getString("table_name"),
+                        resultSet.getString("date_column"),
+                        resultSet.getLong("data_bytes"),
+                        resultSet.getLong("index_bytes"),
+                        resultSet.getLong("total_bytes")
+                )
+        );
+        return metadata.stream().map(this::loadExactTableUsage).toList();
+    }
+
+    private StorageOverviewResponse.TableUsage loadExactTableUsage(TableMetadata table) {
+        String quotedTable = quoteIdentifier(table.tableName());
+        String dates = table.dateColumn() == null
+                ? "null::date as oldest_date, null::date as latest_date"
+                : "min(" + quoteIdentifier(table.dateColumn()) + ")::date as oldest_date, "
+                + "max(" + quoteIdentifier(table.dateColumn()) + ")::date as latest_date";
+        ExactTableUsage exact = jdbcTemplate.queryForObject(
+                "select count(*) as row_count, " + dates + " from " + quotedTable,
+                (resultSet, rowNumber) -> new ExactTableUsage(
+                        resultSet.getLong("row_count"),
+                        resultSet.getObject("oldest_date", LocalDate.class),
+                        resultSet.getObject("latest_date", LocalDate.class)
+                )
+        );
+        CleanupPolicy policy = CLEANUP_POLICIES.get(table.tableName());
+        boolean deleteAllowed = policy != null;
+        long deletableRows = deleteAllowed ? loadDeletableRows(table.tableName(), policy) : 0;
+        return new StorageOverviewResponse.TableUsage(
+                table.tableName(),
+                tableGroup(table.tableName()),
+                tableDataUse(table.tableName()),
+                exact.rowCount(),
+                exact.oldestDate(),
+                exact.latestDate(),
+                table.dataBytes(),
+                table.indexBytes(),
+                table.totalBytes(),
+                deleteAllowed,
+                deletableRows,
+                policy == null ? null : policy.description()
         );
     }
 
-    private int cleanupAttendance(Instant cutoff) {
-        int deleted = jdbcTemplate.update(
-                "delete from attendance_events where occurred_at < ?",
-                Timestamp.from(cutoff)
-        );
-        deleted += jdbcTemplate.update(
-                """
-                delete from attendance_qr_codes code
-                where code.created_at < ?
-                  and not exists (
-                        select 1 from attendance_events attendance
-                        where attendance.qr_code_id = code.id
-                  )
-                """,
-                Timestamp.from(cutoff)
-        );
-        return deleted;
+    private long loadDeletableRows(String tableName, CleanupPolicy policy) {
+        String sql = "select count(*) from " + quoteIdentifier(tableName)
+                + " candidate where " + policy.eligibility();
+        Long count = jdbcTemplate.queryForObject(sql, Long.class);
+        return count == null ? 0 : count;
     }
 
-    private int cleanupStockCounts(Instant cutoff) {
-        int deleted = jdbcTemplate.update(
-                "delete from stock_count_submissions where captured_at < ?",
-                Timestamp.from(cutoff)
+    private int deleteActivityEvents(CleanupPolicy policy, int requestedRows) {
+        String candidates = candidateIds("activity_events", policy);
+        jdbcTemplate.update(
+                "delete from user_notifications where activity_event_id in (" + candidates + ")",
+                requestedRows
         );
-        return deleted + cleanupUnusedMedia(cutoff);
+        return jdbcTemplate.update(
+                "delete from activity_events where id in (" + candidates + ")",
+                requestedRows
+        );
     }
 
-    private int cleanupReceiving(Instant cutoff) {
-        int deleted = jdbcTemplate.update(
-                "delete from stock_receivings where captured_at < ?",
-                Timestamp.from(cutoff)
+    private void deleteRelatedActivity(
+            String tableName,
+            CleanupPolicy policy,
+            int requestedRows
+    ) {
+        String candidates = candidateIds(tableName, policy);
+        String events = "select event.id from activity_events event where event.target_id in ("
+                + candidates + ")";
+        jdbcTemplate.update(
+                "delete from user_notifications where activity_event_id in (" + events + ")",
+                requestedRows
         );
-        return deleted + cleanupUnusedMedia(cutoff);
+        jdbcTemplate.update(
+                "delete from activity_events where target_id in (" + candidates + ")",
+                requestedRows
+        );
     }
 
-    private int cleanupTasks(Instant cutoff) {
-        LocalDate cutoffDate = cutoff.atZone(ZoneOffset.UTC).toLocalDate();
-        int deleted = jdbcTemplate.update(
-                "delete from task_records where task_date < ?",
-                Date.valueOf(cutoffDate)
+    private int deleteOldest(
+            String tableName,
+            CleanupPolicy policy,
+            int requestedRows
+    ) {
+        return jdbcTemplate.update(
+                "delete from " + quoteIdentifier(tableName)
+                        + " where id in (" + candidateIds(tableName, policy) + ")",
+                requestedRows
         );
-        return deleted + cleanupUnusedMedia(cutoff);
     }
 
-    private int cleanupReports(Instant cutoff) {
-        LocalDate cutoffDate = cutoff.atZone(ZoneOffset.UTC).toLocalDate();
-        int deleted = jdbcTemplate.update(
-                "delete from business_reports where report_date < ?",
-                Date.valueOf(cutoffDate)
-        );
-        return deleted + cleanupUnusedMedia(cutoff);
+    private String candidateIds(String tableName, CleanupPolicy policy) {
+        return "select candidate.id from " + quoteIdentifier(tableName) + " candidate where "
+                + policy.eligibility() + " order by " + policy.orderBy() + " limit ?";
     }
 
-    private int cleanupUnusedMedia(Instant cutoff) {
-        int deleted = jdbcTemplate.update(
-                """
-                delete from stock_media media
-                where media.created_at < ?
-                  and not exists (
-                        select 1 from stock_skus sku
-                        where sku.tenant_id = media.tenant_id
-                          and sku.thumbnail_media_id = media.id
-                  )
-                  and not exists (
-                        select 1 from stock_count_submissions count_record
-                        where count_record.tenant_id = media.tenant_id
-                          and (count_record.stock_photo_name = media.storage_key
-                               or count_record.invoice_photo_name = media.storage_key)
-                  )
-                  and not exists (
-                        select 1 from stock_receivings receiving
-                        where receiving.tenant_id = media.tenant_id
-                          and (receiving.invoice_photo_name = media.storage_key
-                               or receiving.goods_photo_name = media.storage_key)
-                  )
-                """,
-                Timestamp.from(cutoff)
-        );
-        deleted += jdbcTemplate.update(
-                """
-                delete from report_media media
-                where media.created_at < ?
-                  and not exists (
-                        select 1 from advertisements advertisement
-                        where advertisement.tenant_id = media.tenant_id
-                          and advertisement.image_storage_key = media.storage_key
-                  )
-                  and not exists (
-                        select 1 from sales_void_bills bill
-                        where bill.tenant_id = media.tenant_id
-                          and bill.photo_media_id = media.id
-                  )
-                  and not exists (
-                        select 1 from waste_report_details waste
-                        where waste.tenant_id = media.tenant_id
-                          and waste.photo_media_id = media.id
-                  )
-                  and not exists (
-                        select 1 from daily_report_photos photo
-                        where photo.tenant_id = media.tenant_id
-                          and photo.photo_media_id = media.id
-                  )
-                  and not exists (
-                        select 1 from complaint_report_details complaint
-                        where complaint.tenant_id = media.tenant_id
-                          and complaint.photo_media_id = media.id
-                  )
-                  and not exists (
-                        select 1 from task_photos task_photo
-                        where task_photo.tenant_id = media.tenant_id
-                          and task_photo.photo_media_id = media.id
-                  )
-                """,
-                Timestamp.from(cutoff)
-        );
-        return deleted;
+    private static String quoteIdentifier(String identifier) {
+        if (identifier == null || !identifier.matches("[a-z][a-z0-9_]*")) {
+            throw new IllegalArgumentException("Unsafe database identifier");
+        }
+        return '"' + identifier + '"';
     }
 
     private void assertStorageAdmin(AuthenticatedUser principal) {
@@ -456,11 +486,27 @@ public class StorageAdminService {
         };
     }
 
-    private record CleanupDefinition(
-            String key,
-            String title,
+    private record TableMetadata(
+            String tableName,
+            String dateColumn,
+            long dataBytes,
+            long indexBytes,
+            long totalBytes
+    ) {
+    }
+
+    private record ExactTableUsage(
+            long rowCount,
+            LocalDate oldestDate,
+            LocalDate latestDate
+    ) {
+    }
+
+    private record CleanupPolicy(
             String description,
-            Set<String> tables
+            String eligibility,
+            String orderBy,
+            boolean deleteRelatedActivity
     ) {
     }
 }
