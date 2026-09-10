@@ -26,8 +26,7 @@ public record StorageOverviewResponse(
             String title,
             String description,
             int retentionDays,
-            long currentBytes,
-            boolean automatic
+            long currentBytes
     ) {
     }
 }

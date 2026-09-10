@@ -33,16 +33,14 @@ public class StorageAdminService {
             new CleanupDefinition(
                     "activity",
                     "Activity & notifications",
-                    "Notifications and activity events older than 30 days.",
-                    Set.of("activity_events", "user_notifications", "push_outbox"),
-                    true
+                    "Notifications and activity events older than 30 days are eligible for manual deletion.",
+                    Set.of("activity_events", "user_notifications", "push_outbox")
             ),
             new CleanupDefinition(
                     "attendance",
                     "Attendance history",
                     "Attendance scans and expired QR codes older than 30 days.",
-                    Set.of("attendance_events", "attendance_qr_codes"),
-                    false
+                    Set.of("attendance_events", "attendance_qr_codes")
             ),
             new CleanupDefinition(
                     "stock-counts",
@@ -53,22 +51,19 @@ public class StorageAdminService {
                             "stock_count_submission_checks",
                             "stock_count_submission_remarks",
                             "stock_media"
-                    ),
-                    false
+                    )
             ),
             new CleanupDefinition(
                     "receiving",
                     "Receiving history",
                     "Receiving records, items and unused photos older than 30 days.",
-                    Set.of("stock_receivings", "stock_receiving_items", "stock_media"),
-                    false
+                    Set.of("stock_receivings", "stock_receiving_items", "stock_media")
             ),
             new CleanupDefinition(
                     "tasks",
                     "Task history",
                     "Task records, checklist results and unused task photos older than 30 days.",
-                    Set.of("task_records", "task_record_checklist_items", "task_photos", "report_media"),
-                    false
+                    Set.of("task_records", "task_record_checklist_items", "task_photos", "report_media")
             ),
             new CleanupDefinition(
                     "reports",
@@ -82,29 +77,25 @@ public class StorageAdminService {
                             "daily_report_photos",
                             "complaint_report_details",
                             "report_media"
-                    ),
-                    false
+                    )
             ),
             new CleanupDefinition(
                     "video-analytics",
                     "Video analytics",
                     "SOP viewing sessions last updated more than 30 days ago.",
-                    Set.of("knowledge_sop_watch_sessions"),
-                    false
+                    Set.of("knowledge_sop_watch_sessions")
             ),
             new CleanupDefinition(
                     "sku-approvals",
                     "Completed SKU approvals",
                     "Completed SKU create, edit and delete requests older than 30 days.",
-                    Set.of("stock_sku_change_requests"),
-                    false
+                    Set.of("stock_sku_change_requests")
             ),
             new CleanupDefinition(
                     "unused-media",
                     "Unused uploads",
                     "Uploaded images older than 30 days that are not used by any current record.",
-                    Set.of("stock_media", "report_media"),
-                    false
+                    Set.of("stock_media", "report_media")
             )
     );
 
@@ -153,8 +144,7 @@ public class StorageAdminService {
                         RETENTION_DAYS,
                         definition.tables().stream().mapToLong(
                                 table -> tableBytes.getOrDefault(table, 0L)
-                        ).sum(),
-                        definition.automatic()
+                        ).sum()
                 ))
                 .toList();
         return new StorageOverviewResponse(
@@ -470,8 +460,7 @@ public class StorageAdminService {
             String key,
             String title,
             String description,
-            Set<String> tables,
-            boolean automatic
+            Set<String> tables
     ) {
     }
 }
