@@ -63,12 +63,13 @@ public class ActivityService {
             UUID targetId,
             String route
     ) {
+        boolean adminActor = actor.isAdmin();
         ActivityEvent event = eventRepository.saveAndFlush(new ActivityEvent(
                 actor.tenantId(),
                 actor.userId(),
-                actor.fullName(),
-                actor.employeeId(),
-                actor.systemRole().name(),
+                adminActor ? "System" : actor.fullName(),
+                adminActor ? "SYSTEM" : actor.employeeId(),
+                adminActor ? "SYSTEM" : actor.systemRole().name(),
                 module,
                 action,
                 entityType,

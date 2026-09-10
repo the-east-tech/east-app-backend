@@ -1,6 +1,7 @@
 package com.eastapp.backend.people;
 
 public enum SystemRole {
+    ADMIN(0),
     OWNER(1),
     HEAD(2),
     MANAGER(3),
@@ -20,15 +21,18 @@ public enum SystemRole {
     }
 
     public boolean canView(SystemRole target) {
-        return target != null && (this == OWNER || target.rank >= rank);
+        if (target == null || target == ADMIN) {
+            return false;
+        }
+        return this == ADMIN || this == OWNER || target.rank >= rank;
     }
 
     public boolean canManage(SystemRole target) {
-        if (target == null) {
+        if (target == null || target == ADMIN) {
             return false;
         }
         return switch (this) {
-            case OWNER -> true;
+            case ADMIN, OWNER -> true;
             case HEAD -> target.rank >= HEAD.rank;
             case MANAGER -> target.rank > MANAGER.rank;
             default -> false;
@@ -36,10 +40,10 @@ public enum SystemRole {
     }
 
     public boolean canAssign(SystemRole target) {
-        return canManage(target);
+        return target != ADMIN && canManage(target);
     }
 
     public boolean canAccessUserManagement() {
-        return this == OWNER || this == HEAD || this == MANAGER;
+        return this == ADMIN || this == OWNER || this == HEAD || this == MANAGER;
     }
 }

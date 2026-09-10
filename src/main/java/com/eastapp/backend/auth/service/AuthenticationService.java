@@ -98,9 +98,10 @@ public class AuthenticationService {
     public List<CurrentUserResponse> contexts(AuthenticatedUser principal) {
         assertOwner(principal);
         UserSession session = currentSession(principal.sessionId());
+        SystemRole contextRole = contextRole(principal);
         return userAccountRepository.findAllContexts(session.getIdentity().getId()).stream()
                 .filter(AuthenticationService::isLoginAllowed)
-                .filter(user -> user.getRole().getSystemKey() == SystemRole.OWNER)
+                .filter(user -> user.getRole().getSystemKey() == contextRole)
                 .map(CurrentUserResponse::from)
                 .toList();
     }
@@ -113,7 +114,7 @@ public class AuthenticationService {
                 .findByIdAndIdentity_Id(targetUserId, session.getIdentity().getId())
                 .orElseThrow(AuthenticationService::contextAccessDenied);
         assertLoginAllowed(target);
-        if (target.getRole().getSystemKey() != SystemRole.OWNER) {
+        if (target.getRole().getSystemKey() != contextRole(principal)) {
             throw contextAccessDenied();
         }
         session.switchContext(target);
@@ -147,6 +148,10 @@ public class AuthenticationService {
         );
     }
 
+    private static SystemRole contextRole(AuthenticatedUser principal) {
+        return principal.isAdmin() ? SystemRole.ADMIN : SystemRole.OWNER;
+    }
+
     private static void assertOwner(AuthenticatedUser principal) {
         if (!principal.isOwner()) {
             throw new ApiException(
@@ -174,7 +179,7 @@ public class AuthenticationService {
         return new ApiException(
                 HttpStatus.FORBIDDEN,
                 "CONTEXT_ACCESS_DENIED",
-                "This Owner business context is not assigned to this login."
+                "This business context is not assigned to this login."
         );
     }
 

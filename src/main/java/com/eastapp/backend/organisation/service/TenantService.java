@@ -18,9 +18,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -29,6 +27,7 @@ public class TenantService {
     private final TenantRepository tenantRepository;
     private final UserAccountRepository userAccountRepository;
     private final TenantProvisioningService tenantProvisioningService;
+    private final SystemAdminProvisioningService systemAdminProvisioningService;
     private final GooglePlacesService googlePlacesService;
     private final TransactionTemplate transactionTemplate;
 
@@ -36,12 +35,14 @@ public class TenantService {
             TenantRepository tenantRepository,
             UserAccountRepository userAccountRepository,
             TenantProvisioningService tenantProvisioningService,
+            SystemAdminProvisioningService systemAdminProvisioningService,
             GooglePlacesService googlePlacesService,
             PlatformTransactionManager transactionManager
     ) {
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
         this.tenantProvisioningService = tenantProvisioningService;
+        this.systemAdminProvisioningService = systemAdminProvisioningService;
         this.googlePlacesService = googlePlacesService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
@@ -57,7 +58,7 @@ public class TenantService {
     }
 
     /**
-     * Business creation is the deliberate Owner-only global exception. Google is
+     * Business creation is the deliberate Owner/Admin global exception. Google is
      * resolved before the short database transaction begins.
      */
     public TenantResponse create(AuthenticatedUser actor, CreateTenantRequest request) {
@@ -82,17 +83,6 @@ public class TenantService {
         assertUnique(companyCode, prefix);
 
         UserAccount creator = currentActor(actor);
-        Map<UUID, UserAccount> existingOwnersByIdentity = new LinkedHashMap<>();
-        userAccountRepository
-                .findAllByRole_SystemKeyAndActiveTrueOrderByCreatedAtAsc(SystemRole.OWNER)
-                .stream()
-                .filter(user -> user.getIdentity().isActive())
-                .filter(user -> user.getTenant().isActive())
-                .filter(user -> user.getRole().isActive())
-                .forEach(user -> existingOwnersByIdentity.putIfAbsent(
-                        user.getIdentity().getId(), user
-                ));
-
         TenantProvisioningService.ProvisionedTenant provisioned = tenantProvisioningService.provision(
                 companyCode, request.businessName(), prefix,
                 googlePlace,
@@ -101,9 +91,13 @@ public class TenantService {
                 creator.getStartDate(), creator.getEndDate()
         );
 
-        existingOwnersByIdentity.values().stream()
-                .filter(owner -> !owner.getIdentity().getId().equals(creator.getIdentity().getId()))
-                .forEach(owner -> tenantProvisioningService.addOwnerContext(provisioned, owner));
+        if (creator.getRole().getSystemKey() == SystemRole.ADMIN) {
+            systemAdminProvisioningService.promoteAdminContext(provisioned.owner());
+        } else {
+            // Only the Owner who created this business receives its Owner context.
+            // The one platform Admin is maintained separately and remains hidden.
+            systemAdminProvisioningService.ensureAdminContext(provisioned.tenant());
+        }
 
         return TenantResponse.from(provisioned.tenant());
     }

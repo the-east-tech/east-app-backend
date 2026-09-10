@@ -60,6 +60,10 @@ public record AuthenticatedUser(
     public Collection<? extends GrantedAuthority> authorities() {
         List<GrantedAuthority> authorities = new ArrayList<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_" + systemRole.name()));
+        if (systemRole == SystemRole.ADMIN) {
+            // Reuse existing Owner-gated endpoints without duplicating controller rules.
+            authorities.add(new SimpleGrantedAuthority("ROLE_OWNER"));
+        }
         permissions.stream()
                 .sorted()
                 .map(permission -> new SimpleGrantedAuthority(permission.authority()))
@@ -71,13 +75,19 @@ public record AuthenticatedUser(
         return permission != null && permissions.contains(permission);
     }
 
-    public boolean isOwner() {
-        return systemRole == SystemRole.OWNER;
+    public boolean isAdmin() {
+        return systemRole == SystemRole.ADMIN;
     }
 
-    /** Retains the existing management meaning: Owner or Head. */
+    public boolean isOwner() {
+        return systemRole == SystemRole.ADMIN || systemRole == SystemRole.OWNER;
+    }
+
+    /** Retains the existing management meaning: Admin, Owner or Head. */
     public boolean isHead() {
-        return systemRole == SystemRole.OWNER || systemRole == SystemRole.HEAD;
+        return systemRole == SystemRole.ADMIN
+                || systemRole == SystemRole.OWNER
+                || systemRole == SystemRole.HEAD;
     }
 
     public boolean isManager() {

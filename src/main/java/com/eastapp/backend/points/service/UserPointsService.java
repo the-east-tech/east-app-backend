@@ -41,6 +41,7 @@ public class UserPointsService {
                 .findAllByTenant_IdAndActiveTrueOrderByIdentity_FullNameAsc(principal.tenantId())
                 .stream()
                 .filter(user -> user.getRole().getSystemKey() != SystemRole.OWNER)
+                .filter(user -> user.getRole().getSystemKey() != SystemRole.ADMIN)
                 .toList();
         Map<UUID, Long> totals = totalsByUser(principal.tenantId());
 
@@ -103,11 +104,12 @@ public class UserPointsService {
 
         UserAccount recipient = userRepository.findByIdAndTenant_Id(request.userId(), principal.tenantId())
                 .orElseThrow(() -> notFound("USER_NOT_FOUND", "The selected user was not found."));
-        if (recipient.getRole().getSystemKey() == SystemRole.OWNER) {
+        if (recipient.getRole().getSystemKey() == SystemRole.OWNER
+                || recipient.getRole().getSystemKey() == SystemRole.ADMIN) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,
-                    "OWNER_POINTS_NOT_APPLICABLE",
-                    "Owner users are outside the employee leaderboard and cannot receive points."
+                    "LEADERBOARD_POINTS_NOT_APPLICABLE",
+                    "Owner and Admin users are outside the employee leaderboard and cannot receive points."
             );
         }
         if (!recipient.isActive()) {

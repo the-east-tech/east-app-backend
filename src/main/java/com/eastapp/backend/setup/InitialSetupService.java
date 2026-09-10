@@ -5,7 +5,9 @@ import com.eastapp.backend.auth.LoginIdentityRepository;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
+import com.eastapp.backend.organisation.service.SystemAdminProvisioningService;
 import com.eastapp.backend.organisation.service.TenantProvisioningService;
+import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.places.GooglePlaceDetails;
 import com.eastapp.backend.places.service.GooglePlacesService;
 import com.eastapp.backend.setup.api.CompleteInitialSetupRequest;
@@ -34,6 +36,7 @@ public class InitialSetupService {
     private final PasswordEncoder passwordEncoder;
     private final SetupCodeService setupCodeService;
     private final TenantProvisioningService tenantProvisioningService;
+    private final SystemAdminProvisioningService systemAdminProvisioningService;
     private final GooglePlacesService googlePlacesService;
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transactionTemplate;
@@ -44,6 +47,7 @@ public class InitialSetupService {
             PasswordEncoder passwordEncoder,
             SetupCodeService setupCodeService,
             TenantProvisioningService tenantProvisioningService,
+            SystemAdminProvisioningService systemAdminProvisioningService,
             GooglePlacesService googlePlacesService,
             JdbcTemplate jdbcTemplate,
             PlatformTransactionManager transactionManager
@@ -53,6 +57,7 @@ public class InitialSetupService {
         this.passwordEncoder = passwordEncoder;
         this.setupCodeService = setupCodeService;
         this.tenantProvisioningService = tenantProvisioningService;
+        this.systemAdminProvisioningService = systemAdminProvisioningService;
         this.googlePlacesService = googlePlacesService;
         this.jdbcTemplate = jdbcTemplate;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -146,14 +151,15 @@ public class InitialSetupService {
                 null,
                 null
         );
+        UserAccount admin = systemAdminProvisioningService.promoteAdminContext(provisioned.owner());
 
         setupCodeService.invalidate();
         log.info("EastApp initial setup completed businessCode={} employeeId={}",
-                provisioned.tenant().getCompanyCode(), provisioned.owner().getEmployeeId());
+                provisioned.tenant().getCompanyCode(), admin.getEmployeeId());
         return new CompleteInitialSetupResponse(
                 provisioned.tenant().getCompanyCode(),
                 provisioned.tenant().getBusinessName(),
-                provisioned.owner().getEmployeeId()
+                admin.getEmployeeId()
         );
     }
 
