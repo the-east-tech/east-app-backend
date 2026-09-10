@@ -8,4 +8,6 @@ import java.util.UUID;
 public interface LoginIdentityRepository extends JpaRepository<LoginIdentity, UUID> {
 
     Optional<LoginIdentity> findByPhoneE164(String phoneE164);
+
+    Optional<LoginIdentity> findFirstByOrderByCreatedAtAscIdAsc();
 }

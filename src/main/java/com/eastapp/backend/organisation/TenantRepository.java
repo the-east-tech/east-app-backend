@@ -18,6 +18,8 @@ public interface TenantRepository extends JpaRepository<Tenant, UUID> {
 
     List<Tenant> findAllByOrderByBusinessNameAsc();
 
+    Optional<Tenant> findFirstByOrderByCreatedAtAscIdAsc();
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Tenant> findLockedById(UUID tenantId);
 }
