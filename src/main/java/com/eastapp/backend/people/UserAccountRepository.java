@@ -93,6 +93,9 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     @EntityGraph(attributePaths = {"identity", "tenant", "role"})
     Optional<UserAccount> findByTenant_IdAndEmployeeId(UUID tenantId, String employeeId);
 
+    @EntityGraph(attributePaths = {"identity", "tenant", "role"})
+    Optional<UserAccount> findFirstByTenant_IdOrderByCreatedAtAscIdAsc(UUID tenantId);
+
     boolean existsByIdentity_IdAndTenant_Id(UUID identityId, UUID tenantId);
     boolean existsByTenant_IdAndEmployeeId(UUID tenantId, String employeeId);
     long countByRole_Id(UUID roleId);

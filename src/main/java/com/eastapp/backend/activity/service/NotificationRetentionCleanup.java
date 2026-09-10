@@ -28,8 +28,16 @@ public class NotificationRetentionCleanup {
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
     public void deleteExpiredActivityData() {
-        Instant now = Instant.now();
-        notificationRepository.deleteCreatedBefore(now.minus(NOTIFICATION_RETENTION));
-        activityEventRepository.deleteOccurredBefore(now.minus(ACTIVITY_EVENT_RETENTION));
+        cleanupExpiredActivityData(Instant.now());
+    }
+
+    public int cleanupExpiredActivityData(Instant now) {
+        int notifications = notificationRepository.deleteCreatedBefore(
+                now.minus(NOTIFICATION_RETENTION)
+        );
+        int events = activityEventRepository.deleteOccurredBefore(
+                now.minus(ACTIVITY_EVENT_RETENTION)
+        );
+        return notifications + events;
     }
 }
