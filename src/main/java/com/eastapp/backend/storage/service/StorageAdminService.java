@@ -33,7 +33,7 @@ public class StorageAdminService {
             new CleanupDefinition(
                     "activity",
                     "Activity & notifications",
-                    "Notifications older than 10 days and activity events older than 30 days.",
+                    "Notifications and activity events older than 30 days.",
                     Set.of("activity_events", "user_notifications", "push_outbox"),
                     true
             ),

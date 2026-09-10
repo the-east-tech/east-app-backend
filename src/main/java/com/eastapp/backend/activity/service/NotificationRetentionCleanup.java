@@ -11,8 +11,7 @@ import java.time.Instant;
 
 @Component
 public class NotificationRetentionCleanup {
-    private static final Duration NOTIFICATION_RETENTION = Duration.ofDays(10);
-    private static final Duration ACTIVITY_EVENT_RETENTION = Duration.ofDays(30);
+    private static final Duration FEED_RETENTION = Duration.ofDays(30);
 
     private final UserNotificationRepository notificationRepository;
     private final ActivityEventRepository activityEventRepository;
@@ -33,10 +32,10 @@ public class NotificationRetentionCleanup {
 
     public int cleanupExpiredActivityData(Instant now) {
         int notifications = notificationRepository.deleteCreatedBefore(
-                now.minus(NOTIFICATION_RETENTION)
+                now.minus(FEED_RETENTION)
         );
         int events = activityEventRepository.deleteOccurredBefore(
-                now.minus(ACTIVITY_EVENT_RETENTION)
+                now.minus(FEED_RETENTION)
         );
         return notifications + events;
     }
