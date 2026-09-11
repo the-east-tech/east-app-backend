@@ -46,6 +46,7 @@
 - Git/PR is the default. Create a ZIP only when explicitly requested; do not provide both unless requested.
 - ZIP delivery does not create a branch, commit or PR unless explicitly requested.
 - Name it `east_app_vNNN_src.zip`.
-- Include every changed top-level folder as its complete final tree and include required changed root files individually.
+- The ZIP is extracted at the project root. Do not add a wrapper directory inside it.
+- Include every changed top-level folder as its complete final tree so macOS Finder Replace does not remove unchanged files. Include required changed root files individually.
 - Omit unchanged root files, generated files, caches and unrelated content.
-- Use a unique output path, make it macOS Finder Replace-safe, and verify paths and integrity once.
+- Verify the archive root paths and integrity once.
