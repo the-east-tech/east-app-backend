@@ -157,6 +157,15 @@ public class BusinessReportsController {
                 .body(reportService.createWaste(principal, request));
     }
 
+    @PostMapping("/waste/batch")
+    ResponseEntity<List<WasteReportResponse>> createWasteBatch(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody CreateWasteReportsRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(reportService.createWasteBatch(principal, request));
+    }
+
     @GetMapping("/waste")
     List<WasteReportResponse> wasteReports(
             @AuthenticationPrincipal AuthenticatedUser principal,

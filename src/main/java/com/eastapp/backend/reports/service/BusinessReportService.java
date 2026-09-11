@@ -34,6 +34,7 @@ import com.eastapp.backend.reports.api.ComplaintOverviewResponse;
 import com.eastapp.backend.reports.api.ComplaintReportResponse;
 import com.eastapp.backend.reports.api.CreateComplaintReportRequest;
 import com.eastapp.backend.reports.api.CreateWasteReportRequest;
+import com.eastapp.backend.reports.api.CreateWasteReportsRequest;
 import com.eastapp.backend.reports.api.DailyPhotoItemResponse;
 import com.eastapp.backend.reports.api.DailyPhotoOverviewResponse;
 import com.eastapp.backend.reports.api.DailyPhotoReportResponse;
@@ -595,6 +596,54 @@ public class BusinessReportService {
         );
     }
 
+    @Transactional
+    public List<WasteReportResponse> createWasteBatch(
+            AuthenticatedUser principal,
+            CreateWasteReportsRequest request
+    ) {
+        validateEditableDate(principal, request.reportDate());
+        Map<UUID, String> names = userNames(principal.tenantId());
+        List<WasteReportResponse> result = new ArrayList<>();
+        for (var evidence : request.evidence()) {
+            ReportMediaReference media = reportMediaService.requireOwnedMedia(
+                    principal,
+                    evidence.photoStorageKey()
+            );
+            BusinessReport report = reportRepository.saveAndFlush(new BusinessReport(
+                    principal.tenantId(),
+                    BusinessReportType.WASTE,
+                    request.reportDate(),
+                    principal.userId()
+            ));
+            WasteReportDetail detail = wasteRepository.saveAndFlush(new WasteReportDetail(
+                    report.getId(),
+                    principal.tenantId(),
+                    null,
+                    "Waste",
+                    BigDecimal.ONE,
+                    "photo",
+                    BigDecimal.ZERO,
+                    evidence.reason(),
+                    media.id()
+            ));
+            report.submit();
+            reportRepository.save(report);
+            recordReportTransition(
+                    principal,
+                    report,
+                    null,
+                    ReportWorkflowStatus.SUBMITTED
+            );
+            result.add(toWasteResponse(
+                    report,
+                    detail,
+                    media.storageKey(),
+                    names
+            ));
+        }
+        return List.copyOf(result);
+    }
+
     @Transactional(readOnly = true)
     public List<WasteReportResponse> wasteReports(
             AuthenticatedUser principal,
@@ -853,7 +902,7 @@ public class BusinessReportService {
                 WasteReportDetail detail = waste.get(report.getId());
                 amount = detail == null ? BigDecimal.ZERO : detail.estimatedLossRm();
                 evidenceCount = detail == null ? 0 : 1;
-                summary = detail == null ? "Waste report" : detail.getItemName() + " · RM " + money(amount);
+                summary = detail == null ? "Waste report" : detail.getReason();
             } else if (report.getReportType() == BusinessReportType.DAILY_PHOTO) {
                 evidenceCount = dailyPhotoCounts.getOrDefault(report.getId(), 0);
                 summary = evidenceCount + " daily photos";
@@ -1238,6 +1287,7 @@ public class BusinessReportService {
                 .max(Map.Entry.comparingByValue())
                 .orElse(Map.entry("None", BigDecimal.ZERO));
         return new WasteOverviewResponse(
+                reports.size(),
                 moneyValue(todayLoss),
                 moneyValue(periodLoss),
                 percentValue(percentage(periodLoss, periodNetSales)),
@@ -1514,7 +1564,7 @@ public class BusinessReportService {
             if (detail != null) {
                 amount = detail.estimatedLossRm();
                 evidenceCount = 1;
-                summary = detail.getItemName() + " · RM " + money(amount);
+                summary = detail.getReason();
             }
         } else if (report.getReportType() == BusinessReportType.DAILY_PHOTO) {
             evidenceCount = (int) dailyPhotoRepository.countByTenantIdAndReportId(report.getTenantId(), report.getId());
