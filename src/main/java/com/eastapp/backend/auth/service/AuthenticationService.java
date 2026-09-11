@@ -1,5 +1,6 @@
 package com.eastapp.backend.auth.service;
 
+import com.eastapp.backend.auth.AdminLogin;
 import com.eastapp.backend.auth.UserSession;
 import com.eastapp.backend.auth.UserSessionRepository;
 import com.eastapp.backend.auth.api.CurrentUserResponse;
@@ -49,9 +50,7 @@ public class AuthenticationService {
         String companyCode = Tenant.normaliseCode(request.companyCode());
         String employeeId = UserAccount.normaliseEmployeeId(request.employeeId());
 
-        UserAccount user = userAccountRepository
-                .findByTenant_CompanyCodeAndEmployeeId(companyCode, employeeId)
-                .orElseThrow(AuthenticationService::invalidCredentials);
+        UserAccount user = findLoginUser(companyCode, employeeId);
 
         if (!passwordEncoder.matches(request.password(), user.getIdentity().getPasswordHash())) {
             throw invalidCredentials();
@@ -65,6 +64,25 @@ public class AuthenticationService {
         );
 
         return new LoginResponse(generatedToken.rawToken(), CurrentUserResponse.from(user));
+    }
+
+    private UserAccount findLoginUser(String companyCode, String employeeId) {
+        if (AdminLogin.COMPANY_ID.equals(companyCode)) {
+            if (!AdminLogin.EMPLOYEE_ID.equals(employeeId)) {
+                throw invalidCredentials();
+            }
+            return userAccountRepository
+                    .findAllByRole_SystemKeyAndActiveTrueOrderByCreatedAtAsc(SystemRole.ADMIN)
+                    .stream()
+                    .filter(AuthenticationService::isLoginAllowed)
+                    .findFirst()
+                    .orElseThrow(AuthenticationService::invalidCredentials);
+        }
+
+        return userAccountRepository
+                .findByTenant_CompanyCodeAndEmployeeId(companyCode, employeeId)
+                .filter(user -> user.getRole().getSystemKey() != SystemRole.ADMIN)
+                .orElseThrow(AuthenticationService::invalidCredentials);
     }
 
     @Transactional

@@ -1,5 +1,6 @@
 package com.eastapp.backend.organisation.service;
 
+import com.eastapp.backend.auth.AdminLogin;
 import com.eastapp.backend.auth.LoginIdentity;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
@@ -159,7 +160,9 @@ public class TenantProvisioningService {
         UserAccount user = new UserAccount(
                 tenant,
                 identity,
-                tenant.allocateEmployeeId(),
+                role.getSystemKey() == SystemRole.ADMIN
+                        ? AdminLogin.EMPLOYEE_ID
+                        : tenant.allocateEmployeeId(),
                 role
         );
         user.updateProfile(
