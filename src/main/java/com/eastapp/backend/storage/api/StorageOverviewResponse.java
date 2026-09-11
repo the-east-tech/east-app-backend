@@ -8,6 +8,7 @@ public record StorageOverviewResponse(
         Instant measuredAt,
         long databaseBytes,
         long applicationTablesBytes,
+        int maxViewRows,
         List<TableUsage> tables
 ) {
     public record TableUsage(
