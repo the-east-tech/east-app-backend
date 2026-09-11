@@ -33,6 +33,21 @@ public interface UserNotificationRepository extends JpaRepository<UserNotificati
     );
 
     @Modifying
+    @Query("""
+            update UserNotification notification
+            set notification.readAt = coalesce(notification.readAt, :dismissedAt),
+                notification.dismissedAt = :dismissedAt
+            where notification.tenantId = :tenantId
+              and notification.recipientUserId = :recipientUserId
+              and notification.dismissedAt is null
+            """)
+    int dismissAll(
+            @Param("tenantId") UUID tenantId,
+            @Param("recipientUserId") UUID recipientUserId,
+            @Param("dismissedAt") Instant dismissedAt
+    );
+
+    @Modifying
     @Query("delete from UserNotification notification where notification.createdAt < :cutoff")
     int deleteCreatedBefore(@Param("cutoff") Instant cutoff);
 }

@@ -74,6 +74,15 @@ public class NotificationService {
     }
 
     @Transactional
+    public void dismissAll(AuthenticatedUser principal) {
+        notificationRepository.dismissAll(
+                principal.tenantId(),
+                principal.userId(),
+                Instant.now()
+        );
+    }
+
+    @Transactional
     public void registerDevice(AuthenticatedUser principal, RegisterPushDeviceRequest request) {
         Instant now = Instant.now();
         String token = request.token().trim();
