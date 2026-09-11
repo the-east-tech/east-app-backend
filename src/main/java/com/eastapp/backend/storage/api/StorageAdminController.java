@@ -32,9 +32,10 @@ public class StorageAdminController {
     StorageTableDataResponse tableData(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable String key,
-            @RequestParam int rowCount
+            @RequestParam int rowCount,
+            @RequestParam(defaultValue = "false") boolean latestFirst
     ) {
-        return storageAdminService.tableData(principal, key, rowCount);
+        return storageAdminService.tableData(principal, key, rowCount, latestFirst);
     }
 
     @PostMapping("/cleanup/{key}")
