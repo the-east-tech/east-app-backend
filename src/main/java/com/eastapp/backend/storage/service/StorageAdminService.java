@@ -207,7 +207,8 @@ public class StorageAdminService {
     public StorageTableDataResponse tableData(
             AuthenticatedUser principal,
             String tableName,
-            int requestedRows
+            int requestedRows,
+            boolean latestFirst
     ) {
         assertStorageAdmin(principal);
         if (requestedRows < 1 || requestedRows > MAX_VIEW_ROWS) {
@@ -232,7 +233,7 @@ public class StorageAdminService {
                 .toList();
         String sql = "select " + viewProjection(tableColumns) + " from "
                 + quoteIdentifier(tableName) + " candidate order by "
-                + viewOrderBy(columnNames) + " limit ?";
+                + viewOrderBy(columnNames, latestFirst) + " limit ?";
         return jdbcTemplate.query(
                 sql,
                 statement -> statement.setInt(1, requestedRows),
@@ -445,15 +446,16 @@ public class StorageAdminService {
                 .orElseThrow();
     }
 
-    private static String viewOrderBy(List<String> columnNames) {
+    private static String viewOrderBy(List<String> columnNames, boolean latestFirst) {
         String dateColumn = VIEW_DATE_COLUMNS.stream()
                 .filter(columnNames::contains)
                 .findFirst()
                 .orElse(null);
         String firstOrderColumn = dateColumn == null ? columnNames.getFirst() : dateColumn;
-        String orderBy = "candidate." + quoteIdentifier(firstOrderColumn) + " asc nulls last";
+        String direction = latestFirst ? " desc nulls last" : " asc nulls last";
+        String orderBy = "candidate." + quoteIdentifier(firstOrderColumn) + direction;
         if (!firstOrderColumn.equals("id") && columnNames.contains("id")) {
-            orderBy += ", candidate.\"id\" asc";
+            orderBy += ", candidate.\"id\"" + direction;
         }
         return orderBy;
     }
