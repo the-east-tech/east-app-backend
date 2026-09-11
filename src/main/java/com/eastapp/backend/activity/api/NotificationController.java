@@ -66,6 +66,12 @@ public class NotificationController {
         return ResponseEntity.noContent().build();
     }
 
+    @DeleteMapping
+    ResponseEntity<Void> dismissAll(@AuthenticationPrincipal AuthenticatedUser principal) {
+        notificationService.dismissAll(principal);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/devices")
     ResponseEntity<Void> registerDevice(
             @AuthenticationPrincipal AuthenticatedUser principal,
