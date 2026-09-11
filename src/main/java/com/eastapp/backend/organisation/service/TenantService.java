@@ -45,14 +45,19 @@ public class TenantService {
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
-    /**
-     * Normal business details are always scoped to the active context. Owners use
-     * /api/v1/auth/contexts only for the minimal business switcher list.
-     */
     @Transactional(readOnly = true)
     public List<TenantResponse> list(AuthenticatedUser actor) {
         assertOwner(actor);
-        return List.of(TenantResponse.from(currentActor(actor).getTenant()));
+        UserAccount current = currentActor(actor);
+        SystemRole contextRole = actor.isAdmin() ? SystemRole.ADMIN : SystemRole.OWNER;
+        return userAccountRepository.findAllContexts(current.getIdentity().getId()).stream()
+                .filter(user -> user.isActive()
+                        && user.getIdentity().isActive()
+                        && user.getRole().isActive()
+                        && user.getRole().getSystemKey() == contextRole)
+                .map(UserAccount::getTenant)
+                .map(TenantResponse::from)
+                .toList();
     }
 
     /**
@@ -112,16 +117,26 @@ public class TenantService {
             UpdateTenantRequest request
     ) {
         assertOwner(actor);
-        if (!tenantId.equals(actor.tenantId())) {
+        UserAccount current = currentActor(actor);
+        UUID identityId = current.getIdentity().getId();
+        SystemRole contextRole = actor.isAdmin() ? SystemRole.ADMIN : SystemRole.OWNER;
+        UserAccount targetContext = requireManageableContext(
+                identityId, tenantId, contextRole
+        );
+        if (tenantId.equals(actor.tenantId()) && !request.active()) {
             throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    "TENANT_ACCESS_DENIED",
-                    "Switch business context before viewing or editing another business."
+                    HttpStatus.CONFLICT,
+                    "CURRENT_TENANT_DEACTIVATION",
+                    "Switch to another business before setting this one inactive."
             );
         }
-        GooglePlaceDetails googlePlace = googlePlacesService.placeDetails(request.googlePlaceId());
+        GooglePlaceDetails googlePlace = request.googlePlaceId().equals(
+                targetContext.getTenant().getGooglePlaceId()
+        ) ? null : googlePlacesService.placeDetails(request.googlePlaceId());
         TenantResponse response = transactionTemplate.execute(
-                status -> updateInTransaction(actor, request, googlePlace)
+                status -> updateInTransaction(
+                        identityId, tenantId, contextRole, request, googlePlace
+                )
         );
         if (response == null) {
             throw new IllegalStateException("Tenant update transaction returned no response");
@@ -130,30 +145,42 @@ public class TenantService {
     }
 
     private TenantResponse updateInTransaction(
-            AuthenticatedUser actor,
+            UUID identityId,
+            UUID tenantId,
+            SystemRole contextRole,
             UpdateTenantRequest request,
             GooglePlaceDetails googlePlace
     ) {
-        UserAccount current = currentActor(actor);
-        if (!request.active()) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "CURRENT_TENANT_DEACTIVATION",
-                    "The active business cannot be deactivated. Switch away before changing its lifecycle."
+        Tenant tenant = requireManageableContext(identityId, tenantId, contextRole).getTenant();
+        tenant.update(request.businessName(), request.active());
+        if (googlePlace != null) {
+            tenant.configureGoogleLocation(
+                    googlePlace.placeId(),
+                    googlePlace.displayName(),
+                    googlePlace.formattedAddress(),
+                    googlePlace.latitude(),
+                    googlePlace.longitude(),
+                    googlePlace.googleMapsUri()
             );
         }
-
-        Tenant tenant = current.getTenant();
-        tenant.update(request.businessName(), true);
-        tenant.configureGoogleLocation(
-                googlePlace.placeId(),
-                googlePlace.displayName(),
-                googlePlace.formattedAddress(),
-                googlePlace.latitude(),
-                googlePlace.longitude(),
-                googlePlace.googleMapsUri()
-        );
         return TenantResponse.from(tenant);
+    }
+
+    private UserAccount requireManageableContext(
+            UUID identityId,
+            UUID tenantId,
+            SystemRole contextRole
+    ) {
+        return userAccountRepository.findByTenant_IdAndIdentity_Id(tenantId, identityId)
+                .filter(user -> user.isActive()
+                        && user.getIdentity().isActive()
+                        && user.getRole().isActive()
+                        && user.getRole().getSystemKey() == contextRole)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.FORBIDDEN,
+                        "TENANT_ACCESS_DENIED",
+                        "This business is not assigned to this Owner login."
+                ));
     }
 
     private static void assertOwner(AuthenticatedUser actor) {
