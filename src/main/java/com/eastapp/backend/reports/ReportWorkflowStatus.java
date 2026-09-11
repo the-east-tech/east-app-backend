@@ -8,10 +8,6 @@ public enum ReportWorkflowStatus {
     SUBMITTED,
     DONE;
 
-    public static final ReportWorkflowStatus DRAFT = PENDING;
-    public static final ReportWorkflowStatus APPROVED = DONE;
-    public static final ReportWorkflowStatus REJECTED = PENDING;
-
     @JsonCreator
     public static ReportWorkflowStatus fromJson(String value) {
         if (value == null || value.isBlank()) return null;
@@ -25,10 +21,6 @@ public enum ReportWorkflowStatus {
 
     @JsonValue
     public String toJson() {
-        return switch (this) {
-            case PENDING -> "DRAFT";
-            case SUBMITTED -> "SUBMITTED";
-            case DONE -> "APPROVED";
-        };
+        return name();
     }
 }
