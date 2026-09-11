@@ -5,6 +5,7 @@ import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.storage.api.StorageCleanupResponse;
 import com.eastapp.backend.storage.api.StorageOverviewResponse;
+import com.eastapp.backend.storage.api.StorageTableDataResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -12,12 +13,32 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 @Service
 public class StorageAdminService {
+    private static final int MAX_VIEW_ROWS = 100;
+    private static final List<String> VIEW_DATE_COLUMNS = List.of(
+            "report_date",
+            "task_date",
+            "occurred_at",
+            "captured_at",
+            "submitted_at",
+            "started_at",
+            "created_at",
+            "installed_on",
+            "updated_at"
+    );
+    private static final Set<String> REDACTED_COLUMNS = Set.of(
+            "setup_code",
+            "password_hash",
+            "token_hash",
+            "secret_hash",
+            "token"
+    );
     private static final String UNUSED_STOCK_MEDIA = """
             not exists (
                 select 1 from stock_skus sku
@@ -177,7 +198,71 @@ public class StorageAdminService {
                 Instant.now(),
                 databaseBytes,
                 applicationBytes,
+                MAX_VIEW_ROWS,
                 tables
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public StorageTableDataResponse tableData(
+            AuthenticatedUser principal,
+            String tableName,
+            int requestedRows
+    ) {
+        assertStorageAdmin(principal);
+        if (requestedRows < 1 || requestedRows > MAX_VIEW_ROWS) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "TABLE_VIEW_ROW_COUNT_INVALID",
+                    "Choose between 1 and " + MAX_VIEW_ROWS + " rows to view."
+            );
+        }
+
+        List<TableColumnMetadata> tableColumns = loadTableColumns(tableName);
+        if (tableColumns.isEmpty()) {
+            throw new ApiException(
+                    HttpStatus.NOT_FOUND,
+                    "STORAGE_TABLE_NOT_FOUND",
+                    "The requested database table was not found."
+            );
+        }
+
+        List<String> columnNames = tableColumns.stream()
+                .map(TableColumnMetadata::name)
+                .toList();
+        String sql = "select " + viewProjection(tableColumns) + " from "
+                + quoteIdentifier(tableName) + " candidate order by "
+                + viewOrderBy(columnNames) + " limit ?";
+        return jdbcTemplate.query(
+                sql,
+                statement -> statement.setInt(1, requestedRows),
+                resultSet -> {
+                    int columnCount = tableColumns.size();
+                    List<StorageTableDataResponse.Column> columns = new ArrayList<>(columnCount);
+                    for (TableColumnMetadata column : tableColumns) {
+                        columns.add(new StorageTableDataResponse.Column(
+                                column.name(),
+                                column.dataType(),
+                                column.nullable()
+                        ));
+                    }
+
+                    List<List<String>> rows = new ArrayList<>();
+                    while (resultSet.next()) {
+                        List<String> row = new ArrayList<>(columnCount);
+                        for (int index = 1; index <= columnCount; index++) {
+                            row.add(displayValue(resultSet.getObject(index)));
+                        }
+                        rows.add(row);
+                    }
+                    return new StorageTableDataResponse(
+                            tableName,
+                            requestedRows,
+                            rows.size(),
+                            columns,
+                            rows
+                    );
+                }
         );
     }
 
@@ -311,6 +396,71 @@ public class StorageAdminService {
                 + " candidate where " + policy.eligibility();
         Long count = jdbcTemplate.queryForObject(sql, Long.class);
         return count == null ? 0 : count;
+    }
+
+    private List<TableColumnMetadata> loadTableColumns(String tableName) {
+        return jdbcTemplate.query(
+                """
+                select attribute.attname as column_name,
+                       pg_catalog.format_type(attribute.atttypid, attribute.atttypmod) as data_type,
+                       not attribute.attnotnull as nullable,
+                       column_type.typname as type_name
+                from pg_catalog.pg_attribute attribute
+                join pg_catalog.pg_class table_info on table_info.oid = attribute.attrelid
+                join pg_catalog.pg_namespace namespace on namespace.oid = table_info.relnamespace
+                join pg_catalog.pg_type column_type on column_type.oid = attribute.atttypid
+                where namespace.nspname = 'public'
+                  and table_info.relname = ?
+                  and table_info.relkind in ('r', 'p')
+                  and attribute.attnum > 0
+                  and not attribute.attisdropped
+                order by attribute.attnum
+                """,
+                (resultSet, rowNumber) -> new TableColumnMetadata(
+                        resultSet.getString("column_name"),
+                        resultSet.getString("data_type"),
+                        resultSet.getBoolean("nullable"),
+                        resultSet.getString("type_name")
+                ),
+                tableName
+        );
+    }
+
+    private static String viewProjection(List<TableColumnMetadata> columns) {
+        return columns.stream()
+                .map(column -> {
+                    String quotedColumn = quoteIdentifier(column.name());
+                    String value = "candidate." + quotedColumn;
+                    if (REDACTED_COLUMNS.contains(column.name())) {
+                        return "case when " + value + " is null then null "
+                                + "else '[REDACTED]' end as " + quotedColumn;
+                    }
+                    if (column.typeName().equals("bytea")) {
+                        return "case when " + value + " is null then null else '[BINARY ' || "
+                                + "octet_length(" + value + ") || ' BYTES]' end as " + quotedColumn;
+                    }
+                    return value;
+                })
+                .reduce((left, right) -> left + ", " + right)
+                .orElseThrow();
+    }
+
+    private static String viewOrderBy(List<String> columnNames) {
+        String dateColumn = VIEW_DATE_COLUMNS.stream()
+                .filter(columnNames::contains)
+                .findFirst()
+                .orElse(null);
+        String firstOrderColumn = dateColumn == null ? columnNames.getFirst() : dateColumn;
+        String orderBy = "candidate." + quoteIdentifier(firstOrderColumn) + " asc nulls last";
+        if (!firstOrderColumn.equals("id") && columnNames.contains("id")) {
+            orderBy += ", candidate.\"id\" asc";
+        }
+        return orderBy;
+    }
+
+    private static String displayValue(Object value) {
+        if (value == null) return null;
+        return value.toString();
     }
 
     private int deleteActivityEvents(CleanupPolicy policy, int requestedRows) {
@@ -466,6 +616,14 @@ public class StorageAdminService {
             long rowCount,
             LocalDate oldestDate,
             LocalDate latestDate
+    ) {
+    }
+
+    private record TableColumnMetadata(
+            String name,
+            String dataType,
+            boolean nullable,
+            String typeName
     ) {
     }
 
