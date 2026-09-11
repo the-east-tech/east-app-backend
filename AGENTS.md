@@ -1,42 +1,52 @@
 # EastApp Backend Rules
 
-## Default execution mode
+## Execution
 
-- For requests such as “fix/change/implement all above and send/give me code”, use this exact workflow: **read only what is needed → make the requested change → review the focused diff → increment the backend version once → commit to a feature branch → open a pull request → stop**.
-- “All above” means every requested item in the current conversation. It does not authorise a repository-wide audit or extra improvements.
-- Make the smallest complete change. Do not inspect, refactor, clean up, modernise, optimise, or reformat unrelated code.
-- Do not run tests, Maven compile/build, the app, Docker, or a database unless the user explicitly asks. Do not retry environment failures.
-- Do not create a ZIP, release bundle, report, documentation, or other artefact unless explicitly requested.
-- Do not use plans, subagents, web research, or broad Git-history analysis unless required by the requested change or explicitly requested.
-- If a necessary expansion would materially change scope or behaviour, ask first. Otherwise complete obvious implementation details without back-and-forth.
+- Answer, review, explain and diagnose requests are read-only. Do not create a branch, commit or PR unless code/file changes are requested.
+- A request to fix, change or implement authorises the complete delivery workflow; do not pause for separate push approval:
+  **fetch latest `main` → inspect only what is needed → create or reuse one task branch → make the smallest complete change → review the focused diff → bump the version once → commit once → push → open or update the PR → stop**.
+- “All above” means only the requested items in the current conversation. It does not authorise a repository-wide review or unrelated improvements.
+- Do not run tests, Maven, builds, the app, Docker or a database unless explicitly requested. Do not retry unavailable tooling.
+- Do not create plans, subagents, ZIPs, documentation or other artefacts unless required or explicitly requested.
+- Ask only when missing information would materially change behaviour. Otherwise complete obvious details without extra confirmation.
 
-## Source and scope
+## Branch and PR control
 
-- GitHub `main` is the source of truth. Fetch the latest `main` for the repository being changed before creating the feature branch.
-- Do not use old ZIPs, previous-chat code, or memory as code truth.
-- Do not fetch or inspect the frontend unless the backend change genuinely depends on its current contract or the user requests cross-repository work.
-- Use focused searches and bounded reads. Open only relevant files or relevant sections of large files.
-- Follow the existing architecture and reuse existing services, repositories, DTOs, validation, security, caching, and error-handling patterns.
+- GitHub `main` is the source of truth. Fetch it before editing and never use an old ZIP, stale branch, previous-chat code or memory as code truth.
+- Check the existing PR state before creating a branch.
+- If an open PR already covers the same unfinished task, continue that branch and PR. Do not create another branch, PR or version bump.
+- If that PR is merged or closed, always create a new branch from the latest `main` and open a new PR. Never reuse its old branch.
+- A different task gets one new branch and one PR. Never create branches or commits per file, attempt or minor correction.
+- Default delivery is a feature branch plus PR. Never push directly to `main`, merge, deploy or reset a database unless explicitly requested.
+
+## Scope
+
+- Change only requested backend files. Preserve unrelated user changes.
+- Do not inspect the frontend unless the API contract requires it or cross-repository work is requested.
+- Use focused searches and bounded reads. Avoid unrelated refactors, reformatting, modernisation and optimisation.
+- Follow the existing architecture and reuse existing services, repositories, DTOs, validation, security, caching and error handling.
 - Keep list/search APIs lazy-loaded and queries focused.
-- Frontend and backend versions are independent; never force them to match.
-- Development database resets and clean baseline replacement are allowed only when clearly requested or required. Never reset production, shared, or unidentified databases.
+- Frontend and backend versions are independent.
+- Reset a development database only when clearly requested or required. Never reset production, shared or unidentified databases.
 
-## Git, versioning and delivery
+## Version, commit and PR
 
-- Default delivery is **feature branch + pull request**. Never push commits directly to `main` unless the user explicitly asks for a direct `main` push.
-- Avoid unnecessary intermediate or throwaway commits on `main`. Keep branch history purposeful; prefer one complete versioned commit for a finished change when practical.
-- **Every pull request must increment the backend version exactly once**, including documentation-only or process-only PRs. The backend version source of truth is `pom.xml`.
-- Backend version format is `0.0.NNN-SNAPSHOT`. Increment `NNN` by one from the latest `main` version for each new PR.
-- Commit and PR titles must be descriptive and versioned: `backend vNNN: concise description`. Example: `backend v110: clean Flyway to single V1`.
-- The version number in the commit/PR title must match the version in `pom.xml`.
-- Commit only the requested changes. Preserve unrelated existing changes.
-- Use the assistant/service Git identity supplied by the environment. Never configure or use the user’s personal name or email as commit author.
-- Do not merge the PR, deploy, or reset a database unless the user explicitly requests it.
-- Final response: provide the PR link, branch name, version, and a brief list of requested changes; state that tests/builds were not run when they were not requested.
+- Every new PR, including a documentation-only PR, increments `pom.xml` exactly once.
+- Use `0.0.NNN-SNAPSHOT`. Select one above the highest backend version on latest `main` or any open backend PR, whichever is higher.
+- Further changes to the same open PR do not increment the version again.
+- Finish and review the requested change before committing. Prefer one commit; do not commit each file or attempt separately.
+- Commit and PR title: `backend vNNN: concise description`. Keep it one line and at most 72 characters.
+- Keep the PR body short: requested changes plus whether checks were run. Do not add long narratives or code dumps.
+- The title version must match `pom.xml`.
+- Use the configured assistant/service Git identity, never the user’s personal identity.
+- Final response: PR link, branch, version, brief changes and checks not run.
 
-## ZIP rules — only when explicitly requested
+## ZIP delivery — explicit fallback only
 
+- Git/PR is the default. Create a ZIP only when explicitly requested; do not provide both unless requested.
+- ZIP delivery does not create a branch, commit or PR unless explicitly requested.
 - Name it `east_app_vNNN_src.zip`.
-- Include every changed top-level folder as its complete resulting tree after additions and deletions.
-- Include required changed root files individually; omit unchanged or unnecessary root files.
-- Make the archive macOS Finder Replace-safe and verify its paths and integrity once.
+- The ZIP is extracted at the project root. Do not add a wrapper directory inside it.
+- Include every changed top-level folder as its complete final tree so macOS Finder Replace does not remove unchanged files. Include required changed root files individually.
+- Omit unchanged root files, generated files, caches and unrelated content.
+- Verify the archive root paths and integrity once.
