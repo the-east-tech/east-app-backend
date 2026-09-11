@@ -89,7 +89,7 @@ public class BusinessReportService {
     private static final BigDecimal TWO = new BigDecimal("2");
     private static final Set<ReportWorkflowStatus> ANALYTICS_STATUSES = Set.of(
             ReportWorkflowStatus.SUBMITTED,
-            ReportWorkflowStatus.APPROVED
+            ReportWorkflowStatus.DONE
     );
     private static final Set<SystemRole> CASH_RECIPIENT_ROLES = Set.of(
             SystemRole.OWNER,
@@ -353,7 +353,7 @@ public class BusinessReportService {
                 .findAllByTenantIdAndReportTypeAndReportDateBetweenOrderByReportDateAscCreatedAtAsc(
                         principal.tenantId(), BusinessReportType.SALES, range.from(), range.to()
                 ).stream()
-                .filter(report -> report.getWorkflowStatus() != ReportWorkflowStatus.DRAFT)
+                .filter(report -> report.getWorkflowStatus() != ReportWorkflowStatus.PENDING)
                 .sorted(Comparator.comparing(BusinessReport::getReportDate).reversed()
                         .thenComparing(BusinessReport::getCreatedAt, Comparator.reverseOrder()))
                 .toList();
@@ -444,11 +444,11 @@ public class BusinessReportService {
                 request.reportDate(),
                 principal.userId()
         )));
-        if (report.getWorkflowStatus() == ReportWorkflowStatus.REJECTED) {
+        if (report.getWorkflowStatus() == ReportWorkflowStatus.PENDING) {
             report.reopenForEditing();
             reportRepository.save(report);
         }
-        if (report.getWorkflowStatus() != ReportWorkflowStatus.DRAFT) {
+        if (report.getWorkflowStatus() != ReportWorkflowStatus.PENDING) {
             throw locked("The submitted sales report is locked. Ask management to reject it before adding another void bill.");
         }
         if (voidBillRepository.existsByTenantIdAndSalesReportIdAndBillNumberIgnoreCase(
@@ -718,11 +718,11 @@ public class BusinessReportService {
                         request.reportDate(),
                         principal.userId()
                 )));
-        if (report.getWorkflowStatus() == ReportWorkflowStatus.REJECTED) {
+        if (report.getWorkflowStatus() == ReportWorkflowStatus.PENDING) {
             report.reopenForEditing();
             reportRepository.save(report);
         }
-        if (report.getWorkflowStatus() != ReportWorkflowStatus.DRAFT) {
+        if (report.getWorkflowStatus() != ReportWorkflowStatus.PENDING) {
             throw locked("This daily photo batch has already been submitted.");
         }
         dailyPhotoRepository.saveAndFlush(new DailyReportPhoto(
@@ -940,12 +940,12 @@ public class BusinessReportService {
             throw new ApiException(HttpStatus.FORBIDDEN, "SELF_REVIEW_NOT_ALLOWED", "Managers cannot approve their own report.");
         }
         try {
-            if (request.status() == ReportWorkflowStatus.APPROVED) {
+            if (request.status() == ReportWorkflowStatus.DONE) {
                 report.approve(principal.userId(), request.note());
-            } else if (request.status() == ReportWorkflowStatus.REJECTED) {
+            } else if (request.status() == ReportWorkflowStatus.PENDING) {
                 report.reject(principal.userId(), request.note());
             } else {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REVIEW_STATUS", "Review status must be APPROVED or REJECTED.");
+                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REVIEW_STATUS", "Review status must be DONE or PENDING.");
             }
         } catch (IllegalStateException exception) {
             throw locked(exception.getMessage());
@@ -1428,7 +1428,7 @@ public class BusinessReportService {
     private SalesReportResponse emptySales(LocalDate date) {
         BigDecimal zero = BigDecimal.ZERO.setScale(2);
         return new SalesReportResponse(
-                null, date, ReportWorkflowStatus.DRAFT,
+                null, date, ReportWorkflowStatus.PENDING,
                 zero, null, "", zero, zero, zero, zero, zero, zero, 0, zero,
                 BigDecimal.ZERO.setScale(1), null, null, null, null,
                 null, null, null, List.of()
@@ -1512,7 +1512,7 @@ public class BusinessReportService {
         return new DailyPhotoReportResponse(
                 null,
                 date,
-                ReportWorkflowStatus.DRAFT,
+                ReportWorkflowStatus.PENDING,
                 user.getId(),
                 user.getFullName(),
                 0,

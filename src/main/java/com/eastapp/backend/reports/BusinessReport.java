@@ -84,22 +84,20 @@ public class BusinessReport {
         this.reportType = Objects.requireNonNull(reportType, "reportType must not be null");
         this.reportDate = Objects.requireNonNull(reportDate, "reportDate must not be null");
         this.submittedByUserId = Objects.requireNonNull(submittedByUserId, "submittedByUserId must not be null");
-        this.workflowStatus = ReportWorkflowStatus.DRAFT;
+        this.workflowStatus = ReportWorkflowStatus.PENDING;
     }
 
 
     public void assignSubmitter(UUID userId) {
-        if (workflowStatus != ReportWorkflowStatus.DRAFT
-                && workflowStatus != ReportWorkflowStatus.REJECTED) {
-            throw new IllegalStateException("Submitted or approved reports are locked");
+        if (workflowStatus != ReportWorkflowStatus.PENDING) {
+            throw new IllegalStateException("Submitted or done reports are locked");
         }
         submittedByUserId = Objects.requireNonNull(userId, "userId must not be null");
     }
 
     public void submit() {
-        if (workflowStatus != ReportWorkflowStatus.DRAFT
-                && workflowStatus != ReportWorkflowStatus.REJECTED) {
-            throw new IllegalStateException("Only a draft or rejected report can be submitted");
+        if (workflowStatus != ReportWorkflowStatus.PENDING) {
+            throw new IllegalStateException("Only a pending report can be submitted");
         }
         workflowStatus = ReportWorkflowStatus.SUBMITTED;
         submittedAt = Instant.now();
@@ -109,7 +107,7 @@ public class BusinessReport {
     }
 
     public void markCompleteWithoutApproval() {
-        workflowStatus = ReportWorkflowStatus.APPROVED;
+        workflowStatus = ReportWorkflowStatus.DONE;
         submittedAt = Instant.now();
         reviewedByUserId = submittedByUserId;
         reviewedAt = submittedAt;
@@ -118,7 +116,7 @@ public class BusinessReport {
 
     public void approve(UUID reviewerUserId, String note) {
         requireSubmitted();
-        workflowStatus = ReportWorkflowStatus.APPROVED;
+        workflowStatus = ReportWorkflowStatus.DONE;
         reviewedByUserId = Objects.requireNonNull(reviewerUserId, "reviewerUserId must not be null");
         reviewedAt = Instant.now();
         reviewNote = normaliseOptional(note);
@@ -127,22 +125,21 @@ public class BusinessReport {
     public void reject(UUID reviewerUserId, String note) {
         requireSubmitted();
         String normalised = requireText(note, "A rejection reason is required.");
-        workflowStatus = ReportWorkflowStatus.REJECTED;
+        workflowStatus = ReportWorkflowStatus.PENDING;
         reviewedByUserId = Objects.requireNonNull(reviewerUserId, "reviewerUserId must not be null");
         reviewedAt = Instant.now();
         reviewNote = normalised;
     }
 
     public void reopenForEditing() {
-        if (workflowStatus == ReportWorkflowStatus.REJECTED) {
-            workflowStatus = ReportWorkflowStatus.DRAFT;
+        if (workflowStatus == ReportWorkflowStatus.PENDING) {
             submittedAt = null;
             reviewedByUserId = null;
             reviewedAt = null;
             reviewNote = null;
         }
-        if (workflowStatus != ReportWorkflowStatus.DRAFT) {
-            throw new IllegalStateException("Approved or submitted reports are locked");
+        if (workflowStatus != ReportWorkflowStatus.PENDING) {
+            throw new IllegalStateException("Done or submitted reports are locked");
         }
     }
 
