@@ -1,5 +1,6 @@
 package com.eastapp.backend.organisation.service;
 
+import com.eastapp.backend.auth.AdminLogin;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.Tenant;
@@ -175,6 +176,13 @@ public class TenantService {
     }
 
     private void assertUnique(String companyCode, String prefix) {
+        if (AdminLogin.COMPANY_ID.equals(companyCode)) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "COMPANY_CODE_RESERVED",
+                    "ADMIN is reserved for the founding administrator login."
+            );
+        }
         if (tenantRepository.existsByCompanyCode(companyCode)) {
             throw new ApiException(
                     HttpStatus.CONFLICT, "COMPANY_CODE_EXISTS", "This company code already exists."

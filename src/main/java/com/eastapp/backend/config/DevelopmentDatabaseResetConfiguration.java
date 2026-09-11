@@ -17,7 +17,7 @@ public class DevelopmentDatabaseResetConfiguration {
      * A destructive reset is allowed only when BOTH this code gate and
      * EASTAPP_DATABASE_RESET_ON_START are true. If either is false, data is preserved.
      */
-    private static final boolean DATABASE_RESET_ALLOWED_BY_CODE = false;
+    private static final boolean DATABASE_RESET_ALLOWED_BY_CODE = true;
 
     @Bean
     FlywayConfigurationCustomizer eastAppFlywayConfigurationCustomizer(

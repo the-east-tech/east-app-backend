@@ -1,5 +1,6 @@
 package com.eastapp.backend.setup;
 
+import com.eastapp.backend.auth.AdminLogin;
 import com.eastapp.backend.auth.LoginIdentity;
 import com.eastapp.backend.auth.LoginIdentityRepository;
 import com.eastapp.backend.common.error.ApiException;
@@ -118,6 +119,9 @@ public class InitialSetupService {
 
         String companyCode = Tenant.normaliseCode(request.companyCode());
         String prefix = Tenant.normaliseEmployeeIdPrefix(request.employeeIdPrefix());
+        if (AdminLogin.COMPANY_ID.equals(companyCode)) {
+            throw reservedAdminCompanyCode();
+        }
         if (tenantRepository.existsByCompanyCode(companyCode)) {
             throw new ApiException(HttpStatus.CONFLICT, "COMPANY_CODE_EXISTS", "This company code already exists.");
         }
@@ -153,9 +157,9 @@ public class InitialSetupService {
         log.info("EastApp initial setup completed businessCode={} employeeId={}",
                 provisioned.tenant().getCompanyCode(), provisioned.creator().getEmployeeId());
         return new CompleteInitialSetupResponse(
-                provisioned.tenant().getCompanyCode(),
+                AdminLogin.COMPANY_ID,
                 provisioned.tenant().getBusinessName(),
-                provisioned.creator().getEmployeeId()
+                AdminLogin.EMPLOYEE_ID
         );
     }
 
@@ -168,6 +172,14 @@ public class InitialSetupService {
                 HttpStatus.UNAUTHORIZED,
                 "INVALID_SETUP_CODE",
                 "The setup code is invalid or has expired."
+        );
+    }
+
+    private static ApiException reservedAdminCompanyCode() {
+        return new ApiException(
+                HttpStatus.CONFLICT,
+                "COMPANY_CODE_RESERVED",
+                "ADMIN is reserved for the founding administrator login."
         );
     }
 }
