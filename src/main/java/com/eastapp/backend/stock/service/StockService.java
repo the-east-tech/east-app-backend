@@ -299,7 +299,9 @@ public class StockService {
         }
         Tenant tenant = tenant(principal.tenantId());
         UserAccount actor = actor(principal);
-        StockTag saved = tagRepository.saveAndFlush(new StockTag(tenant, tag, actor));
+        StockTag saved = tagRepository.saveAndFlush(new StockTag(
+                tenant, tag, request.active() == null || request.active(), actor
+        ));
         List<UserAccount> assignedUsers = replaceTagAssignees(
                 principal.tenantId(), saved.getId(), request.assignedUserIds(), actor
         );
@@ -321,7 +323,7 @@ public class StockService {
         }
         UserAccount actor = actor(principal);
         List<UserAccount> oldUsers = assignedUsers(principal.tenantId(), tagId);
-        tag.rename(newName, actor);
+        tag.update(newName, request.active(), actor);
         List<UserAccount> newUsers = request.assignedUserIds() == null
                 ? oldUsers
                 : replaceTagAssignees(
@@ -374,7 +376,8 @@ public class StockService {
                 request.websiteOrGoogleLink(), request.notes(), request.unit(),
                 request.recommendedPurchaseAmount(), request.recommendedPurchaseFrequency(),
                 request.pricingPerUnit(), request.minimumBalanceValue(),
-                request.maximumBalanceValue(), request.currentBalanceValue(), actor
+                request.maximumBalanceValue(), request.currentBalanceValue(),
+                request.active() == null || request.active(), actor
         ));
         return StockSupplierResponse.from(supplier);
     }
@@ -392,13 +395,22 @@ public class StockService {
                         principal.tenantId(), request.supplierName().trim())) {
             throw conflict("STOCK_SUPPLIER_EXISTS", "This supplier already exists.");
         }
+        if (Boolean.FALSE.equals(request.active())
+                && supplier.isActive()
+                && !StockSupplier.ORDER_NONE.equals(supplier.getOrderState())) {
+            throw conflict(
+                    "STOCK_SUPPLIER_HAS_ACTIVE_ORDER",
+                    "Finish the supplier's active order before deactivating it."
+            );
+        }
         supplier.update(
                 request.supplierName(), request.supplierItem(), request.contactPerson(),
                 request.phone(), request.address(), request.address2(),
                 request.websiteOrGoogleLink(), request.notes(), request.unit(),
                 request.recommendedPurchaseAmount(), request.recommendedPurchaseFrequency(),
                 request.pricingPerUnit(), request.minimumBalanceValue(),
-                request.maximumBalanceValue(), request.currentBalanceValue(), actor(principal)
+                request.maximumBalanceValue(), request.currentBalanceValue(),
+                request.active(), actor(principal)
         );
         return StockSupplierResponse.from(supplier);
     }
@@ -607,14 +619,14 @@ public class StockService {
         StockMedia thumbnail = skuThumbnail(principal, request.photoPath());
         Tenant tenant = tenant(principal.tenantId());
         UserAccount actor = actor(principal);
-        StockTag tag1 = tag(request.tag1Id(), principal.tenantId());
-        StockTag tag2 = tag(request.tag2Id(), principal.tenantId());
+        StockTag tag1 = selectableTag(request.tag1Id(), principal.tenantId(), null);
+        StockTag tag2 = selectableTag(request.tag2Id(), principal.tenantId(), null);
         return skuRepository.save(new StockSku(
                 tenant, request.name(), tag1, tag2, request.unit(),
                 request.minimumBalanceValue(), request.maximumBalanceValue(),
                 request.currentBalanceValue(), request.recoveryPercent(),
                 request.minimumPriceRm(), request.maximumPriceRm(),
-                suppliers(principal.tenantId(), request.supplierIds()),
+                suppliers(principal.tenantId(), request.supplierIds(), Set.of()),
                 thumbnail, request.assignedStaffNames(),
                 request.receivableChecklist(), request.stockCheckSchedule(),
                 request.stockCheckDay(), request.stockCheckDate(),
@@ -637,14 +649,23 @@ public class StockService {
         StockMedia thumbnail = keepThumbnail
                 ? sku.getThumbnailMedia()
                 : skuThumbnail(principal, request.photoPath());
-        StockTag tag1 = tag(request.tag1Id(), principal.tenantId());
-        StockTag tag2 = tag(request.tag2Id(), principal.tenantId());
+        StockTag tag1 = selectableTag(
+                request.tag1Id(), principal.tenantId(),
+                sku.getTag1() == null ? null : sku.getTag1().getId()
+        );
+        StockTag tag2 = selectableTag(
+                request.tag2Id(), principal.tenantId(),
+                sku.getTag2() == null ? null : sku.getTag2().getId()
+        );
+        Set<UUID> existingSupplierIds = sku.getSuppliers().stream()
+                .map(StockSupplier::getId)
+                .collect(Collectors.toSet());
         sku.update(
                 request.name(), tag1, tag2, request.unit(),
                 request.minimumBalanceValue(), request.maximumBalanceValue(),
                 sku.getCurrentBalanceValue(), request.recoveryPercent(),
                 request.minimumPriceRm(), request.maximumPriceRm(),
-                suppliers(principal.tenantId(), request.supplierIds()),
+                suppliers(principal.tenantId(), request.supplierIds(), existingSupplierIds),
                 thumbnail, request.assignedStaffNames(),
                 request.receivableChecklist(), request.stockCheckSchedule(),
                 request.stockCheckDay(), request.stockCheckDate(),
@@ -1075,6 +1096,17 @@ public class StockService {
                 .orElseThrow(() -> notFound("STOCK_TAG_NOT_FOUND", "Stock tag not found."));
     }
 
+    private StockTag selectableTag(UUID id, UUID tenantId, UUID currentTagId) {
+        StockTag tag = tag(id, tenantId);
+        if (tag != null && !tag.isActive() && !tag.getId().equals(currentTagId)) {
+            throw badRequest(
+                    "STOCK_TAG_INACTIVE",
+                    "Reactivate this tag before assigning it to an SKU."
+            );
+        }
+        return tag;
+    }
+
     private List<StockTagResponse> tagResponses(UUID tenantId, List<StockTag> tags) {
         Map<UUID, List<UserAccount>> usersByTag = assignedUsersByTag(
                 tenantId,
@@ -1215,7 +1247,11 @@ public class StockService {
                 .orElseThrow(() -> notFound("STOCK_SKU_NOT_FOUND", "SKU not found."));
     }
 
-    private Set<StockSupplier> suppliers(UUID tenantId, List<UUID> ids) {
+    private Set<StockSupplier> suppliers(
+            UUID tenantId,
+            List<UUID> ids,
+            Set<UUID> currentSupplierIds
+    ) {
         if (ids == null || ids.isEmpty()) return Set.of();
         LinkedHashSet<UUID> uniqueIds = new LinkedHashSet<>(ids);
         Map<UUID, StockSupplier> found = supplierRepository
@@ -1226,7 +1262,16 @@ public class StockService {
             throw notFound("STOCK_SUPPLIER_NOT_FOUND", "One or more suppliers were not found.");
         }
         Set<StockSupplier> result = new LinkedHashSet<>();
-        for (UUID id : uniqueIds) result.add(found.get(id));
+        for (UUID id : uniqueIds) {
+            StockSupplier supplier = found.get(id);
+            if (!supplier.isActive() && !currentSupplierIds.contains(id)) {
+                throw badRequest(
+                        "STOCK_SUPPLIER_INACTIVE",
+                        "Reactivate this supplier before assigning it to an SKU."
+                );
+            }
+            result.add(supplier);
+        }
         return result;
     }
 

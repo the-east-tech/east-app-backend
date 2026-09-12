@@ -19,6 +19,9 @@ public interface StockSupplierRepository extends JpaRepository<StockSupplier, UU
     List<StockSupplier> findAllByTenant_IdOrderBySupplierNameAsc(UUID tenantId);
 
     @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy", "orderedBy"})
+    List<StockSupplier> findAllByTenant_IdAndActiveTrueOrderBySupplierNameAsc(UUID tenantId);
+
+    @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy", "orderedBy"})
     @Query("""
             select supplier
             from StockSupplier supplier

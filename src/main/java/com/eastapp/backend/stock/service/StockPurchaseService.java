@@ -32,7 +32,9 @@ public class StockPurchaseService {
 
     @Transactional(readOnly = true)
     public List<StockPurchaseSupplierResponse> suppliers(AuthenticatedUser principal) {
-        return supplierRepository.findAllByTenant_IdOrderBySupplierNameAsc(principal.tenantId())
+        return supplierRepository.findAllByTenant_IdAndActiveTrueOrderBySupplierNameAsc(
+                        principal.tenantId()
+                )
                 .stream()
                 .map(StockPurchaseSupplierResponse::from)
                 .toList();
@@ -56,6 +58,13 @@ public class StockPurchaseService {
             MarkSupplierOrderedRequest request
     ) {
         StockSupplier supplier = supplierForUpdate(principal, supplierId);
+        if (!supplier.isActive()) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "STOCK_SUPPLIER_INACTIVE",
+                    "Reactivate this supplier before creating an order."
+            );
+        }
         UserAccount actor = actor(principal);
         try {
             supplier.markOrdered(request.message(), actor, Instant.now());

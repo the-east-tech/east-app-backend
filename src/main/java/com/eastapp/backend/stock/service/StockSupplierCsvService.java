@@ -147,6 +147,7 @@ public class StockSupplierCsvService {
         for (ParsedSupplier row : analysis.readyRows()) {
             stockService.createSupplier(principal, new CreateStockSupplierRequest(
                     row.supplierName(),
+                    true,
                     row.supplierItem(),
                     row.contactPerson(),
                     row.phone(),

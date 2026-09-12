@@ -7,6 +7,7 @@ import java.util.UUID;
 public record StockTagResponse(
         UUID id,
         String tag,
+        boolean active,
         String createdBy,
         String createdDate,
         String lastUpdated,
@@ -23,6 +24,7 @@ public record StockTagResponse(
         return new StockTagResponse(
                 item.getId(),
                 item.getTag(),
+                item.isActive(),
                 StockResponseSupport.employeeId(item.getCreatedBy()),
                 StockResponseSupport.label(item.getCreatedAt()),
                 StockResponseSupport.label(item.getUpdatedAt()),

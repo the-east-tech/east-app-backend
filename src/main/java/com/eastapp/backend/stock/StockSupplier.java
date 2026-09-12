@@ -44,6 +44,8 @@ public class StockSupplier {
     private Tenant tenant;
     @Column(name = "supplier_name", nullable = false, length = 120)
     private String supplierName;
+    @Column(nullable = false)
+    private boolean active = true;
     @Column(name = "supplier_item", nullable = false, length = 160)
     private String supplierItem;
     @Column(name = "contact_person", nullable = false, length = 120)
@@ -109,10 +111,11 @@ public class StockSupplier {
             BigDecimal recommendedPurchaseAmount, String recommendedPurchaseFrequency,
             BigDecimal pricingPerUnit, BigDecimal minimumBalanceValue,
             BigDecimal maximumBalanceValue, BigDecimal currentBalanceValue,
-            UserAccount actor
+            boolean active, UserAccount actor
     ) {
         this.tenant = Objects.requireNonNull(tenant);
         this.supplierName = requireText(supplierName, "supplierName");
+        this.active = active;
         this.supplierItem = requireText(supplierItem, "supplierItem");
         this.contactPerson = text(contactPerson);
         this.phone = text(phone);
@@ -140,9 +143,10 @@ public class StockSupplier {
             BigDecimal recommendedPurchaseAmount, String recommendedPurchaseFrequency,
             BigDecimal pricingPerUnit, BigDecimal minimumBalanceValue,
             BigDecimal maximumBalanceValue, BigDecimal currentBalanceValue,
-            UserAccount actor
+            Boolean active, UserAccount actor
     ) {
         this.supplierName = requireText(supplierName, "supplierName");
+        if (active != null) this.active = active;
         this.supplierItem = requireText(supplierItem, "supplierItem");
         this.contactPerson = text(contactPerson);
         this.phone = text(phone);
@@ -226,6 +230,7 @@ public class StockSupplier {
     public UUID getId() { return id; }
     public Tenant getTenant() { return tenant; }
     public String getSupplierName() { return supplierName; }
+    public boolean isActive() { return active; }
     public String getSupplierItem() { return supplierItem; }
     public String getContactPerson() { return contactPerson; }
     public String getPhone() { return phone; }
