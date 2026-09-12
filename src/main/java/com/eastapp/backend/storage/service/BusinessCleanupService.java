@@ -55,7 +55,7 @@ public class BusinessCleanupService {
     private static final String SKU_ELIGIBLE = """
             sku.tenant_id = :tenantId
             and not sku.active
-            and sku.updated_at::date < :cutoffDate
+            and sku.updated_at < :cutoffAt
             and sku.updated_at <= :asOf
             and not exists (select 1 from stock_count_submissions count_record where count_record.sku_id = sku.id)
             and not exists (select 1 from stock_receivable_items item where item.sku_id = sku.id)
@@ -65,7 +65,7 @@ public class BusinessCleanupService {
     private static final String SUPPLIER_ELIGIBLE = """
             supplier.tenant_id = :tenantId
             and not supplier.active
-            and supplier.updated_at::date < :cutoffDate
+            and supplier.updated_at < :cutoffAt
             and supplier.updated_at <= :asOf
             and not exists (select 1 from stock_receivables receivable where receivable.supplier_id = supplier.id)
             and not exists (select 1 from stock_sku_suppliers link where link.supplier_id = supplier.id)
@@ -73,7 +73,7 @@ public class BusinessCleanupService {
     private static final String TAG_ELIGIBLE = """
             tag.tenant_id = :tenantId
             and not tag.active
-            and tag.updated_at::date < :cutoffDate
+            and tag.updated_at < :cutoffAt
             and tag.updated_at <= :asOf
             and not exists (select 1 from stock_skus sku where sku.tag1_id = tag.id or sku.tag2_id = tag.id)
             and not exists (select 1 from knowledge_sops sop where sop.tag_id = tag.id)
@@ -83,15 +83,15 @@ public class BusinessCleanupService {
     private static final String TASK_TEMPLATE_ELIGIBLE = """
             template.tenant_id = :tenantId
             and not template.active
-            and template.updated_at::date < :cutoffDate
+            and template.updated_at < :cutoffAt
             and template.updated_at <= :asOf
             and not exists (select 1 from task_records task where task.template_id = template.id)
             """;
     private static final String ADVERTISEMENT_ELIGIBLE = """
             advertisement.tenant_id = :tenantId
             and (
-                (not advertisement.active and advertisement.updated_at::date < :cutoffDate)
-                or advertisement.ends_at::date < :cutoffDate
+                (not advertisement.active and advertisement.updated_at < :cutoffAt)
+                or advertisement.ends_at < :cutoffAt
             )
             and advertisement.updated_at <= :asOf
             and advertisement.ends_at <= :asOf
@@ -99,19 +99,19 @@ public class BusinessCleanupService {
     private static final String COUNT_ELIGIBLE = """
             count_record.tenant_id = :tenantId
             and count_record.review_status = 'DONE'
-            and count_record.captured_at::date < :cutoffDate
+            and count_record.captured_at < :cutoffAt
             and count_record.updated_at <= :asOf
             """;
     private static final String RECEIVABLE_ELIGIBLE = """
             receivable.tenant_id = :tenantId
             and receivable.review_status = 'DONE'
-            and receivable.captured_at::date < :cutoffDate
+            and receivable.captured_at < :cutoffAt
             and receivable.updated_at <= :asOf
             """;
     private static final String SKU_REQUEST_ELIGIBLE = """
             request.tenant_id = :tenantId
             and request.workflow_status = 'DONE'
-            and request.updated_at::date < :cutoffDate
+            and request.updated_at < :cutoffAt
             and request.updated_at <= :asOf
             """;
     private static final String REPORT_ELIGIBLE = """
@@ -128,12 +128,12 @@ public class BusinessCleanupService {
             """;
     private static final String ATTENDANCE_ELIGIBLE = """
             attendance.tenant_id = :tenantId
-            and attendance.occurred_at::date < :cutoffDate
+            and attendance.occurred_at < :cutoffAt
             and attendance.created_at <= :asOf
             """;
     private static final String ACTIVITY_ELIGIBLE = """
             event.tenant_id = :tenantId
-            and event.occurred_at::date < :cutoffDate
+            and event.occurred_at < :cutoffAt
             and event.occurred_at <= :asOf
             and not exists (
                 select 1 from user_notifications notification
@@ -144,7 +144,7 @@ public class BusinessCleanupService {
             """;
     private static final String VIDEO_ELIGIBLE = """
             watch.tenant_id = :tenantId
-            and watch.started_at::date < :cutoffDate
+            and watch.started_at < :cutoffAt
             and watch.updated_at <= :asOf
             """;
     private static final String UNUSED_STOCK_MEDIA = """
@@ -399,7 +399,7 @@ public class BusinessCleanupService {
                 where id = :id and tenant_id = :tenantId
                 """,
                 runParameters(principal, runId)
-                        .addValue("completedAt", completedAt)
+                        .addValue("completedAt", Timestamp.from(completedAt))
                         .addValue("deletedRecords", deletedRecords)
                         .addValue("deletedPhotos", deletedPhotos)
         );
@@ -424,10 +424,10 @@ public class BusinessCleanupService {
             addRefs(refs, BusinessCleanupDataType.INACTIVE_SETUP, "stock_tags", "tag", TAG_ELIGIBLE, parameters);
             addRefs(refs, BusinessCleanupDataType.INACTIVE_SETUP, "task_templates", "template", TASK_TEMPLATE_ELIGIBLE, parameters);
             addRefs(refs, BusinessCleanupDataType.INACTIVE_SETUP, "advertisements", "advertisement", ADVERTISEMENT_ELIGIBLE, parameters);
-            long inactive = count("stock_skus", "sku", "sku.tenant_id = :tenantId and not sku.active and sku.updated_at::date < :cutoffDate and sku.updated_at <= :asOf", parameters)
-                    + count("stock_suppliers", "supplier", "supplier.tenant_id = :tenantId and not supplier.active and supplier.updated_at::date < :cutoffDate and supplier.updated_at <= :asOf", parameters)
-                    + count("stock_tags", "tag", "tag.tenant_id = :tenantId and not tag.active and tag.updated_at::date < :cutoffDate and tag.updated_at <= :asOf", parameters)
-                    + count("task_templates", "template", "template.tenant_id = :tenantId and not template.active and template.updated_at::date < :cutoffDate and template.updated_at <= :asOf", parameters);
+            long inactive = count("stock_skus", "sku", "sku.tenant_id = :tenantId and not sku.active and sku.updated_at < :cutoffAt and sku.updated_at <= :asOf", parameters)
+                    + count("stock_suppliers", "supplier", "supplier.tenant_id = :tenantId and not supplier.active and supplier.updated_at < :cutoffAt and supplier.updated_at <= :asOf", parameters)
+                    + count("stock_tags", "tag", "tag.tenant_id = :tenantId and not tag.active and tag.updated_at < :cutoffAt and tag.updated_at <= :asOf", parameters)
+                    + count("task_templates", "template", "template.tenant_id = :tenantId and not template.active and template.updated_at < :cutoffAt and template.updated_at <= :asOf", parameters);
             long safelyInactive = refs.stream()
                     .filter(ref -> ref.dataType() == BusinessCleanupDataType.INACTIVE_SETUP)
                     .filter(ref -> !ref.tableName().equals("advertisements"))
@@ -1018,6 +1018,12 @@ public class BusinessCleanupService {
     }
 
     private static void validate(BusinessCleanupRequest request) {
+        if (request.cutoffDate().isAfter(LocalDate.now(BUSINESS_ZONE))) {
+            throw badRequest(
+                    "BUSINESS_CLEANUP_CUTOFF_DATE_FUTURE",
+                    "Cutoff date must be today or earlier in the business timezone."
+            );
+        }
         if (request.mediaMode() == BusinessCleanupMediaMode.SELECTED && request.mediaTypes().isEmpty()) {
             throw badRequest(
                     "BUSINESS_CLEANUP_MEDIA_TYPES_REQUIRED",
@@ -1121,7 +1127,8 @@ public class BusinessCleanupService {
         return new MapSqlParameterSource()
                 .addValue("tenantId", principal.tenantId())
                 .addValue("cutoffDate", request.cutoffDate())
-                .addValue("asOf", asOf);
+                .addValue("cutoffAt", Timestamp.from(request.cutoffDate().atStartOfDay(BUSINESS_ZONE).toInstant()))
+                .addValue("asOf", Timestamp.from(asOf));
     }
 
     private static MapSqlParameterSource runParameters(AuthenticatedUser principal, UUID runId) {
