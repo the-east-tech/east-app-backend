@@ -1,0 +1,13 @@
+package com.eastapp.backend.storage.api;
+
+public enum BusinessCleanupMediaType {
+    SKU_THUMBNAILS,
+    STOCK_COUNT_PHOTOS,
+    RECEIVABLE_INVOICE_PHOTOS,
+    RECEIVABLE_GOODS_PHOTOS,
+    SALES_VOID_BILL_PHOTOS,
+    WASTE_PHOTOS,
+    COMPLAINT_PHOTOS,
+    TASK_REPORT_PHOTOS,
+    ADVERTISEMENT_PHOTOS
+}
