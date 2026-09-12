@@ -9,13 +9,13 @@ import com.eastapp.backend.storage.api.BusinessCleanupMediaType;
 import com.eastapp.backend.storage.api.BusinessCleanupPreviewResponse;
 import com.eastapp.backend.storage.api.BusinessCleanupRequest;
 import com.eastapp.backend.storage.api.BusinessCleanupRunResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -186,14 +186,14 @@ public class BusinessCleanupService {
     );
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public BusinessCleanupService(
             NamedParameterJdbcTemplate jdbcTemplate,
-            ObjectMapper objectMapper
+            JsonMapper jsonMapper
     ) {
         this.jdbcTemplate = jdbcTemplate;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @Transactional(readOnly = true)
@@ -929,7 +929,7 @@ public class BusinessCleanupService {
     }
 
     private void writeJson(ZipOutputStream zip, String path, Object value) throws IOException {
-        writeBytes(zip, path, objectMapper.writeValueAsBytes(value));
+        writeBytes(zip, path, jsonMapper.writeValueAsBytes(value));
     }
 
     private static void writeBytes(ZipOutputStream zip, String path, byte[] bytes) throws IOException {
