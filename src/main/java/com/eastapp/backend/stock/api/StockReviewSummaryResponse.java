@@ -5,7 +5,7 @@ public record StockReviewSummaryResponse(
         long done,
         long total,
         long dailyCountPending,
-        long receivingPending,
+        long receivablePending,
         long skuChangePending,
         long readyToReceive
 ) {
@@ -14,6 +14,6 @@ public record StockReviewSummaryResponse(
     }
 
     public long outstandingPending() {
-        return dailyCountPending + receivingPending + skuChangePending;
+        return dailyCountPending + receivablePending + skuChangePending;
     }
 }

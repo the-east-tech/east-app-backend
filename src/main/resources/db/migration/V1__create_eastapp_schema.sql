@@ -278,6 +278,8 @@ CREATE TABLE stock_suppliers (
     contact_person VARCHAR(120) NOT NULL DEFAULT '',
     phone VARCHAR(32) NOT NULL DEFAULT '',
     address VARCHAR(500) NOT NULL DEFAULT '',
+    address_2 VARCHAR(500) NOT NULL DEFAULT '',
+    website_or_google_link VARCHAR(1000) NOT NULL DEFAULT '',
     notes VARCHAR(1000) NOT NULL DEFAULT '',
     unit VARCHAR(32) NOT NULL,
     recommended_purchase_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
@@ -410,7 +412,7 @@ CREATE TABLE stock_sku_assignees (
     CONSTRAINT fk_stock_sku_assignees_sku FOREIGN KEY (sku_id) REFERENCES stock_skus (id) ON DELETE CASCADE
 );
 
-CREATE TABLE stock_sku_receiving_checklist (
+CREATE TABLE stock_sku_receivable_checklist (
     sku_id UUID NOT NULL,
     position INTEGER NOT NULL,
     checklist_item VARCHAR(300) NOT NULL,
@@ -471,7 +473,7 @@ CREATE TABLE stock_count_submission_remarks (
         REFERENCES stock_count_submissions (id) ON DELETE CASCADE
 );
 
-CREATE TABLE stock_receivings (
+CREATE TABLE stock_receivables (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     tenant_id UUID NOT NULL,
     supplier_id UUID NOT NULL,
@@ -486,29 +488,29 @@ CREATE TABLE stock_receivings (
     review_note VARCHAR(1000) NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_stock_receivings_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_stock_receivings_supplier_same_tenant FOREIGN KEY (tenant_id, supplier_id)
+    CONSTRAINT fk_stock_receivables_tenant FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_receivables_supplier_same_tenant FOREIGN KEY (tenant_id, supplier_id)
         REFERENCES stock_suppliers (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT fk_stock_receivings_received_by FOREIGN KEY (tenant_id, received_by_user_id)
+    CONSTRAINT fk_stock_receivables_received_by FOREIGN KEY (tenant_id, received_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT fk_stock_receivings_reviewed_by FOREIGN KEY (tenant_id, reviewed_by_user_id)
+    CONSTRAINT fk_stock_receivables_reviewed_by FOREIGN KEY (tenant_id, reviewed_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_receivings_tenant_id_id UNIQUE (tenant_id, id)
+    CONSTRAINT uq_stock_receivables_tenant_id_id UNIQUE (tenant_id, id)
 );
-CREATE INDEX ix_stock_receivings_tenant_captured_at ON stock_receivings (tenant_id, captured_at DESC);
-CREATE INDEX ix_stock_receivings_tenant_review_captured_at ON stock_receivings (tenant_id, review_status, captured_at DESC);
-CREATE INDEX ix_stock_receivings_tenant_supplier
-    ON stock_receivings (tenant_id, supplier_id);
-CREATE INDEX ix_stock_receivings_tenant_order_reference
-    ON stock_receivings (tenant_id, order_reference, captured_at DESC)
+CREATE INDEX ix_stock_receivables_tenant_captured_at ON stock_receivables (tenant_id, captured_at DESC);
+CREATE INDEX ix_stock_receivables_tenant_review_captured_at ON stock_receivables (tenant_id, review_status, captured_at DESC);
+CREATE INDEX ix_stock_receivables_tenant_supplier
+    ON stock_receivables (tenant_id, supplier_id);
+CREATE INDEX ix_stock_receivables_tenant_order_reference
+    ON stock_receivables (tenant_id, order_reference, captured_at DESC)
     WHERE order_reference IS NOT NULL;
-CREATE UNIQUE INDEX uq_stock_receivings_active_order_reference
-    ON stock_receivings (tenant_id, order_reference)
+CREATE UNIQUE INDEX uq_stock_receivables_active_order_reference
+    ON stock_receivables (tenant_id, order_reference)
     WHERE order_reference IS NOT NULL AND review_status <> 'PENDING';
 
-CREATE TABLE stock_receiving_items (
+CREATE TABLE stock_receivable_items (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
-    receiving_id UUID NOT NULL,
+    receivable_id UUID NOT NULL,
     sku_id UUID NOT NULL,
     position INTEGER NOT NULL,
     sku_name VARCHAR(120) NOT NULL,
@@ -517,11 +519,11 @@ CREATE TABLE stock_receiving_items (
     unit VARCHAR(32) NOT NULL,
     condition VARCHAR(80) NOT NULL,
     note VARCHAR(1000) NOT NULL DEFAULT '',
-    CONSTRAINT fk_stock_receiving_items_receiving FOREIGN KEY (receiving_id)
-        REFERENCES stock_receivings (id) ON DELETE CASCADE,
-    CONSTRAINT fk_stock_receiving_items_sku FOREIGN KEY (sku_id)
+    CONSTRAINT fk_stock_receivable_items_receivable FOREIGN KEY (receivable_id)
+        REFERENCES stock_receivables (id) ON DELETE CASCADE,
+    CONSTRAINT fk_stock_receivable_items_sku FOREIGN KEY (sku_id)
         REFERENCES stock_skus (id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_receiving_items_position UNIQUE (receiving_id, position)
+    CONSTRAINT uq_stock_receivable_items_position UNIQUE (receivable_id, position)
 );
 
 CREATE TABLE knowledge_sops (

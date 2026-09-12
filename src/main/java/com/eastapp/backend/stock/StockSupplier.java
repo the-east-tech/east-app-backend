@@ -52,6 +52,10 @@ public class StockSupplier {
     private String phone;
     @Column(nullable = false, length = 500)
     private String address;
+    @Column(name = "address_2", nullable = false, length = 500)
+    private String address2;
+    @Column(name = "website_or_google_link", nullable = false, length = 1000)
+    private String websiteOrGoogleLink;
     @Column(nullable = false, length = 1000)
     private String notes;
     @Column(nullable = false, length = 32)
@@ -100,7 +104,8 @@ public class StockSupplier {
 
     public StockSupplier(
             Tenant tenant, String supplierName, String supplierItem, String contactPerson,
-            String phone, String address, String notes, String unit,
+            String phone, String address, String address2, String websiteOrGoogleLink,
+            String notes, String unit,
             BigDecimal recommendedPurchaseAmount, String recommendedPurchaseFrequency,
             BigDecimal pricingPerUnit, BigDecimal minimumBalanceValue,
             BigDecimal maximumBalanceValue, BigDecimal currentBalanceValue,
@@ -112,6 +117,8 @@ public class StockSupplier {
         this.contactPerson = text(contactPerson);
         this.phone = text(phone);
         this.address = text(address);
+        this.address2 = text(address2);
+        this.websiteOrGoogleLink = text(websiteOrGoogleLink);
         this.notes = text(notes);
         this.unit = requireText(unit, "unit");
         this.recommendedPurchaseAmount = nonNegative(recommendedPurchaseAmount, "recommendedPurchaseAmount");
@@ -128,7 +135,8 @@ public class StockSupplier {
 
     public void update(
             String supplierName, String supplierItem, String contactPerson,
-            String phone, String address, String notes, String unit,
+            String phone, String address, String address2, String websiteOrGoogleLink,
+            String notes, String unit,
             BigDecimal recommendedPurchaseAmount, String recommendedPurchaseFrequency,
             BigDecimal pricingPerUnit, BigDecimal minimumBalanceValue,
             BigDecimal maximumBalanceValue, BigDecimal currentBalanceValue,
@@ -139,6 +147,8 @@ public class StockSupplier {
         this.contactPerson = text(contactPerson);
         this.phone = text(phone);
         this.address = text(address);
+        this.address2 = text(address2);
+        this.websiteOrGoogleLink = text(websiteOrGoogleLink);
         this.notes = text(notes);
         this.unit = requireText(unit, "unit");
         this.recommendedPurchaseAmount = nonNegative(recommendedPurchaseAmount, "recommendedPurchaseAmount");
@@ -181,9 +191,9 @@ public class StockSupplier {
         this.orderedMessage = value;
     }
 
-    public UUID beginReceiving() {
+    public UUID beginReceivable() {
         if (!canReceive()) {
-            throw new IllegalArgumentException("Mark this supplier as Ordered Done before receiving stock.");
+            throw new IllegalArgumentException("Mark this supplier as Ordered Done before receivable stock.");
         }
         if (currentOrderReference == null) {
             throw new IllegalArgumentException("Active supplier order is missing its reference.");
@@ -192,7 +202,7 @@ public class StockSupplier {
         return currentOrderReference;
     }
 
-    public void applyReceivingReview(UUID orderReference, StockWorkflowStatus status) {
+    public void applyReceivableReview(UUID orderReference, StockWorkflowStatus status) {
         if (orderReference == null || !orderReference.equals(currentOrderReference)) return;
         if (!ORDER_SUBMITTED.equals(orderState)) return;
         if (status == StockWorkflowStatus.DONE) {
@@ -220,6 +230,8 @@ public class StockSupplier {
     public String getContactPerson() { return contactPerson; }
     public String getPhone() { return phone; }
     public String getAddress() { return address; }
+    public String getAddress2() { return address2; }
+    public String getWebsiteOrGoogleLink() { return websiteOrGoogleLink; }
     public String getNotes() { return notes; }
     public String getUnit() { return unit; }
     public BigDecimal getRecommendedPurchaseAmount() { return recommendedPurchaseAmount; }

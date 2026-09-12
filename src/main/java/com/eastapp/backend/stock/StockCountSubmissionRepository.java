@@ -54,6 +54,8 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             StockWorkflowStatus excludedWorkflowStatus
     );
 
+    boolean existsByTenant_IdAndSku_Id(UUID tenantId, UUID skuId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = {"tenant", "sku", "submittedBy", "reviewedBy"})
     List<StockCountSubmission> findAllByTenant_IdAndIdIn(UUID tenantId, List<UUID> ids);

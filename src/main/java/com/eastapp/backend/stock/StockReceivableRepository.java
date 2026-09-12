@@ -11,21 +11,21 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface StockReceivingRepository extends JpaRepository<StockReceiving, UUID> {
+public interface StockReceivableRepository extends JpaRepository<StockReceivable, UUID> {
     @EntityGraph(attributePaths = {"tenant", "supplier", "receivedBy", "reviewedBy"})
-    Page<StockReceiving> findAllByTenant_IdOrderByCapturedAtDesc(UUID tenantId, Pageable pageable);
+    Page<StockReceivable> findAllByTenant_IdOrderByCapturedAtDesc(UUID tenantId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"tenant", "supplier", "receivedBy", "reviewedBy"})
     @Query("""
-            select receiving
-            from StockReceiving receiving
-            where receiving.tenant.id = :tenantId
-              and (:filterByWorkflowStatus = false or receiving.workflowStatus = :workflowStatus)
-              and (:filterByFrom = false or receiving.capturedAt >= :fromInclusive)
-              and (:filterByTo = false or receiving.capturedAt < :toExclusive)
-            order by receiving.capturedAt desc, receiving.id desc
+            select receivable
+            from StockReceivable receivable
+            where receivable.tenant.id = :tenantId
+              and (:filterByWorkflowStatus = false or receivable.workflowStatus = :workflowStatus)
+              and (:filterByFrom = false or receivable.capturedAt >= :fromInclusive)
+              and (:filterByTo = false or receivable.capturedAt < :toExclusive)
+            order by receivable.capturedAt desc, receivable.id desc
             """)
-    Page<StockReceiving> searchByTenant(
+    Page<StockReceivable> searchByTenant(
             @Param("tenantId") UUID tenantId,
             @Param("filterByWorkflowStatus") boolean filterByWorkflowStatus,
             @Param("workflowStatus") StockWorkflowStatus workflowStatus,
@@ -37,9 +37,11 @@ public interface StockReceivingRepository extends JpaRepository<StockReceiving, 
     );
 
     @EntityGraph(attributePaths = {"tenant", "supplier", "receivedBy", "reviewedBy", "items", "items.sku"})
-    Optional<StockReceiving> findByIdAndTenant_Id(UUID id, UUID tenantId);
+    Optional<StockReceivable> findByIdAndTenant_Id(UUID id, UUID tenantId);
 
     boolean existsByTenant_IdAndSupplier_Id(UUID tenantId, UUID supplierId);
+
+    boolean existsByTenant_IdAndItems_Sku_Id(UUID tenantId, UUID skuId);
 
     long countByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
             UUID tenantId,

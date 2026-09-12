@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-public record CreateStockReceivingItemRequest(
+public record CreateStockReceivableItemRequest(
         @NotNull UUID skuId,
         @NotNull @DecimalMin("0") BigDecimal invoiceQuantity,
         @NotNull @DecimalMin("0") BigDecimal receivedQuantity,

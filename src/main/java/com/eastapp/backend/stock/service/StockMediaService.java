@@ -47,11 +47,11 @@ public class StockMediaService {
     }
 
     @Transactional
-    public StockMediaUploadResponse saveReceivingPhoto(
+    public StockMediaUploadResponse saveReceivablePhoto(
             AuthenticatedUser principal,
             MultipartFile file
     ) {
-        return saveImage(principal, file, "Receiving photo");
+        return saveImage(principal, file, "Receivable photo");
     }
 
     public StoredStockMedia loadSkuThumbnail(
@@ -61,11 +61,11 @@ public class StockMediaService {
         return loadImage(principal, storageKey, "SKU thumbnail");
     }
 
-    public StoredStockMedia loadReceivingPhoto(
+    public StoredStockMedia loadReceivablePhoto(
             AuthenticatedUser principal,
             String storageKey
     ) {
-        return loadImage(principal, storageKey, "Receiving photo");
+        return loadImage(principal, storageKey, "Receivable photo");
     }
 
     private StockMediaUploadResponse saveImage(

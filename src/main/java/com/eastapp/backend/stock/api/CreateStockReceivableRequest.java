@@ -10,10 +10,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-public record CreateStockReceivingRequest(
+public record CreateStockReceivableRequest(
         @NotNull UUID supplierId,
         @NotNull Instant capturedAt,
         @NotBlank @Size(max = 500) String invoicePhotoName,
         @NotBlank @Size(max = 500) String goodsPhotoName,
-        @NotEmpty List<@Valid CreateStockReceivingItemRequest> items
+        @NotEmpty List<@Valid CreateStockReceivableItemRequest> items
 ) {}

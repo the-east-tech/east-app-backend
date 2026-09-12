@@ -13,6 +13,8 @@ public record CreateStockSupplierRequest(
         @Size(max = 120) String contactPerson,
         @Size(max = 32) String phone,
         @Size(max = 500) String address,
+        @Size(max = 500) String address2,
+        @Size(max = 1000) String websiteOrGoogleLink,
         @Size(max = 1000) String notes,
         @NotBlank @Size(max = 32) String unit,
         @NotNull @DecimalMin("0") BigDecimal recommendedPurchaseAmount,

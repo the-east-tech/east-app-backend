@@ -125,6 +125,10 @@ public class StockSkuChangeRequest {
         skuId = Objects.requireNonNull(id);
     }
 
+    public void detachSku() {
+        skuId = null;
+    }
+
     public UUID getId() { return id; }
     public UUID getTenantId() { return tenantId; }
     public UUID getSkuId() { return skuId; }

@@ -6,6 +6,7 @@ import com.eastapp.backend.stock.StockWorkflowStatus;
 import com.eastapp.backend.stock.service.StockMediaService;
 import com.eastapp.backend.stock.service.StockService;
 import com.eastapp.backend.stock.service.StockSkuCsvService;
+import com.eastapp.backend.stock.service.StockSupplierCsvService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.core.io.Resource;
@@ -37,15 +38,18 @@ public class StockController {
     private final StockService stockService;
     private final StockMediaService stockMediaService;
     private final StockSkuCsvService stockSkuCsvService;
+    private final StockSupplierCsvService stockSupplierCsvService;
 
     public StockController(
             StockService stockService,
             StockMediaService stockMediaService,
-            StockSkuCsvService stockSkuCsvService
+            StockSkuCsvService stockSkuCsvService,
+            StockSupplierCsvService stockSupplierCsvService
     ) {
         this.stockService = stockService;
         this.stockMediaService = stockMediaService;
         this.stockSkuCsvService = stockSkuCsvService;
+        this.stockSupplierCsvService = stockSupplierCsvService;
     }
 
 
@@ -71,23 +75,23 @@ public class StockController {
                 .body(media.resource());
     }
 
-    @PostMapping(value = "/media/receiving-photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/media/receivable-photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
-    ResponseEntity<StockMediaUploadResponse> uploadReceivingPhoto(
+    ResponseEntity<StockMediaUploadResponse> uploadReceivablePhoto(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam("file") MultipartFile file
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(stockMediaService.saveReceivingPhoto(principal, file));
+                .body(stockMediaService.saveReceivablePhoto(principal, file));
     }
 
-    @GetMapping("/media/receiving-photos/{storageKey}")
+    @GetMapping("/media/receivable-photos/{storageKey}")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
-    ResponseEntity<Resource> receivingPhoto(
+    ResponseEntity<Resource> receivablePhoto(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable String storageKey
     ) {
-        StockMediaService.StoredStockMedia media = stockMediaService.loadReceivingPhoto(principal, storageKey);
+        StockMediaService.StoredStockMedia media = stockMediaService.loadReceivablePhoto(principal, storageKey);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(media.contentType()))
                 .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
@@ -117,6 +121,37 @@ public class StockController {
             @RequestParam(defaultValue = "50") int size
     ) {
         return stockService.listSuppliers(principal, search, page, size);
+    }
+
+    @GetMapping(value = "/suppliers/export", produces = "text/csv")
+    @PreAuthorize("hasRole('OWNER')")
+    ResponseEntity<byte[]> exportSuppliers(
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        StockSupplierCsvService.CsvExport export = stockSupplierCsvService.exportSuppliers(principal);
+        return ResponseEntity.ok()
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + export.fileName() + "\"")
+                .body(export.bytes());
+    }
+
+    @PostMapping(value = "/suppliers/import/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('OWNER')")
+    StockSupplierCsvPreviewResponse previewSupplierImport(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return stockSupplierCsvService.preview(principal, file);
+    }
+
+    @PostMapping(value = "/suppliers/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('OWNER')")
+    ResponseEntity<StockSupplierCsvImportResponse> importSuppliers(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(stockSupplierCsvService.importSuppliers(principal, file));
     }
 
     @GetMapping("/skus")
@@ -184,9 +219,9 @@ public class StockController {
         return stockService.listCounts(principal, mine, workflowStatus, from, to, page, size);
     }
 
-    @GetMapping("/receivings")
+    @GetMapping("/receivables")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
-    PageResponse<StockReceivingResponse> receivings(
+    PageResponse<StockReceivableResponse> receivables(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false) StockWorkflowStatus workflowStatus,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -194,7 +229,7 @@ public class StockController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
-        return stockService.listReceivings(principal, workflowStatus, from, to, page, size);
+        return stockService.listReceivables(principal, workflowStatus, from, to, page, size);
     }
 
     @PostMapping("/tags")
@@ -338,23 +373,23 @@ public class StockController {
         return stockService.bulkReviewCounts(principal, request);
     }
 
-    @PostMapping("/receivings")
+    @PostMapping("/receivables")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
-    ResponseEntity<StockReceivingResponse> createReceiving(
+    ResponseEntity<StockReceivableResponse> createReceivable(
             @AuthenticationPrincipal AuthenticatedUser principal,
-            @Valid @RequestBody CreateStockReceivingRequest request
+            @Valid @RequestBody CreateStockReceivableRequest request
     ) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(stockService.createReceiving(principal, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(stockService.createReceivable(principal, request));
     }
 
-    @PatchMapping("/receivings/{receivingId}/review")
+    @PatchMapping("/receivables/{receivableId}/review")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
-    StockReceivingResponse reviewReceiving(
+    StockReceivableResponse reviewReceivable(
             @AuthenticationPrincipal AuthenticatedUser principal,
-            @PathVariable UUID receivingId,
+            @PathVariable UUID receivableId,
             @Valid @RequestBody ReviewStockRecordRequest request
     ) {
-        return stockService.reviewReceiving(principal, receivingId, request);
+        return stockService.reviewReceivable(principal, receivableId, request);
     }
 
     @GetMapping("/reviews/today-summary")

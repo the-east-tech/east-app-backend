@@ -27,8 +27,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 @Entity
-@Table(name = "stock_receivings")
-public class StockReceiving {
+@Table(name = "stock_receivables")
+public class StockReceivable {
     @Id @Generated @ColumnDefault("uuidv7()")
     @Column(nullable = false, updatable = false)
     private UUID id;
@@ -47,9 +47,9 @@ public class StockReceiving {
     private String invoicePhotoName;
     @Column(name = "goods_photo_name", nullable = false, length = 500)
     private String goodsPhotoName;
-    @OneToMany(mappedBy = "receiving", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "receivable", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")
-    private List<StockReceivingItem> items = new ArrayList<>();
+    private List<StockReceivableItem> items = new ArrayList<>();
     @Column(name = "review_status", nullable = false, length = 24)
     @Enumerated(EnumType.STRING)
     private StockWorkflowStatus workflowStatus = StockWorkflowStatus.SUBMITTED;
@@ -67,9 +67,9 @@ public class StockReceiving {
     @UpdateTimestamp @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    protected StockReceiving() {}
+    protected StockReceivable() {}
 
-    public StockReceiving(
+    public StockReceivable(
             Tenant tenant, StockSupplier supplier, UserAccount receivedBy,
             Instant capturedAt, String invoicePhotoName, String goodsPhotoName
     ) {
@@ -80,24 +80,24 @@ public class StockReceiving {
         this.invoicePhotoName = text(invoicePhotoName);
         this.goodsPhotoName = text(goodsPhotoName);
         this.workflowStatus = StockWorkflowStatus.SUBMITTED;
-        this.orderReference = supplier.beginReceiving();
+        this.orderReference = supplier.beginReceivable();
     }
 
-    public void addItem(StockReceivingItem item) {
+    public void addItem(StockReceivableItem item) {
         item.attachTo(this, items.size());
         items.add(item);
     }
 
     public void review(StockWorkflowStatus next, String note, UserAccount actor) {
         if (workflowStatus != StockWorkflowStatus.SUBMITTED) {
-            throw new IllegalStateException("Only a submitted receiving record may be reviewed.");
+            throw new IllegalStateException("Only a submitted receivable record may be reviewed.");
         }
         if (next != StockWorkflowStatus.DONE && next != StockWorkflowStatus.PENDING) {
-            throw new IllegalArgumentException("Stock receiving status must be DONE or PENDING.");
+            throw new IllegalArgumentException("Stock receivable status must be DONE or PENDING.");
         }
         UserAccount reviewer = Objects.requireNonNull(actor);
         if (next == StockWorkflowStatus.PENDING) {
-            for (StockReceivingItem item : items) {
+            for (StockReceivableItem item : items) {
                 StockSku sku = item.getSku();
                 BigDecimal reverted = sku.getCurrentBalanceValue().subtract(item.getReceivedQuantity());
                 if (reverted.signum() < 0) reverted = BigDecimal.ZERO;
@@ -108,7 +108,7 @@ public class StockReceiving {
         this.reviewNote = text(note);
         this.reviewedBy = reviewer;
         this.reviewedAt = Instant.now();
-        supplier.applyReceivingReview(orderReference, next);
+        supplier.applyReceivableReview(orderReference, next);
     }
 
     public UUID getId() { return id; }
@@ -118,7 +118,7 @@ public class StockReceiving {
     public Instant getCapturedAt() { return capturedAt; }
     public String getInvoicePhotoName() { return invoicePhotoName; }
     public String getGoodsPhotoName() { return goodsPhotoName; }
-    public List<StockReceivingItem> getItems() { return items; }
+    public List<StockReceivableItem> getItems() { return items; }
     public StockWorkflowStatus getWorkflowStatus() { return workflowStatus; }
     public UUID getOrderReference() { return orderReference; }
     public UserAccount getReviewedBy() { return reviewedBy; }
