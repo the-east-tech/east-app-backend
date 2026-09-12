@@ -3,7 +3,6 @@ package com.eastapp.backend.storage.service;
 import com.eastapp.backend.auth.permission.SystemPermission;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
-import com.eastapp.backend.storage.api.StorageCleanupResponse;
 import com.eastapp.backend.storage.api.StorageOverviewResponse;
 import com.eastapp.backend.storage.api.StorageTableDataResponse;
 import org.springframework.http.HttpStatus;
@@ -267,49 +266,6 @@ public class StorageAdminService {
         );
     }
 
-    @Transactional
-    public StorageCleanupResponse cleanup(
-            AuthenticatedUser principal,
-            String tableName,
-            boolean confirmed,
-            int requestedRows
-    ) {
-        assertStorageAdmin(principal);
-        if (!confirmed) {
-            throw new ApiException(
-                    HttpStatus.BAD_REQUEST,
-                    "CLEANUP_CONFIRMATION_REQUIRED",
-                    "Confirm the permanent deletion first."
-            );
-        }
-        if (requestedRows < 1) {
-            throw new ApiException(
-                    HttpStatus.BAD_REQUEST,
-                    "CLEANUP_ROW_COUNT_REQUIRED",
-                    "Choose at least one row to delete."
-            );
-        }
-        CleanupPolicy policy = CLEANUP_POLICIES.get(tableName);
-        if (policy == null) {
-            throw new ApiException(
-                    HttpStatus.NOT_FOUND,
-                    "TABLE_CLEANUP_NOT_ALLOWED",
-                    "This table does not support direct cleanup."
-            );
-        }
-
-        int deletedRows;
-        if (tableName.equals("activity_events")) {
-            deletedRows = deleteActivityEvents(policy, requestedRows);
-        } else {
-            if (policy.deleteRelatedActivity()) {
-                deleteRelatedActivity(tableName, policy, requestedRows);
-            }
-            deletedRows = deleteOldest(tableName, policy, requestedRows);
-        }
-        return new StorageCleanupResponse(tableName, deletedRows, Instant.now());
-    }
-
     private List<StorageOverviewResponse.TableUsage> loadTableUsage() {
         List<TableMetadata> metadata = jdbcTemplate.query(
                 """
@@ -373,9 +329,6 @@ public class StorageAdminService {
                         resultSet.getObject("latest_date", LocalDate.class)
                 )
         );
-        CleanupPolicy policy = CLEANUP_POLICIES.get(table.tableName());
-        boolean deleteAllowed = policy != null;
-        long deletableRows = deleteAllowed ? loadDeletableRows(table.tableName(), policy) : 0;
         return new StorageOverviewResponse.TableUsage(
                 table.tableName(),
                 tableGroup(table.tableName()),
@@ -386,17 +339,10 @@ public class StorageAdminService {
                 table.dataBytes(),
                 table.indexBytes(),
                 table.totalBytes(),
-                deleteAllowed,
-                deletableRows,
-                policy == null ? null : policy.description()
+                false,
+                0,
+                null
         );
-    }
-
-    private long loadDeletableRows(String tableName, CleanupPolicy policy) {
-        String sql = "select count(*) from " + quoteIdentifier(tableName)
-                + " candidate where " + policy.eligibility();
-        Long count = jdbcTemplate.queryForObject(sql, Long.class);
-        return count == null ? 0 : count;
     }
 
     private List<TableColumnMetadata> loadTableColumns(String tableName) {
@@ -465,52 +411,6 @@ public class StorageAdminService {
         return value.toString();
     }
 
-    private int deleteActivityEvents(CleanupPolicy policy, int requestedRows) {
-        String candidates = candidateIds("activity_events", policy);
-        jdbcTemplate.update(
-                "delete from user_notifications where activity_event_id in (" + candidates + ")",
-                requestedRows
-        );
-        return jdbcTemplate.update(
-                "delete from activity_events where id in (" + candidates + ")",
-                requestedRows
-        );
-    }
-
-    private void deleteRelatedActivity(
-            String tableName,
-            CleanupPolicy policy,
-            int requestedRows
-    ) {
-        String candidates = candidateIds(tableName, policy);
-        String events = "select event.id from activity_events event where event.target_id in ("
-                + candidates + ")";
-        jdbcTemplate.update(
-                "delete from user_notifications where activity_event_id in (" + events + ")",
-                requestedRows
-        );
-        jdbcTemplate.update(
-                "delete from activity_events where target_id in (" + candidates + ")",
-                requestedRows
-        );
-    }
-
-    private int deleteOldest(
-            String tableName,
-            CleanupPolicy policy,
-            int requestedRows
-    ) {
-        return jdbcTemplate.update(
-                "delete from " + quoteIdentifier(tableName)
-                        + " where id in (" + candidateIds(tableName, policy) + ")",
-                requestedRows
-        );
-    }
-
-    private String candidateIds(String tableName, CleanupPolicy policy) {
-        return "select candidate.id from " + quoteIdentifier(tableName) + " candidate where "
-                + policy.eligibility() + " order by " + policy.orderBy() + " limit ?";
-    }
 
     private static String quoteIdentifier(String identifier) {
         if (identifier == null || !identifier.matches("[a-z][a-z0-9_]*")) {
@@ -600,6 +500,7 @@ public class StorageAdminService {
             case "task_records" -> "Scheduled task history and status";
             case "task_record_checklist_items" -> "Task checklist results";
             case "task_photos" -> "Task photo links";
+            case "business_cleanup_runs" -> "Business backup and cleanup audit history";
             case "flyway_schema_history" -> "Database migration history";
             default -> "Application data";
         };

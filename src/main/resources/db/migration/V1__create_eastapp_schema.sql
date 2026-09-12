@@ -1,4 +1,4 @@
--- EastApp clean reset-per-release schema (v120).
+-- EastApp clean reset-per-release schema (v141).
 -- This V1 contains the complete schema for a brand-new EastApp database.
 -- While the reset-per-release policy is active, merge every schema change into
 -- this file, keep V1 as the only migration, and reset the database each release.
@@ -991,3 +991,39 @@ CREATE TABLE task_photos (
 );
 CREATE INDEX ix_task_photos_tenant_record_time
     ON task_photos (tenant_id, record_id, submitted_at, id);
+
+-- Metadata only. Backup ZIP bytes are returned to the requesting device and
+-- are never stored in PostgreSQL.
+CREATE TABLE business_cleanup_runs (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    requested_by_user_id UUID NOT NULL,
+    cutoff_date DATE NOT NULL,
+    data_types VARCHAR(500) NOT NULL,
+    media_mode VARCHAR(24) NOT NULL,
+    media_types VARCHAR(1000) NOT NULL DEFAULT '',
+    record_count BIGINT NOT NULL,
+    blocked_record_count BIGINT NOT NULL,
+    photo_count BIGINT NOT NULL,
+    excluded_photo_count BIGINT NOT NULL,
+    estimated_zip_bytes BIGINT NOT NULL,
+    selection_sha256 VARCHAR(64) NOT NULL,
+    zip_file_name VARCHAR(255) NOT NULL,
+    zip_size_bytes BIGINT NOT NULL,
+    zip_sha256 VARCHAR(64) NOT NULL,
+    status VARCHAR(24) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    saved_confirmed_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    deleted_record_count BIGINT NOT NULL DEFAULT 0,
+    deleted_photo_count BIGINT NOT NULL DEFAULT 0,
+    CONSTRAINT fk_business_cleanup_runs_tenant
+        FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_business_cleanup_runs_requester_same_tenant
+        FOREIGN KEY (tenant_id, requested_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT ck_business_cleanup_runs_status
+        CHECK (status IN ('BACKUP_CREATED', 'SAVED_CONFIRMED', 'COMPLETED'))
+);
+CREATE INDEX ix_business_cleanup_runs_tenant_created
+    ON business_cleanup_runs (tenant_id, created_at DESC);
