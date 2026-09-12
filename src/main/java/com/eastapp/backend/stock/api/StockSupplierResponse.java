@@ -7,6 +7,7 @@ import java.util.UUID;
 public record StockSupplierResponse(
         UUID id,
         String supplierName,
+        boolean active,
         String supplierItem,
         String contactPerson,
         String phone,
@@ -26,7 +27,7 @@ public record StockSupplierResponse(
 ) {
     public static StockSupplierResponse from(StockSupplier item) {
         return new StockSupplierResponse(
-                item.getId(), item.getSupplierName(), item.getSupplierItem(),
+                item.getId(), item.getSupplierName(), item.isActive(), item.getSupplierItem(),
                 item.getContactPerson(), item.getPhone(), item.getAddress(),
                 item.getAddress2(), item.getWebsiteOrGoogleLink(), item.getNotes(),
                 item.getUnit(), item.getRecommendedPurchaseAmount(),

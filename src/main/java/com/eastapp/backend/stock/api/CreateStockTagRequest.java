@@ -9,7 +9,8 @@ import java.util.UUID;
 
 public record CreateStockTagRequest(
         @NotBlank @Size(max = 80) String tag,
-        @Size(max = 500) List<@NotNull UUID> assignedUserIds
+        @Size(max = 500) List<@NotNull UUID> assignedUserIds,
+        Boolean active
 ) {
     public CreateStockTagRequest {
         assignedUserIds = assignedUserIds == null ? List.of() : List.copyOf(assignedUserIds);

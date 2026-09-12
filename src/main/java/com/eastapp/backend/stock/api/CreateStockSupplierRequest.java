@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 
 public record CreateStockSupplierRequest(
         @NotBlank @Size(max = 120) String supplierName,
+        Boolean active,
         @NotBlank @Size(max = 160) String supplierItem,
         @Size(max = 120) String contactPerson,
         @Size(max = 32) String phone,

@@ -32,6 +32,9 @@ public class StockTag {
     @Column(nullable = false, length = 80)
     private String tag;
 
+    @Column(nullable = false)
+    private boolean active = true;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "created_by_user_id", nullable = false, updatable = false)
     private UserAccount createdBy;
@@ -49,20 +52,27 @@ public class StockTag {
     protected StockTag() {}
 
     public StockTag(Tenant tenant, String tag, UserAccount actor) {
+        this(tenant, tag, true, actor);
+    }
+
+    public StockTag(Tenant tenant, String tag, boolean active, UserAccount actor) {
         this.tenant = Objects.requireNonNull(tenant);
         this.tag = requireText(tag, "tag");
+        this.active = active;
         this.createdBy = Objects.requireNonNull(actor);
         this.updatedBy = actor;
     }
 
-    public void rename(String tag, UserAccount actor) {
+    public void update(String tag, Boolean active, UserAccount actor) {
         this.tag = requireText(tag, "tag");
+        if (active != null) this.active = active;
         this.updatedBy = Objects.requireNonNull(actor);
     }
 
     public UUID getId() { return id; }
     public Tenant getTenant() { return tenant; }
     public String getTag() { return tag; }
+    public boolean isActive() { return active; }
     public UserAccount getCreatedBy() { return createdBy; }
     public UserAccount getUpdatedBy() { return updatedBy; }
     public Instant getCreatedAt() { return createdAt; }

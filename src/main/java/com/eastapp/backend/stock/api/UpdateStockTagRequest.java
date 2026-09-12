@@ -9,5 +9,6 @@ import java.util.UUID;
 
 public record UpdateStockTagRequest(
         @NotBlank @Size(max = 80) String tag,
-        @Size(max = 500) List<@NotNull UUID> assignedUserIds
+        @Size(max = 500) List<@NotNull UUID> assignedUserIds,
+        Boolean active
 ) {}
