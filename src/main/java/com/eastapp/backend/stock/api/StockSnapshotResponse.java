@@ -7,6 +7,6 @@ public record StockSnapshotResponse(
         List<StockSupplierResponse> suppliers,
         List<StockSkuResponse> skus,
         List<StockCountSubmissionResponse> submissions,
-        List<StockReceivingResponse> receivingRecords
+        List<StockReceivableResponse> receivableRecords
 ) {
 }

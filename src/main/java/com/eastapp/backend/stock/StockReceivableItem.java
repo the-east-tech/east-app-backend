@@ -15,14 +15,14 @@ import java.util.Objects;
 import java.util.UUID;
 
 @Entity
-@Table(name = "stock_receiving_items")
-public class StockReceivingItem {
+@Table(name = "stock_receivable_items")
+public class StockReceivableItem {
     @Id @Generated @ColumnDefault("uuidv7()")
     @Column(nullable = false, updatable = false)
     private UUID id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "receiving_id", nullable = false, updatable = false)
-    private StockReceiving receiving;
+    @JoinColumn(name = "receivable_id", nullable = false, updatable = false)
+    private StockReceivable receivable;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "sku_id", nullable = false, updatable = false)
     private StockSku sku;
@@ -41,9 +41,9 @@ public class StockReceivingItem {
     @Column(nullable = false, length = 1000)
     private String note;
 
-    protected StockReceivingItem() {}
+    protected StockReceivableItem() {}
 
-    public StockReceivingItem(
+    public StockReceivableItem(
             StockSku sku, BigDecimal invoiceQuantity, BigDecimal receivedQuantity,
             String condition, String note
     ) {
@@ -56,9 +56,9 @@ public class StockReceivingItem {
         this.note = text(note);
     }
 
-    void attachTo(StockReceiving receiving, int position) {
+    void attachTo(StockReceivable receivable, int position) {
         if (position < 0) throw new IllegalArgumentException("position must not be negative");
-        this.receiving = Objects.requireNonNull(receiving);
+        this.receivable = Objects.requireNonNull(receivable);
         this.position = position;
     }
     public UUID getId() { return id; }

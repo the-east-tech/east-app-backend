@@ -78,7 +78,7 @@ public class StockSkuCsvService {
             "minimum_price_rm",
             "maximum_price_rm",
             "supplier_names",
-            "receiving_checklist",
+            "receivable_checklist",
             "stock_check_schedule",
             "stock_check_day",
             "stock_check_date",
@@ -146,7 +146,7 @@ public class StockSkuCsvService {
                             decimal(sku.getMinimumPriceRm()),
                             decimal(sku.getMaximumPriceRm()),
                             objectMapper.writeValueAsString(supplierNames),
-                            objectMapper.writeValueAsString(sku.getReceivingChecklist()),
+                            objectMapper.writeValueAsString(sku.getReceivableChecklist()),
                             sku.getStockCheckSchedule().name(),
                             sku.getStockCheckDay() == null ? "" : sku.getStockCheckDay(),
                             sku.getStockCheckDate() == null ? "" : sku.getStockCheckDate(),
@@ -268,7 +268,7 @@ public class StockSkuCsvService {
                     suppliers.stream().map(StockSupplier::getId).toList(),
                     noImage.getStorageKey(),
                     List.of(),
-                    row.receivingChecklist(),
+                    row.receivableChecklist(),
                     row.stockCheckSchedule(),
                     row.stockCheckDay(),
                     row.stockCheckDate(),
@@ -406,7 +406,7 @@ public class StockSkuCsvService {
                 record, "supplier_names", 50, 120
         );
         List<String> checklist = stringList(
-                record, "receiving_checklist", 50, 300
+                record, "receivable_checklist", 50, 300
         );
         StockCheckSchedule stockCheckSchedule;
         try {
@@ -662,7 +662,7 @@ public class StockSkuCsvService {
             BigDecimal minimumPrice,
             BigDecimal maximumPrice,
             List<String> supplierNames,
-            List<String> receivingChecklist,
+            List<String> receivableChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
             LocalDate stockCheckDate,

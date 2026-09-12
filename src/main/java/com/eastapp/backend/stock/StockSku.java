@@ -96,12 +96,12 @@ public class StockSku {
 
     @ElementCollection
     @CollectionTable(
-            name = "stock_sku_receiving_checklist",
+            name = "stock_sku_receivable_checklist",
             joinColumns = @JoinColumn(name = "sku_id")
     )
     @OrderColumn(name = "position")
     @Column(name = "checklist_item", nullable = false, length = 300)
-    private List<String> receivingChecklist = new ArrayList<>();
+    private List<String> receivableChecklist = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "stock_check_schedule", nullable = false, length = 16)
@@ -153,7 +153,7 @@ public class StockSku {
             Set<StockSupplier> suppliers,
             StockMedia thumbnailMedia,
             List<String> assignedStaffNames,
-            List<String> receivingChecklist,
+            List<String> receivableChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
             LocalDate stockCheckDate,
@@ -167,7 +167,7 @@ public class StockSku {
                 name, tag1, tag2, unit,
                 minimumBalanceValue, maximumBalanceValue, currentBalanceValue,
                 recoveryPercent, minimumPriceRm, maximumPriceRm,
-                suppliers, thumbnailMedia, assignedStaffNames, receivingChecklist,
+                suppliers, thumbnailMedia, assignedStaffNames, receivableChecklist,
                 stockCheckSchedule, stockCheckDay, stockCheckDate, active, coolingPeriod, actor
         );
     }
@@ -186,7 +186,7 @@ public class StockSku {
             Set<StockSupplier> suppliers,
             StockMedia thumbnailMedia,
             List<String> assignedStaffNames,
-            List<String> receivingChecklist,
+            List<String> receivableChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
             LocalDate stockCheckDate,
@@ -198,7 +198,7 @@ public class StockSku {
                 name, tag1, tag2, unit,
                 minimumBalanceValue, maximumBalanceValue, currentBalanceValue,
                 recoveryPercent, minimumPriceRm, maximumPriceRm,
-                suppliers, thumbnailMedia, assignedStaffNames, receivingChecklist,
+                suppliers, thumbnailMedia, assignedStaffNames, receivableChecklist,
                 stockCheckSchedule, stockCheckDay, stockCheckDate, active, coolingPeriod, actor
         );
     }
@@ -217,7 +217,7 @@ public class StockSku {
             Set<StockSupplier> suppliers,
             StockMedia thumbnailMedia,
             List<String> assignedStaffNames,
-            List<String> receivingChecklist,
+            List<String> receivableChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
             LocalDate stockCheckDate,
@@ -257,12 +257,12 @@ public class StockSku {
                     .distinct()
                     .forEach(this.assignedStaffNames::add);
         }
-        this.receivingChecklist.clear();
-        if (receivingChecklist != null) {
-            receivingChecklist.stream()
+        this.receivableChecklist.clear();
+        if (receivableChecklist != null) {
+            receivableChecklist.stream()
                     .map(StockSku::text)
                     .filter(item -> !item.isEmpty())
-                    .forEach(this.receivingChecklist::add);
+                    .forEach(this.receivableChecklist::add);
         }
         this.stockCheckSchedule = Objects.requireNonNull(
                 stockCheckSchedule,
@@ -304,7 +304,7 @@ public class StockSku {
     public StockMedia getThumbnailMedia() { return thumbnailMedia; }
     public UUID getThumbnailMediaId() { return thumbnailMedia.getId(); }
     public List<String> getAssignedStaffNames() { return assignedStaffNames; }
-    public List<String> getReceivingChecklist() { return receivingChecklist; }
+    public List<String> getReceivableChecklist() { return receivableChecklist; }
     public StockCheckSchedule getStockCheckSchedule() { return stockCheckSchedule; }
     public Integer getStockCheckDay() { return stockCheckDay; }
     public LocalDate getStockCheckDate() { return stockCheckDate; }

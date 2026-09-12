@@ -27,7 +27,7 @@ public record UpsertStockSkuRequest(
         List<UUID> supplierIds,
         @Size(max = 500) String photoPath,
         List<@Size(max = 120) String> assignedStaffNames,
-        List<@Size(max = 300) String> receivingChecklist,
+        List<@Size(max = 300) String> receivableChecklist,
         @NotNull StockCheckSchedule stockCheckSchedule,
         Integer stockCheckDay,
         LocalDate stockCheckDate,

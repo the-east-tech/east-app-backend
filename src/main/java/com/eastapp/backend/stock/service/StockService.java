@@ -6,6 +6,7 @@ import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.people.SystemRole;
+import com.eastapp.backend.reports.WasteReportDetailRepository;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.activity.service.WorkflowActivityService;
 import com.eastapp.backend.common.error.ApiException;
@@ -13,9 +14,9 @@ import com.eastapp.backend.knowledge.KnowledgeSopRepository;
 import com.eastapp.backend.stock.StockCheckSchedule;
 import com.eastapp.backend.stock.StockCountSubmission;
 import com.eastapp.backend.stock.StockCountSubmissionRepository;
-import com.eastapp.backend.stock.StockReceiving;
-import com.eastapp.backend.stock.StockReceivingItem;
-import com.eastapp.backend.stock.StockReceivingRepository;
+import com.eastapp.backend.stock.StockReceivable;
+import com.eastapp.backend.stock.StockReceivableItem;
+import com.eastapp.backend.stock.StockReceivableRepository;
 import com.eastapp.backend.stock.StockMedia;
 import com.eastapp.backend.stock.StockMediaRepository;
 import com.eastapp.backend.stock.StockMediaReference;
@@ -34,13 +35,13 @@ import com.eastapp.backend.stock.StockWorkflowStatus;
 import com.eastapp.backend.stock.api.BulkReviewStockCountsResponse;
 import com.eastapp.backend.stock.api.BulkReviewStockCountsRequest;
 import com.eastapp.backend.stock.api.CreateStockCountRequest;
-import com.eastapp.backend.stock.api.CreateStockReceivingItemRequest;
-import com.eastapp.backend.stock.api.CreateStockReceivingRequest;
+import com.eastapp.backend.stock.api.CreateStockReceivableItemRequest;
+import com.eastapp.backend.stock.api.CreateStockReceivableRequest;
 import com.eastapp.backend.stock.api.CreateStockSupplierRequest;
 import com.eastapp.backend.stock.api.CreateStockTagRequest;
 import com.eastapp.backend.stock.api.ReviewStockRecordRequest;
 import com.eastapp.backend.stock.api.StockCountSubmissionResponse;
-import com.eastapp.backend.stock.api.StockReceivingResponse;
+import com.eastapp.backend.stock.api.StockReceivableResponse;
 import com.eastapp.backend.stock.api.StockReviewSummaryResponse;
 import com.eastapp.backend.stock.api.StockSkuResponse;
 import com.eastapp.backend.stock.api.StockSkuChangeRequestResponse;
@@ -91,11 +92,12 @@ public class StockService {
     private final StockSkuRepository skuRepository;
     private final StockSkuChangeRequestRepository skuChangeRequestRepository;
     private final StockCountSubmissionRepository countRepository;
-    private final StockReceivingRepository receivingRepository;
+    private final StockReceivableRepository receivableRepository;
     private final WorkflowActivityService workflowActivityService;
     private final StockMediaRepository mediaRepository;
     private final KnowledgeSopRepository knowledgeSopRepository;
     private final TaskTemplateRepository taskTemplateRepository;
+    private final WasteReportDetailRepository wasteReportDetailRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public StockService(
@@ -107,11 +109,12 @@ public class StockService {
             StockSkuRepository skuRepository,
             StockSkuChangeRequestRepository skuChangeRequestRepository,
             StockCountSubmissionRepository countRepository,
-            StockReceivingRepository receivingRepository,
+            StockReceivableRepository receivableRepository,
             WorkflowActivityService workflowActivityService,
             StockMediaRepository mediaRepository,
             KnowledgeSopRepository knowledgeSopRepository,
-            TaskTemplateRepository taskTemplateRepository
+            TaskTemplateRepository taskTemplateRepository,
+            WasteReportDetailRepository wasteReportDetailRepository
     ) {
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
@@ -121,11 +124,12 @@ public class StockService {
         this.skuRepository = skuRepository;
         this.skuChangeRequestRepository = skuChangeRequestRepository;
         this.countRepository = countRepository;
-        this.receivingRepository = receivingRepository;
+        this.receivableRepository = receivableRepository;
         this.workflowActivityService = workflowActivityService;
         this.mediaRepository = mediaRepository;
         this.knowledgeSopRepository = knowledgeSopRepository;
         this.taskTemplateRepository = taskTemplateRepository;
+        this.wasteReportDetailRepository = wasteReportDetailRepository;
     }
 
     @Transactional(readOnly = true)
@@ -139,7 +143,7 @@ public class StockService {
                         PageRequest.of(0, SNAPSHOT_HISTORY_SIZE)
                 )
                 .getContent();
-        List<StockReceiving> receivings = receivingRepository
+        List<StockReceivable> receivables = receivableRepository
                 .findAllByTenant_IdOrderByCapturedAtDesc(
                         tenantId,
                         PageRequest.of(0, SNAPSHOT_HISTORY_SIZE)
@@ -161,7 +165,7 @@ public class StockService {
                                 photoPath(count.getSku(), photoPaths)
                         ))
                         .toList(),
-                receivings.stream().map(StockReceivingResponse::from).toList()
+                receivables.stream().map(StockReceivableResponse::from).toList()
         );
     }
 
@@ -263,7 +267,7 @@ public class StockService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<StockReceivingResponse> listReceivings(
+    public PageResponse<StockReceivableResponse> listReceivables(
             AuthenticatedUser principal,
             StockWorkflowStatus workflowStatus,
             LocalDate from,
@@ -273,7 +277,7 @@ public class StockService {
     ) {
         DateRange range = dateRange(from, to);
         return PageResponse.from(
-                receivingRepository.searchByTenant(
+                receivableRepository.searchByTenant(
                         principal.tenantId(),
                         workflowStatus != null,
                         workflowStatus,
@@ -283,7 +287,7 @@ public class StockService {
                         range.toExclusive(),
                         pageRequest(page, size)
                 ),
-                StockReceivingResponse::from
+                StockReceivableResponse::from
         );
     }
 
@@ -366,7 +370,8 @@ public class StockService {
         StockSupplier supplier = supplierRepository.save(new StockSupplier(
                 tenant,
                 request.supplierName(), request.supplierItem(), request.contactPerson(),
-                request.phone(), request.address(), request.notes(), request.unit(),
+                request.phone(), request.address(), request.address2(),
+                request.websiteOrGoogleLink(), request.notes(), request.unit(),
                 request.recommendedPurchaseAmount(), request.recommendedPurchaseFrequency(),
                 request.pricingPerUnit(), request.minimumBalanceValue(),
                 request.maximumBalanceValue(), request.currentBalanceValue(), actor
@@ -389,7 +394,8 @@ public class StockService {
         }
         supplier.update(
                 request.supplierName(), request.supplierItem(), request.contactPerson(),
-                request.phone(), request.address(), request.notes(), request.unit(),
+                request.phone(), request.address(), request.address2(),
+                request.websiteOrGoogleLink(), request.notes(), request.unit(),
                 request.recommendedPurchaseAmount(), request.recommendedPurchaseFrequency(),
                 request.pricingPerUnit(), request.minimumBalanceValue(),
                 request.maximumBalanceValue(), request.currentBalanceValue(), actor(principal)
@@ -402,12 +408,12 @@ public class StockService {
         StockSupplier supplier = supplier(supplierId, principal.tenantId());
         boolean inUse = skuRepository.existsByTenant_IdAndSuppliers_Id(
                 principal.tenantId(), supplierId)
-                || receivingRepository.existsByTenant_IdAndSupplier_Id(
+                || receivableRepository.existsByTenant_IdAndSupplier_Id(
                         principal.tenantId(), supplierId);
         if (inUse) {
             throw conflict(
                     "STOCK_SUPPLIER_IN_USE",
-                    "This supplier is assigned to an SKU or receiving record and cannot be deleted."
+                    "This supplier is assigned to an SKU or receivable record and cannot be deleted."
             );
         }
         supplierRepository.delete(supplier);
@@ -461,9 +467,7 @@ public class StockService {
     @Transactional
     public StockSkuChangeRequestResponse deleteSku(AuthenticatedUser principal, UUID skuId) {
         StockSku sku = sku(skuId, principal.tenantId());
-        if (!sku.isActive()) {
-            throw conflict("STOCK_SKU_INACTIVE", "This SKU is already inactive.");
-        }
+        assertSkuCanBeHardDeleted(principal.tenantId(), skuId);
         StockSkuChangeRequest change = skuChangeRequestRepository
                 .findFirstByTenantIdAndSkuIdOrderByUpdatedAtDesc(principal.tenantId(), skuId)
                 .orElse(null);
@@ -570,7 +574,29 @@ public class StockService {
                     requireSkuId(change),
                     readSkuPayload(change)
             );
-            case DELETE -> sku(requireSkuId(change), principal.tenantId()).deactivate(actor(principal));
+            case DELETE -> hardDeleteSku(principal, change);
+        }
+    }
+
+    private void hardDeleteSku(AuthenticatedUser principal, StockSkuChangeRequest change) {
+        UUID skuId = requireSkuId(change);
+        StockSku sku = sku(skuId, principal.tenantId());
+        assertSkuCanBeHardDeleted(principal.tenantId(), skuId);
+        change.detachSku();
+        skuChangeRequestRepository.saveAndFlush(change);
+        skuRepository.delete(sku);
+        skuRepository.flush();
+    }
+
+    private void assertSkuCanBeHardDeleted(UUID tenantId, UUID skuId) {
+        boolean hasHistory = countRepository.existsByTenant_IdAndSku_Id(tenantId, skuId)
+                || receivableRepository.existsByTenant_IdAndItems_Sku_Id(tenantId, skuId)
+                || wasteReportDetailRepository.existsByTenantIdAndSkuId(tenantId, skuId);
+        if (hasHistory) {
+            throw conflict(
+                    "STOCK_SKU_HAS_HISTORY",
+                    "This SKU has count, receivable or Waste history and cannot be permanently deleted. Set it inactive instead."
+            );
         }
     }
 
@@ -590,7 +616,7 @@ public class StockService {
                 request.minimumPriceRm(), request.maximumPriceRm(),
                 suppliers(principal.tenantId(), request.supplierIds()),
                 thumbnail, request.assignedStaffNames(),
-                request.receivingChecklist(), request.stockCheckSchedule(),
+                request.receivableChecklist(), request.stockCheckSchedule(),
                 request.stockCheckDay(), request.stockCheckDate(),
                 request.active(), request.coolingPeriod(), actor
         ));
@@ -620,7 +646,7 @@ public class StockService {
                 request.minimumPriceRm(), request.maximumPriceRm(),
                 suppliers(principal.tenantId(), request.supplierIds()),
                 thumbnail, request.assignedStaffNames(),
-                request.receivingChecklist(), request.stockCheckSchedule(),
+                request.receivableChecklist(), request.stockCheckSchedule(),
                 request.stockCheckDay(), request.stockCheckDate(),
                 request.active(), request.coolingPeriod(),
                 actor(principal)
@@ -855,24 +881,24 @@ public class StockService {
     }
 
     @Transactional
-    public StockReceivingResponse createReceiving(
+    public StockReceivableResponse createReceivable(
             AuthenticatedUser principal,
-            CreateStockReceivingRequest request
+            CreateStockReceivableRequest request
     ) {
         StockSupplier supplier = supplier(request.supplierId(), principal.tenantId());
-        requireReceivingPhoto(principal.tenantId(), request.invoicePhotoName(), "Invoice");
-        requireReceivingPhoto(principal.tenantId(), request.goodsPhotoName(), "Goods received");
+        requireReceivablePhoto(principal.tenantId(), request.invoicePhotoName(), "Invoice");
+        requireReceivablePhoto(principal.tenantId(), request.goodsPhotoName(), "Goods received");
         UserAccount actor = actor(principal);
-        StockReceiving receiving = new StockReceiving(
+        StockReceivable receivable = new StockReceivable(
                 supplier.getTenant(), supplier, actor, request.capturedAt(),
                 request.invoicePhotoName(), request.goodsPhotoName()
         );
         Set<UUID> receivedSkuIds = new LinkedHashSet<>();
-        for (CreateStockReceivingItemRequest itemRequest : request.items()) {
+        for (CreateStockReceivableItemRequest itemRequest : request.items()) {
             if (!receivedSkuIds.add(itemRequest.skuId())) {
                 throw badRequest(
                         "STOCK_RECEIVING_DUPLICATE_SKU",
-                        "Each SKU can appear only once in a receiving submission."
+                        "Each SKU can appear only once in a receivable submission."
                 );
             }
         }
@@ -883,7 +909,7 @@ public class StockService {
         if (skusById.size() != receivedSkuIds.size()) {
             throw notFound("STOCK_SKU_NOT_FOUND", "One or more selected SKUs were not found.");
         }
-        for (CreateStockReceivingItemRequest itemRequest : request.items()) {
+        for (CreateStockReceivableItemRequest itemRequest : request.items()) {
             StockSku sku = skusById.get(itemRequest.skuId());
             if (sku.getSuppliers().stream().noneMatch(item -> item.getId().equals(supplier.getId()))) {
                 throw badRequest(
@@ -894,41 +920,41 @@ public class StockService {
             BigDecimal previous = sku.getCurrentBalanceValue();
             BigDecimal next = previous.add(itemRequest.receivedQuantity());
             sku.updateBalance(next, actor);
-            receiving.addItem(new StockReceivingItem(
+            receivable.addItem(new StockReceivableItem(
                     sku, itemRequest.invoiceQuantity(), itemRequest.receivedQuantity(),
                     itemRequest.condition(), itemRequest.note()
             ));
         }
-        StockReceiving saved = receivingRepository.save(receiving);
+        StockReceivable saved = receivableRepository.save(receivable);
         workflowActivityService.recordTransition(
-                principal, "Stock", "stock receiving", saved.getId(),
+                principal, "Stock", "stock receivable", saved.getId(),
                 supplier.getSupplierName(), null, StockWorkflowStatus.SUBMITTED,
-                "/api/v1/stock/receivings/" + saved.getId()
+                "/api/v1/stock/receivables/" + saved.getId()
         );
-        return StockReceivingResponse.from(saved);
+        return StockReceivableResponse.from(saved);
     }
 
     @Transactional
-    public StockReceivingResponse reviewReceiving(
+    public StockReceivableResponse reviewReceivable(
             AuthenticatedUser principal,
-            UUID receivingId,
+            UUID receivableId,
             ReviewStockRecordRequest request
     ) {
-        StockReceiving receiving = receivingRepository
-                .findByIdAndTenant_Id(receivingId, principal.tenantId())
-                .orElseThrow(() -> notFound("STOCK_RECEIVING_NOT_FOUND", "Receiving record not found."));
-        if (receiving.getWorkflowStatus() != StockWorkflowStatus.SUBMITTED) {
-            throw conflict("STOCK_RECEIVING_ALREADY_REVIEWED", "This receiving record has already been reviewed.");
+        StockReceivable receivable = receivableRepository
+                .findByIdAndTenant_Id(receivableId, principal.tenantId())
+                .orElseThrow(() -> notFound("STOCK_RECEIVING_NOT_FOUND", "Receivable record not found."));
+        if (receivable.getWorkflowStatus() != StockWorkflowStatus.SUBMITTED) {
+            throw conflict("STOCK_RECEIVING_ALREADY_REVIEWED", "This receivable record has already been reviewed.");
         }
         StockWorkflowStatus next = requireReviewDecision(request.status());
-        receiving.review(next, request.note(), actor(principal));
+        receivable.review(next, request.note(), actor(principal));
         workflowActivityService.recordTransition(
-                principal, "Stock", "stock receiving", receiving.getId(),
-                receiving.getSupplier().getSupplierName(), StockWorkflowStatus.SUBMITTED,
+                principal, "Stock", "stock receivable", receivable.getId(),
+                receivable.getSupplier().getSupplierName(), StockWorkflowStatus.SUBMITTED,
                 next,
-                "/api/v1/stock/receivings/" + receiving.getId()
+                "/api/v1/stock/receivables/" + receivable.getId()
         );
-        return StockReceivingResponse.from(receiving);
+        return StockReceivableResponse.from(receivable);
     }
 
     @Transactional(readOnly = true)
@@ -941,7 +967,7 @@ public class StockService {
                 .countByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
                         principal.tenantId(), fromInclusive, toExclusive
                 );
-        long receivingTotal = receivingRepository
+        long receivableTotal = receivableRepository
                 .countByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
                         principal.tenantId(), fromInclusive, toExclusive
                 );
@@ -952,7 +978,7 @@ public class StockService {
                         fromInclusive,
                         toExclusive
                 );
-        long receivingPending = receivingRepository
+        long receivablePending = receivableRepository
                 .countByTenant_IdAndWorkflowStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
                         principal.tenantId(),
                         StockWorkflowStatus.SUBMITTED,
@@ -969,8 +995,8 @@ public class StockService {
                         fromInclusive, toExclusive
                 );
 
-        long total = countTotal + receivingTotal + skuChangeTotal;
-        long pending = countPending + receivingPending + skuChangePending;
+        long total = countTotal + receivableTotal + skuChangeTotal;
+        long pending = countPending + receivablePending + skuChangePending;
         return new StockReviewSummaryResponse(
                 pending,
                 total - pending,
@@ -978,7 +1004,7 @@ public class StockService {
                 countRepository.countByTenant_IdAndWorkflowStatus(
                         principal.tenantId(), StockWorkflowStatus.SUBMITTED
                 ),
-                receivingRepository.countByTenant_IdAndWorkflowStatus(
+                receivableRepository.countByTenant_IdAndWorkflowStatus(
                         principal.tenantId(), StockWorkflowStatus.SUBMITTED
                 ),
                 skuChangeRequestRepository.countByTenantIdAndWorkflowStatus(
@@ -1227,7 +1253,7 @@ public class StockService {
                 : user.getFullName();
     }
 
-    private void requireReceivingPhoto(UUID tenantId, String storageKey, String label) {
+    private void requireReceivablePhoto(UUID tenantId, String storageKey, String label) {
         String value = storageKey == null ? "" : storageKey.trim();
         if (value.isEmpty()) {
             throw badRequest(

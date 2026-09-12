@@ -9,7 +9,7 @@ public record StockPurchaseSupplierResponse(
         UUID supplierId,
         String messageTemplate,
         String orderState,
-        boolean receivingEnabled,
+        boolean receivableEnabled,
         UUID currentOrderReference,
         Instant orderedAt,
         String orderedBy,

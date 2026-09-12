@@ -24,7 +24,7 @@ public record StockSkuResponse(
         List<UUID> supplierIds,
         String photoPath,
         List<String> assignedStaffNames,
-        List<String> receivingChecklist,
+        List<String> receivableChecklist,
         StockCheckSchedule stockCheckSchedule,
         Integer stockCheckDay,
         LocalDate stockCheckDate,
@@ -44,7 +44,7 @@ public record StockSkuResponse(
                 item.getMaximumPriceRm(),
                 item.getSuppliers().stream().map(supplier -> supplier.getId()).toList(),
                 photoPath, List.copyOf(item.getAssignedStaffNames()),
-                List.copyOf(item.getReceivingChecklist()),
+                List.copyOf(item.getReceivableChecklist()),
                 item.getStockCheckSchedule(), item.getStockCheckDay(), item.getStockCheckDate(),
                 StockResponseSupport.label(item.getUpdatedAt()),
                 StockResponseSupport.employeeId(item.getLastUpdatedBy()), item.isActive(), item.isCoolingPeriod()

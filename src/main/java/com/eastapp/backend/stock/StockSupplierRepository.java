@@ -28,6 +28,9 @@ public interface StockSupplierRepository extends JpaRepository<StockSupplier, UU
                     or lower(supplier.supplierName) like lower(concat('%', :search, '%'))
                     or lower(supplier.supplierItem) like lower(concat('%', :search, '%'))
                     or lower(supplier.contactPerson) like lower(concat('%', :search, '%'))
+                    or lower(supplier.address) like lower(concat('%', :search, '%'))
+                    or lower(supplier.address2) like lower(concat('%', :search, '%'))
+                    or lower(supplier.websiteOrGoogleLink) like lower(concat('%', :search, '%'))
                   )
             order by lower(supplier.supplierName), supplier.id
             """)

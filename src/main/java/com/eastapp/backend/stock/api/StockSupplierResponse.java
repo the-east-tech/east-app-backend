@@ -11,6 +11,8 @@ public record StockSupplierResponse(
         String contactPerson,
         String phone,
         String address,
+        String address2,
+        String websiteOrGoogleLink,
         String notes,
         String unit,
         BigDecimal recommendedPurchaseAmount,
@@ -25,7 +27,8 @@ public record StockSupplierResponse(
     public static StockSupplierResponse from(StockSupplier item) {
         return new StockSupplierResponse(
                 item.getId(), item.getSupplierName(), item.getSupplierItem(),
-                item.getContactPerson(), item.getPhone(), item.getAddress(), item.getNotes(),
+                item.getContactPerson(), item.getPhone(), item.getAddress(),
+                item.getAddress2(), item.getWebsiteOrGoogleLink(), item.getNotes(),
                 item.getUnit(), item.getRecommendedPurchaseAmount(),
                 item.getRecommendedPurchaseFrequency(), item.getPricingPerUnit(),
                 item.getMinimumBalanceValue(), item.getMaximumBalanceValue(),

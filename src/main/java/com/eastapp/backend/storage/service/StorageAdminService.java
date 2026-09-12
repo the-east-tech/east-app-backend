@@ -52,10 +52,10 @@ public class StorageAdminService {
                        or count_record.invoice_photo_name = candidate.storage_key)
             )
             and not exists (
-                select 1 from stock_receivings receiving
-                where receiving.tenant_id = candidate.tenant_id
-                  and (receiving.invoice_photo_name = candidate.storage_key
-                       or receiving.goods_photo_name = candidate.storage_key)
+                select 1 from stock_receivables receivable
+                where receivable.tenant_id = candidate.tenant_id
+                  and (receivable.invoice_photo_name = candidate.storage_key
+                       or receivable.goods_photo_name = candidate.storage_key)
             )
             and not exists (
                 select 1 from stock_sku_change_requests request
@@ -133,7 +133,7 @@ public class StorageAdminService {
                     "candidate.created_at, candidate.id", false
             )),
             Map.entry("stock_media", new CleanupPolicy(
-                    "Oldest photos that are not referenced by an SKU, stock count, receiving or pending SKU request.",
+                    "Oldest photos that are not referenced by an SKU, stock count, receivable or pending SKU request.",
                     UNUSED_STOCK_MEDIA, "candidate.created_at, candidate.id", false
             )),
             Map.entry("stock_sku_change_requests", new CleanupPolicy(
@@ -144,8 +144,8 @@ public class StorageAdminService {
                     "Oldest completed stock counts. Their checklist and remark rows are removed automatically.",
                     "candidate.review_status = 'DONE'", "candidate.captured_at, candidate.id", true
             )),
-            Map.entry("stock_receivings", new CleanupPolicy(
-                    "Oldest completed receiving records. Their item rows are removed automatically.",
+            Map.entry("stock_receivables", new CleanupPolicy(
+                    "Oldest completed receivable records. Their item rows are removed automatically.",
                     "candidate.review_status = 'DONE'", "candidate.captured_at, candidate.id", true
             )),
             Map.entry("knowledge_sop_watch_sessions", new CleanupPolicy(
@@ -569,19 +569,19 @@ public class StorageAdminService {
             case "push_outbox" -> "Pending and sent push deliveries";
             case "attendance_qr_codes" -> "Attendance QR tokens and expiry";
             case "attendance_events" -> "Check-in/out, device and location records";
-            case "stock_media" -> "SKU, count and receiving image bytes";
+            case "stock_media" -> "SKU, count and receivable image bytes";
             case "stock_tags" -> "Stock categories";
             case "stock_suppliers" -> "Supplier setup and purchase state";
             case "stock_skus" -> "SKU setup and current balances";
             case "stock_sku_change_requests" -> "SKU approval requests";
             case "stock_sku_suppliers" -> "SKU-to-supplier links";
             case "stock_sku_assignees" -> "SKU assignee names";
-            case "stock_sku_receiving_checklist" -> "SKU receiving checklist templates";
+            case "stock_sku_receivable_checklist" -> "SKU receivable checklist templates";
             case "stock_count_submissions" -> "Daily stock count history";
             case "stock_count_submission_checks" -> "Daily count checklist results";
             case "stock_count_submission_remarks" -> "Daily count remarks";
-            case "stock_receivings" -> "Receiving history and review status";
-            case "stock_receiving_items" -> "SKU quantities in each receiving";
+            case "stock_receivables" -> "Receivable history and review status";
+            case "stock_receivable_items" -> "SKU quantities in each receivable";
             case "knowledge_sops" -> "SOP content";
             case "knowledge_sop_watch_sessions" -> "SOP video viewing analytics";
             case "translation_cache" -> "Reusable translated content";
