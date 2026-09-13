@@ -53,7 +53,7 @@ management:
 eastapp:
   error-report:
     enabled: ${EASTAPP_ERROR_REPORT_ENABLED:false}
-    recipient: ${EASTAPP_ERROR_REPORT_RECIPIENT:the.east.dongfangxiang@gmail.com}
+    recipient: ${EASTAPP_ERROR_REPORT_RECIPIENT:}
     from: ${EASTAPP_ERROR_REPORT_FROM:${EASTAPP_MAIL_USERNAME:}}
     duplicate-window-seconds: ${EASTAPP_ERROR_REPORT_DUPLICATE_WINDOW_SECONDS:300}
 
