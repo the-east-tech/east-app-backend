@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.slf4j.MDC;
 
 import com.eastapp.backend.common.logging.RequestLoggingFilter;
-import com.eastapp.backend.support.service.ErrorReportService;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -23,11 +22,6 @@ public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final int MAX_TECHNICAL_MESSAGE_LENGTH = 1200;
-    private final ErrorReportService errorReportService;
-
-    public ApiExceptionHandler(ErrorReportService errorReportService) {
-        this.errorReportService = errorReportService;
-    }
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ApiErrorResponse> handleApiException(ApiException exception) {
@@ -68,10 +62,6 @@ public class ApiExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiErrorResponse> handleDataIntegrity(DataIntegrityViolationException exception) {
         log.error("Database integrity conflict requestId={}", currentRequestId(), exception);
-        errorReportService.reportSystemError(
-                "HTTP database integrity error requestId=" + currentRequestId(),
-                exception
-        );
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiErrorResponse.of(
                         "DATA_CONFLICT",
@@ -82,10 +72,6 @@ public class ApiExceptionHandler {
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiErrorResponse> handleUnexpected(Exception exception) {
         log.error("Unhandled backend error requestId={}", currentRequestId(), exception);
-        errorReportService.reportSystemError(
-                "Unhandled HTTP error requestId=" + currentRequestId(),
-                exception
-        );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiErrorResponse.of(
                         "INTERNAL_SERVER_ERROR",
