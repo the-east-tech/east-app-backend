@@ -3,6 +3,21 @@ server:
   port: ${PORT:8080}
 
 spring:
+  mail:
+    host: ${EASTAPP_MAIL_HOST:smtp.gmail.com}
+    port: ${EASTAPP_MAIL_PORT:587}
+    username: ${EASTAPP_MAIL_USERNAME:}
+    password: ${EASTAPP_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
+
   servlet:
     multipart:
       max-file-size: 5MB
@@ -36,6 +51,12 @@ management:
 
 
 eastapp:
+  error-report:
+    enabled: ${EASTAPP_ERROR_REPORT_ENABLED:false}
+    recipient: ${EASTAPP_ERROR_REPORT_RECIPIENT:}
+    from: ${EASTAPP_ERROR_REPORT_FROM:${EASTAPP_MAIL_USERNAME:}}
+    duplicate-window-seconds: ${EASTAPP_ERROR_REPORT_DUPLICATE_WINDOW_SECONDS:300}
+
   database:
     # Environment gate. A wipe also requires DATABASE_RESET_ALLOWED_BY_CODE=true.
     reset-on-start: ${EASTAPP_DATABASE_RESET_ON_START:false}

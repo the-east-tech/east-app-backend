@@ -3,6 +3,7 @@ package com.eastapp.backend.activity.service;
 import com.eastapp.backend.activity.ActivityEvent;
 import com.eastapp.backend.activity.UserNotification;
 import com.eastapp.backend.activity.config.NotificationProperties;
+import com.eastapp.backend.support.service.ErrorReportService;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
@@ -28,10 +29,15 @@ public class FirebasePushGateway {
     private static final String APP_NAME = "eastapp-notifications";
 
     private final NotificationProperties properties;
+    private final ErrorReportService errorReportService;
     private volatile FirebaseMessaging messaging;
 
-    public FirebasePushGateway(NotificationProperties properties) {
+    public FirebasePushGateway(
+            NotificationProperties properties,
+            ErrorReportService errorReportService
+    ) {
         this.properties = properties;
+        this.errorReportService = errorReportService;
     }
 
     public boolean isEnabled() {
@@ -72,8 +78,10 @@ public class FirebasePushGateway {
                     || code == MessagingErrorCode.INVALID_ARGUMENT) {
                 return Result.INVALID_TOKEN;
             }
+            errorReportService.reportSystemError("Firebase push delivery", exception);
             return Result.RETRYABLE_FAILURE;
         } catch (RuntimeException | IOException exception) {
+            errorReportService.reportSystemError("Firebase push delivery", exception);
             return Result.RETRYABLE_FAILURE;
         }
     }
