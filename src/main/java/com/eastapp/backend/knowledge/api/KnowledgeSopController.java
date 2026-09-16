@@ -1,6 +1,7 @@
 package com.eastapp.backend.knowledge.api;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.common.api.DeletionPreviewResponse;
 import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.knowledge.service.KnowledgeSopService;
 import jakarta.validation.Valid;
@@ -84,5 +85,14 @@ public class KnowledgeSopController {
     ) {
         sopService.bulkDelete(principal, request);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/bulk-delete/preview")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
+    DeletionPreviewResponse previewBulkDelete(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody BulkDeleteKnowledgeSopsRequest request
+    ) {
+        return sopService.previewBulkDelete(principal, request);
     }
 }

@@ -6,6 +6,9 @@ import com.eastapp.backend.auth.UserSession;
 import com.eastapp.backend.auth.UserSessionRepository;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.api.PageResponse;
+import com.eastapp.backend.common.api.DeletionDependencyResponse;
+import com.eastapp.backend.common.api.DeletionPreviewResponse;
+import com.eastapp.backend.common.deletion.DeletionPreviewService;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
@@ -44,6 +47,7 @@ public class UserAccountService {
     private final PasswordEncoder passwordEncoder;
     private final EmployeeIdService employeeIdService;
     private final JdbcTemplate jdbcTemplate;
+    private final DeletionPreviewService deletionPreviewService;
 
     public UserAccountService(
             UserAccountRepository userAccountRepository,
@@ -53,7 +57,8 @@ public class UserAccountService {
             RoleRepository roleRepository,
             PasswordEncoder passwordEncoder,
             EmployeeIdService employeeIdService,
-            JdbcTemplate jdbcTemplate
+            JdbcTemplate jdbcTemplate,
+            DeletionPreviewService deletionPreviewService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.loginIdentityRepository = loginIdentityRepository;
@@ -63,6 +68,7 @@ public class UserAccountService {
         this.passwordEncoder = passwordEncoder;
         this.employeeIdService = employeeIdService;
         this.jdbcTemplate = jdbcTemplate;
+        this.deletionPreviewService = deletionPreviewService;
     }
 
     @Transactional(readOnly = true)
@@ -159,7 +165,7 @@ public class UserAccountService {
         assertRoleMayBeAssigned(actor, newRole);
         assertPhoneAvailableForIdentity(request.phoneE164(), target.getIdentity().getId());
 
-        if (target.getRole().getSystemKey() == SystemRole.OWNER) {
+        if (target.getRole().getSystemKey() == SystemRole.OWNER && !actor.isAdmin()) {
             assertOwnerAccountRemainsOwner(newRole, request.active());
             target.updateProfile(
                     request.fullName(), request.phoneE164(), request.profilePhotoKey(),
@@ -168,7 +174,7 @@ public class UserAccountService {
             return UserResponse.from(target);
         }
 
-        if (newRole.getSystemKey() == SystemRole.OWNER && !request.active()) {
+        if (newRole.getSystemKey() == SystemRole.OWNER && !request.active() && !actor.isAdmin()) {
             throw conflict("OWNER_ACCOUNT_ACTIVE_REQUIRED", "A user promoted to Owner must remain active.");
         }
 
@@ -205,6 +211,20 @@ public class UserAccountService {
         if (target.getRole().getSystemKey() == SystemRole.ADMIN) {
             throw conflict("ADMIN_ACCOUNT_PROTECTED", "The founding administrator cannot be deleted.");
         }
+        assertMayPermanentlyDeleteUser(actor, target);
+
+        List<DeletionDependencyResponse> dependencies = deletionPreviewService
+                .user(actor.tenantId(), userId)
+                .dependencies();
+        if (!dependencies.isEmpty()) {
+            throw conflict(
+                    "USER_DELETE_DEPENDENCIES",
+                    "Delete the linked business records first: " + dependencies.stream()
+                            .map(item -> item.label() + " (" + item.count() + ")")
+                            .reduce((left, right) -> left + ", " + right)
+                            .orElse("")
+            );
+        }
 
         UUID identityId = target.getIdentity().getId();
         try {
@@ -219,7 +239,6 @@ public class UserAccountService {
             );
             jdbcTemplate.update("delete from push_devices where user_id = ?", userId);
             jdbcTemplate.update("delete from user_notifications where recipient_user_id = ?", userId);
-            jdbcTemplate.update("delete from stock_tag_assignees where user_id = ?", userId);
             jdbcTemplate.update("delete from user_sessions where active_user_id = ?", userId);
             userAccountRepository.delete(target);
             userAccountRepository.flush();
@@ -231,6 +250,35 @@ public class UserAccountService {
             throw conflict(
                     "USER_HAS_BUSINESS_HISTORY",
                     "This user has business history or protected references and cannot be permanently deleted. Deactivate the user instead."
+            );
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public DeletionPreviewResponse deletionPreview(AuthenticatedUser actor, UUID userId) {
+        UserAccount target = findVisibleUser(actor, userId);
+        if (target.getId().equals(actor.userId())) {
+            throw conflict("USER_SELF_DELETE_DENIED", "The current signed-in user cannot be deleted.");
+        }
+        if (target.getRole().getSystemKey() == SystemRole.ADMIN) {
+            throw conflict("ADMIN_ACCOUNT_PROTECTED", "The founding administrator cannot be deleted.");
+        }
+        assertMayPermanentlyDeleteUser(actor, target);
+        return deletionPreviewService.user(actor.tenantId(), userId);
+    }
+
+    private static void assertMayPermanentlyDeleteUser(
+            AuthenticatedUser actor,
+            UserAccount target
+    ) {
+        if (actor.isAdmin()) {
+            return;
+        }
+        if (actor.systemRole() != SystemRole.OWNER
+                || target.getRole().getSystemKey().rank() <= SystemRole.OWNER.rank()) {
+            throw forbidden(
+                    "USER_DELETE_DENIED",
+                    "Owners can permanently delete only lower-role users in their own business."
             );
         }
     }

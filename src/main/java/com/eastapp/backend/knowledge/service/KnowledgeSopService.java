@@ -2,6 +2,8 @@ package com.eastapp.backend.knowledge.service;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.api.PageResponse;
+import com.eastapp.backend.common.api.DeletionPreviewResponse;
+import com.eastapp.backend.common.deletion.DeletionPreviewService;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.knowledge.KnowledgeSop;
 import com.eastapp.backend.knowledge.KnowledgeSopRepository;
@@ -32,17 +34,20 @@ public class KnowledgeSopService {
     private final TenantRepository tenantRepository;
     private final UserAccountRepository userRepository;
     private final StockTagRepository tagRepository;
+    private final DeletionPreviewService deletionPreviewService;
 
     public KnowledgeSopService(
             KnowledgeSopRepository sopRepository,
             TenantRepository tenantRepository,
             UserAccountRepository userRepository,
-            StockTagRepository tagRepository
+            StockTagRepository tagRepository,
+            DeletionPreviewService deletionPreviewService
     ) {
         this.sopRepository = sopRepository;
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
         this.tagRepository = tagRepository;
+        this.deletionPreviewService = deletionPreviewService;
     }
 
     @Transactional(readOnly = true)
@@ -267,7 +272,39 @@ public class KnowledgeSopService {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         List<KnowledgeSop> completeLinkedGroups = sopRepository
                 .findAllByTenant_IdAndLinkGroupIdIn(principal.tenantId(), linkGroupIds);
+        DeletionPreviewResponse preview = deletionPreviewService.sops(
+                principal.tenantId(),
+                completeLinkedGroups.stream().map(KnowledgeSop::getId).toList()
+        );
+        if (!preview.deletable()) {
+            String dependencies = preview.dependencies().stream()
+                    .map(item -> item.label() + " (" + item.count() + ")")
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElse("");
+            throw conflict("SOP_HAS_DEPENDENCIES", "Remove linked records before deleting this SOP: " + dependencies);
+        }
         sopRepository.deleteAllInBatch(completeLinkedGroups);
+    }
+
+    @Transactional(readOnly = true)
+    public DeletionPreviewResponse previewBulkDelete(
+            AuthenticatedUser principal,
+            BulkDeleteKnowledgeSopsRequest request
+    ) {
+        Set<UUID> requestedIds = new LinkedHashSet<>(request.sopIds());
+        List<KnowledgeSop> sops = sopRepository.findAllByTenant_IdAndIdIn(principal.tenantId(), requestedIds);
+        if (sops.size() != requestedIds.size()) {
+            throw notFound("SOP_NOT_FOUND", "One or more selected SOPs were not found in the active business.");
+        }
+        Set<UUID> linkGroupIds = sops.stream()
+                .map(KnowledgeSop::getLinkGroupId)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        List<UUID> completeIds = sopRepository.findAllByTenant_IdAndLinkGroupIdIn(
+                        principal.tenantId(), linkGroupIds
+                ).stream()
+                .map(KnowledgeSop::getId)
+                .toList();
+        return deletionPreviewService.sops(principal.tenantId(), completeIds);
     }
 
     private static ApiException notFound(String code, String message) {
