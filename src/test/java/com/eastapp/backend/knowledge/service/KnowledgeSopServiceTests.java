@@ -1,6 +1,8 @@
 package com.eastapp.backend.knowledge.service;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.common.api.DeletionPreviewResponse;
+import com.eastapp.backend.common.deletion.DeletionPreviewService;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.knowledge.KnowledgeSop;
 import com.eastapp.backend.knowledge.KnowledgeSopLanguage;
@@ -53,6 +55,8 @@ class KnowledgeSopServiceTests {
     private UserAccountRepository userRepository;
     @Mock
     private StockTagRepository tagRepository;
+    @Mock
+    private DeletionPreviewService deletionPreviewService;
     @Mock
     private KnowledgeSop sop;
     @Mock
@@ -267,8 +271,12 @@ class KnowledgeSopServiceTests {
         when(sopRepository.findAllByTenant_IdAndIdIn(TENANT_ID, Set.of(SOP_ID)))
                 .thenReturn(List.of(sop));
         when(sop.getLinkGroupId()).thenReturn(LINK_GROUP_ID);
+        when(sop.getId()).thenReturn(SOP_ID);
+        when(secondSop.getId()).thenReturn(SECOND_SOP_ID);
         when(sopRepository.findAllByTenant_IdAndLinkGroupIdIn(TENANT_ID, Set.of(LINK_GROUP_ID)))
                 .thenReturn(List.of(sop, secondSop));
+        when(deletionPreviewService.sops(TENANT_ID, List.of(SOP_ID, SECOND_SOP_ID)))
+                .thenReturn(new DeletionPreviewResponse(true, List.of()));
 
         service().bulkDelete(
                 principal(),
@@ -316,7 +324,8 @@ class KnowledgeSopServiceTests {
                 sopRepository,
                 tenantRepository,
                 userRepository,
-                tagRepository
+                tagRepository,
+                deletionPreviewService
         );
     }
 
