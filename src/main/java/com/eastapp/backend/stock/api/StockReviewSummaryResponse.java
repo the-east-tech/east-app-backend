@@ -6,11 +6,10 @@ public record StockReviewSummaryResponse(
         long total,
         long dailyCountPending,
         long receivablePending,
-        long skuChangePending,
-        long readyToReceive
+        long skuChangePending
 ) {
     public StockReviewSummaryResponse(long pendingReview, long done, long total) {
-        this(pendingReview, done, total, 0, 0, 0, 0);
+        this(pendingReview, done, total, 0, 0, 0);
     }
 
     public long outstandingPending() {

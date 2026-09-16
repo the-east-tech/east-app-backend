@@ -53,8 +53,6 @@ public class StockReceivable {
     @Column(name = "review_status", nullable = false, length = 24)
     @Enumerated(EnumType.STRING)
     private StockWorkflowStatus workflowStatus = StockWorkflowStatus.SUBMITTED;
-    @Column(name = "order_reference", updatable = false)
-    private UUID orderReference;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by_user_id")
     private UserAccount reviewedBy;
@@ -80,7 +78,6 @@ public class StockReceivable {
         this.invoicePhotoName = text(invoicePhotoName);
         this.goodsPhotoName = text(goodsPhotoName);
         this.workflowStatus = StockWorkflowStatus.SUBMITTED;
-        this.orderReference = supplier.beginReceivable();
     }
 
     public void addItem(StockReceivableItem item) {
@@ -108,7 +105,6 @@ public class StockReceivable {
         this.reviewNote = text(note);
         this.reviewedBy = reviewer;
         this.reviewedAt = Instant.now();
-        supplier.applyReceivableReview(orderReference, next);
     }
 
     public UUID getId() { return id; }
@@ -120,7 +116,6 @@ public class StockReceivable {
     public String getGoodsPhotoName() { return goodsPhotoName; }
     public List<StockReceivableItem> getItems() { return items; }
     public StockWorkflowStatus getWorkflowStatus() { return workflowStatus; }
-    public UUID getOrderReference() { return orderReference; }
     public UserAccount getReviewedBy() { return reviewedBy; }
     public Instant getReviewedAt() { return reviewedAt; }
     public String getReviewNote() { return reviewNote; }

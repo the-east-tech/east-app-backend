@@ -31,11 +31,6 @@ public class StockSupplier {
             Please confirm availability and delivery time. Thank u.
             """.trim();
 
-    public static final String ORDER_NONE = "NONE";
-    public static final String ORDERED = "ORDERED";
-    public static final String ORDER_SUBMITTED = "SUBMITTED";
-    public static final String ORDER_CORRECTION_REQUIRED = "CORRECTION_REQUIRED";
-
     @Id @Generated @ColumnDefault("uuidv7()")
     @Column(nullable = false, updatable = false)
     private UUID id;
@@ -85,18 +80,6 @@ public class StockSupplier {
 
     @Column(name = "purchase_message_template", nullable = false, length = 2000)
     private String purchaseMessageTemplate = DEFAULT_PURCHASE_MESSAGE_TEMPLATE;
-    @Column(name = "order_state", nullable = false, length = 24)
-    private String orderState = ORDER_NONE;
-    @Column(name = "current_order_reference")
-    private UUID currentOrderReference;
-    @Column(name = "ordered_at")
-    private Instant orderedAt;
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ordered_by_user_id")
-    private UserAccount orderedBy;
-    @Column(name = "ordered_message", nullable = false, length = 4000)
-    private String orderedMessage = "";
-
     @CreationTimestamp @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
     @UpdateTimestamp @Column(name = "updated_at", nullable = false)
@@ -180,47 +163,6 @@ public class StockSupplier {
         this.purchaseMessageTemplate = value;
     }
 
-    public void markOrdered(String message, UserAccount actor, Instant when) {
-        if (!ORDER_NONE.equals(orderState)) {
-            throw new IllegalStateException("This supplier already has an active order.");
-        }
-        String value = requireText(message, "message");
-        if (value.length() > 4000) {
-            throw new IllegalArgumentException("message must not exceed 4000 characters");
-        }
-        this.orderState = ORDERED;
-        this.currentOrderReference = UUID.randomUUID();
-        this.orderedAt = Objects.requireNonNull(when, "when must not be null");
-        this.orderedBy = Objects.requireNonNull(actor, "actor must not be null");
-        this.orderedMessage = value;
-    }
-
-    public UUID beginReceivable() {
-        if (!canReceive()) {
-            throw new IllegalArgumentException("Mark this supplier as Ordered Done before receivable stock.");
-        }
-        if (currentOrderReference == null) {
-            throw new IllegalArgumentException("Active supplier order is missing its reference.");
-        }
-        this.orderState = ORDER_SUBMITTED;
-        return currentOrderReference;
-    }
-
-    public void applyReceivableReview(UUID orderReference, StockWorkflowStatus status) {
-        if (orderReference == null || !orderReference.equals(currentOrderReference)) return;
-        if (!ORDER_SUBMITTED.equals(orderState)) return;
-        if (status == StockWorkflowStatus.DONE) {
-            orderState = ORDER_NONE;
-            currentOrderReference = null;
-        } else if (status == StockWorkflowStatus.PENDING) {
-            orderState = ORDER_CORRECTION_REQUIRED;
-        }
-    }
-
-    public boolean canReceive() {
-        return ORDERED.equals(orderState) || ORDER_CORRECTION_REQUIRED.equals(orderState);
-    }
-
     private void validateRanges() {
         if (maximumBalanceValue.compareTo(minimumBalanceValue) < 0) {
             throw new IllegalArgumentException("maximumBalanceValue must be at least minimumBalanceValue");
@@ -250,12 +192,6 @@ public class StockSupplier {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public String getPurchaseMessageTemplate() { return purchaseMessageTemplate; }
-    public String getOrderState() { return orderState; }
-    public UUID getCurrentOrderReference() { return currentOrderReference; }
-    public Instant getOrderedAt() { return orderedAt; }
-    public UserAccount getOrderedBy() { return orderedBy; }
-    public String getOrderedMessage() { return orderedMessage; }
-
     private static String text(String value) { return value == null ? "" : value.trim(); }
     private static String requireText(String value, String field) {
         String result = text(value);

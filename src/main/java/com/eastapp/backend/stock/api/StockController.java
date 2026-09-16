@@ -1,12 +1,15 @@
 package com.eastapp.backend.stock.api;
 
 import com.eastapp.backend.common.api.PageResponse;
+import com.eastapp.backend.common.api.CsvImportResponse;
+import com.eastapp.backend.common.api.CsvPreviewResponse;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.stock.StockWorkflowStatus;
 import com.eastapp.backend.stock.service.StockMediaService;
 import com.eastapp.backend.stock.service.StockService;
 import com.eastapp.backend.stock.service.StockSkuCsvService;
 import com.eastapp.backend.stock.service.StockSupplierCsvService;
+import com.eastapp.backend.stock.service.StockTagCsvService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.core.io.Resource;
@@ -39,17 +42,20 @@ public class StockController {
     private final StockMediaService stockMediaService;
     private final StockSkuCsvService stockSkuCsvService;
     private final StockSupplierCsvService stockSupplierCsvService;
+    private final StockTagCsvService stockTagCsvService;
 
     public StockController(
             StockService stockService,
             StockMediaService stockMediaService,
             StockSkuCsvService stockSkuCsvService,
-            StockSupplierCsvService stockSupplierCsvService
+            StockSupplierCsvService stockSupplierCsvService,
+            StockTagCsvService stockTagCsvService
     ) {
         this.stockService = stockService;
         this.stockMediaService = stockMediaService;
         this.stockSkuCsvService = stockSkuCsvService;
         this.stockSupplierCsvService = stockSupplierCsvService;
+        this.stockTagCsvService = stockTagCsvService;
     }
 
 
@@ -111,6 +117,34 @@ public class StockController {
             @RequestParam(defaultValue = "50") int size
     ) {
         return stockService.listTags(principal, search, page, size);
+    }
+
+    @GetMapping(value = "/tags/export", produces = "text/csv")
+    @PreAuthorize("hasRole('OWNER')")
+    ResponseEntity<byte[]> exportTags(@AuthenticationPrincipal AuthenticatedUser principal) {
+        StockTagCsvService.CsvExport export = stockTagCsvService.exportTags(principal);
+        return ResponseEntity.ok()
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + export.fileName() + "\"")
+                .body(export.bytes());
+    }
+
+    @PostMapping(value = "/tags/import/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('OWNER')")
+    CsvPreviewResponse previewTagImport(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return stockTagCsvService.preview(principal, file);
+    }
+
+    @PostMapping(value = "/tags/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('OWNER')")
+    ResponseEntity<CsvImportResponse> importTags(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(stockTagCsvService.importTags(principal, file));
     }
 
     @GetMapping("/suppliers")

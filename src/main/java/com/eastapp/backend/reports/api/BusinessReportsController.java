@@ -1,12 +1,16 @@
 package com.eastapp.backend.reports.api;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.common.api.CsvImportResponse;
+import com.eastapp.backend.common.api.CsvPreviewResponse;
 import com.eastapp.backend.reports.BusinessReportType;
 import com.eastapp.backend.reports.service.BusinessReportService;
 import com.eastapp.backend.reports.service.ReportMediaService;
+import com.eastapp.backend.reports.service.SalesReportCsvService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -24,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,13 +37,16 @@ import java.util.UUID;
 public class BusinessReportsController {
     private final BusinessReportService reportService;
     private final ReportMediaService mediaService;
+    private final SalesReportCsvService salesCsvService;
 
     public BusinessReportsController(
             BusinessReportService reportService,
-            ReportMediaService mediaService
+            ReportMediaService mediaService,
+            SalesReportCsvService salesCsvService
     ) {
         this.reportService = reportService;
         this.mediaService = mediaService;
+        this.salesCsvService = salesCsvService;
     }
 
     @GetMapping("/dashboard")
@@ -81,6 +89,38 @@ public class BusinessReportsController {
             @RequestParam(required = false) Integer days
     ) {
         return reportService.salesHistory(principal, from, to, days);
+    }
+
+    @GetMapping(value = "/sales/export", produces = "text/csv")
+    @PreAuthorize("hasAuthority('PERMISSION_SALES_REPORT_ACCESS')")
+    ResponseEntity<byte[]> exportSales(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        SalesReportCsvService.CsvExport export = salesCsvService.exportSales(principal, from, to);
+        return ResponseEntity.ok()
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + export.fileName() + "\"")
+                .body(export.bytes());
+    }
+
+    @PostMapping(value = "/sales/import/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('PERMISSION_SALES_REPORT_ACCESS')")
+    CsvPreviewResponse previewSalesImport(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return salesCsvService.preview(principal, file);
+    }
+
+    @PostMapping(value = "/sales/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('PERMISSION_SALES_REPORT_ACCESS')")
+    ResponseEntity<CsvImportResponse> importSales(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(salesCsvService.importSales(principal, file));
     }
 
     @GetMapping("/sales")

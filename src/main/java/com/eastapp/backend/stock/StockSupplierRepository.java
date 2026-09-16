@@ -15,13 +15,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface StockSupplierRepository extends JpaRepository<StockSupplier, UUID> {
-    @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy", "orderedBy"})
+    @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy"})
     List<StockSupplier> findAllByTenant_IdOrderBySupplierNameAsc(UUID tenantId);
 
-    @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy", "orderedBy"})
+    @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy"})
     List<StockSupplier> findAllByTenant_IdAndActiveTrueOrderBySupplierNameAsc(UUID tenantId);
 
-    @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy", "orderedBy"})
+    @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy"})
     @Query("""
             select supplier
             from StockSupplier supplier
@@ -43,13 +43,13 @@ public interface StockSupplierRepository extends JpaRepository<StockSupplier, UU
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy", "orderedBy"})
+    @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy"})
     Optional<StockSupplier> findByIdAndTenant_Id(UUID id, UUID tenantId);
 
     List<StockSupplier> findAllByTenant_IdAndIdIn(UUID tenantId, Collection<UUID> ids);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy", "orderedBy"})
+    @EntityGraph(attributePaths = {"tenant", "lastBalanceUpdatedBy", "createdBy"})
     Optional<StockSupplier> findLockedByIdAndTenant_Id(
             UUID id,
             UUID tenantId
@@ -57,5 +57,4 @@ public interface StockSupplierRepository extends JpaRepository<StockSupplier, UU
 
     boolean existsByTenant_IdAndSupplierNameIgnoreCase(UUID tenantId, String supplierName);
 
-    long countByTenant_IdAndOrderStateIn(UUID tenantId, Collection<String> orderStates);
 }

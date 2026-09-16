@@ -21,7 +21,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/business-cleanup")
-@PreAuthorize("hasRole('OWNER')")
+@PreAuthorize("hasRole('ADMIN')")
 public class BusinessCleanupController {
     private static final MediaType ZIP = MediaType.parseMediaType("application/zip");
 

@@ -138,6 +138,19 @@ EASTAPP_CLOUDFLARE_API_TOKEN=<Workers AI token>
 
 When the provider is disabled or its credentials are absent, EastApp can still reuse stored translations. A cache miss returns a provider-disabled response without calling Cloudflare.
 
+### Error reporting email
+
+EastApp sends user-confirmed frontend reports and automatic unhandled backend reports through the Resend HTTPS API. The recipient address and API key stay on the backend and are never returned to Flutter.
+
+```text
+EASTAPP_ERROR_REPORT_ENABLED=true
+EASTAPP_RESEND_API_KEY=<Resend API key>
+EASTAPP_ERROR_REPORT_RECIPIENT=<private recipient address>
+EASTAPP_ERROR_REPORT_FROM=EastApp <onboarding@resend.dev>
+```
+
+Use `onboarding@resend.dev` while testing with the Resend account owner address. Use a sender on a verified Resend domain when sending to other recipients. `EASTAPP_RESEND_API_URL` and `EASTAPP_ERROR_REPORT_DUPLICATE_WINDOW_SECONDS` are optional.
+
 ### Home data
 
 - Five latest Stock Audit Trail records performed by the current logged-in user
@@ -397,6 +410,10 @@ EASTAPP_DATABASE_RESET_ON_START=false
 EASTAPP_TRANSLATION_PROVIDER_ENABLED=true
 EASTAPP_CLOUDFLARE_ACCOUNT_ID=<Cloudflare account ID>
 EASTAPP_CLOUDFLARE_API_TOKEN=<Workers AI token>
+EASTAPP_ERROR_REPORT_ENABLED=true
+EASTAPP_RESEND_API_KEY=<Resend API key>
+EASTAPP_ERROR_REPORT_RECIPIENT=<private recipient address>
+EASTAPP_ERROR_REPORT_FROM=EastApp <onboarding@resend.dev>
 ```
 
 Datasource variables should reference the Railway PostgreSQL service:
