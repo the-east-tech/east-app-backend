@@ -92,7 +92,7 @@ public class UserController {
     }
 
     @GetMapping("/{userId}/deletion-preview")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OWNER')")
+    @PreAuthorize("hasRole('ADMIN')")
     DeletionPreviewResponse deletionPreview(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID userId
@@ -129,7 +129,7 @@ public class UserController {
     }
 
     @DeleteMapping("/{userId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OWNER')")
+    @PreAuthorize("hasRole('ADMIN')")
     ResponseEntity<Void> delete(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID userId
