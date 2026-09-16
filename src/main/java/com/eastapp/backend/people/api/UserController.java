@@ -4,6 +4,7 @@ import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.api.PageResponse;
 import com.eastapp.backend.common.api.CsvImportResponse;
 import com.eastapp.backend.common.api.CsvPreviewResponse;
+import com.eastapp.backend.common.api.DeletionPreviewResponse;
 import com.eastapp.backend.people.SystemRole;
 import com.eastapp.backend.people.service.UserAccountService;
 import com.eastapp.backend.people.service.UserCsvService;
@@ -90,6 +91,15 @@ public class UserController {
         return userAccountService.get(principal, userId);
     }
 
+    @GetMapping("/{userId}/deletion-preview")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OWNER')")
+    DeletionPreviewResponse deletionPreview(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable UUID userId
+    ) {
+        return userAccountService.deletionPreview(principal, userId);
+    }
+
     @PostMapping
     ResponseEntity<UserResponse> create(
             @AuthenticationPrincipal AuthenticatedUser principal,
@@ -119,6 +129,7 @@ public class UserController {
     }
 
     @DeleteMapping("/{userId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OWNER')")
     ResponseEntity<Void> delete(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @PathVariable UUID userId

@@ -1,16 +1,16 @@
 package com.eastapp.backend.stock.service;
 
 import com.eastapp.backend.common.api.PageResponse;
+import com.eastapp.backend.common.api.DeletionPreviewResponse;
+import com.eastapp.backend.common.deletion.DeletionPreviewService;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
 import com.eastapp.backend.people.UserAccount;
 import com.eastapp.backend.people.UserAccountRepository;
 import com.eastapp.backend.people.SystemRole;
-import com.eastapp.backend.reports.WasteReportDetailRepository;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.activity.service.WorkflowActivityService;
 import com.eastapp.backend.common.error.ApiException;
-import com.eastapp.backend.knowledge.KnowledgeSopRepository;
 import com.eastapp.backend.stock.StockCheckSchedule;
 import com.eastapp.backend.stock.StockCountSubmission;
 import com.eastapp.backend.stock.StockCountSubmissionRepository;
@@ -52,7 +52,6 @@ import com.eastapp.backend.stock.api.StockTagResponse;
 import com.eastapp.backend.stock.api.UpdateStockBalanceRequest;
 import com.eastapp.backend.stock.api.UpdateStockTagRequest;
 import com.eastapp.backend.stock.api.UpsertStockSkuRequest;
-import com.eastapp.backend.tasks.TaskTemplateRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
@@ -95,9 +94,7 @@ public class StockService {
     private final StockReceivableRepository receivableRepository;
     private final WorkflowActivityService workflowActivityService;
     private final StockMediaRepository mediaRepository;
-    private final KnowledgeSopRepository knowledgeSopRepository;
-    private final TaskTemplateRepository taskTemplateRepository;
-    private final WasteReportDetailRepository wasteReportDetailRepository;
+    private final DeletionPreviewService deletionPreviewService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public StockService(
@@ -112,9 +109,7 @@ public class StockService {
             StockReceivableRepository receivableRepository,
             WorkflowActivityService workflowActivityService,
             StockMediaRepository mediaRepository,
-            KnowledgeSopRepository knowledgeSopRepository,
-            TaskTemplateRepository taskTemplateRepository,
-            WasteReportDetailRepository wasteReportDetailRepository
+            DeletionPreviewService deletionPreviewService
     ) {
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
@@ -127,9 +122,7 @@ public class StockService {
         this.receivableRepository = receivableRepository;
         this.workflowActivityService = workflowActivityService;
         this.mediaRepository = mediaRepository;
-        this.knowledgeSopRepository = knowledgeSopRepository;
-        this.taskTemplateRepository = taskTemplateRepository;
-        this.wasteReportDetailRepository = wasteReportDetailRepository;
+        this.deletionPreviewService = deletionPreviewService;
     }
 
     @Transactional(readOnly = true)
@@ -335,27 +328,15 @@ public class StockService {
     @Transactional
     public void deleteTag(AuthenticatedUser principal, UUID tagId) {
         StockTag tag = tag(tagId, principal.tenantId());
-        boolean inUse = skuRepository.existsByTenant_IdAndTag1_Id(
-                principal.tenantId(), tagId
-        ) || skuRepository.existsByTenant_IdAndTag2_Id(
-                principal.tenantId(), tagId
-        );
-        if (inUse) {
-            throw conflict("STOCK_TAG_IN_USE", "This tag is assigned to an SKU and cannot be deleted.");
-        }
-        if (knowledgeSopRepository.existsByTenant_IdAndTag_Id(principal.tenantId(), tagId)) {
-            throw conflict(
-                    "STOCK_TAG_IN_USE_BY_SOP",
-                    "This tag is assigned to a Knowledge SOP and cannot be deleted."
-            );
-        }
-        if (taskTemplateRepository.existsByTenantIdAndTagId(principal.tenantId(), tagId)) {
-            throw conflict(
-                    "STOCK_TAG_IN_USE_BY_TASK",
-                    "This tag belongs to a Task and cannot be deleted."
-            );
-        }
+        assertDeletable(deletionPreviewService.stockTag(principal.tenantId(), tagId),
+                "STOCK_TAG_HAS_DEPENDENCIES", "tag");
         tagRepository.delete(tag);
+    }
+
+    @Transactional(readOnly = true)
+    public DeletionPreviewResponse previewTagDeletion(AuthenticatedUser principal, UUID tagId) {
+        tag(tagId, principal.tenantId());
+        return deletionPreviewService.stockTag(principal.tenantId(), tagId);
     }
 
     @Transactional
@@ -410,17 +391,15 @@ public class StockService {
     @Transactional
     public void deleteSupplier(AuthenticatedUser principal, UUID supplierId) {
         StockSupplier supplier = supplier(supplierId, principal.tenantId());
-        boolean inUse = skuRepository.existsByTenant_IdAndSuppliers_Id(
-                principal.tenantId(), supplierId)
-                || receivableRepository.existsByTenant_IdAndSupplier_Id(
-                        principal.tenantId(), supplierId);
-        if (inUse) {
-            throw conflict(
-                    "STOCK_SUPPLIER_IN_USE",
-                    "This supplier is assigned to an SKU or receivable record and cannot be deleted."
-            );
-        }
+        assertDeletable(deletionPreviewService.supplier(principal.tenantId(), supplierId),
+                "STOCK_SUPPLIER_HAS_DEPENDENCIES", "supplier");
         supplierRepository.delete(supplier);
+    }
+
+    @Transactional(readOnly = true)
+    public DeletionPreviewResponse previewSupplierDeletion(AuthenticatedUser principal, UUID supplierId) {
+        supplier(supplierId, principal.tenantId());
+        return deletionPreviewService.supplier(principal.tenantId(), supplierId);
     }
 
     @Transactional
@@ -471,11 +450,18 @@ public class StockService {
     @Transactional
     public StockSkuChangeRequestResponse deleteSku(AuthenticatedUser principal, UUID skuId) {
         StockSku sku = sku(skuId, principal.tenantId());
-        assertSkuCanBeHardDeleted(principal.tenantId(), skuId);
+        assertDeletable(deletionPreviewService.sku(principal.tenantId(), skuId),
+                "STOCK_SKU_HAS_DEPENDENCIES", "SKU");
         StockSkuChangeRequest change = skuChangeRequestRepository
                 .findFirstByTenantIdAndSkuIdOrderByUpdatedAtDesc(principal.tenantId(), skuId)
                 .orElse(null);
         return submitSkuChange(principal, change, sku, StockSkuChangeType.DELETE, null);
+    }
+
+    @Transactional(readOnly = true)
+    public DeletionPreviewResponse previewSkuDeletion(AuthenticatedUser principal, UUID skuId) {
+        sku(skuId, principal.tenantId());
+        return deletionPreviewService.sku(principal.tenantId(), skuId);
     }
 
     @Transactional(readOnly = true)
@@ -585,23 +571,25 @@ public class StockService {
     private void hardDeleteSku(AuthenticatedUser principal, StockSkuChangeRequest change) {
         UUID skuId = requireSkuId(change);
         StockSku sku = sku(skuId, principal.tenantId());
-        assertSkuCanBeHardDeleted(principal.tenantId(), skuId);
+        assertDeletable(deletionPreviewService.sku(principal.tenantId(), skuId),
+                "STOCK_SKU_HAS_DEPENDENCIES", "SKU");
         change.detachSku();
         skuChangeRequestRepository.saveAndFlush(change);
         skuRepository.delete(sku);
         skuRepository.flush();
     }
 
-    private void assertSkuCanBeHardDeleted(UUID tenantId, UUID skuId) {
-        boolean hasHistory = countRepository.existsByTenant_IdAndSku_Id(tenantId, skuId)
-                || receivableRepository.existsByTenant_IdAndItems_Sku_Id(tenantId, skuId)
-                || wasteReportDetailRepository.existsByTenantIdAndSkuId(tenantId, skuId);
-        if (hasHistory) {
-            throw conflict(
-                    "STOCK_SKU_HAS_HISTORY",
-                    "This SKU has count, receivable or Waste history and cannot be permanently deleted. Set it inactive instead."
-            );
-        }
+    private static void assertDeletable(
+            DeletionPreviewResponse preview,
+            String code,
+            String entityLabel
+    ) {
+        if (preview.deletable()) return;
+        String dependencies = preview.dependencies().stream()
+                .map(item -> item.label() + " (" + item.count() + ")")
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+        throw conflict(code, "Remove linked records before deleting this " + entityLabel + ": " + dependencies);
     }
 
     private StockSku createSkuNow(AuthenticatedUser principal, UpsertStockSkuRequest request) {

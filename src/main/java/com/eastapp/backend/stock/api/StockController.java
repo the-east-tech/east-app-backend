@@ -1,6 +1,7 @@
 package com.eastapp.backend.stock.api;
 
 import com.eastapp.backend.common.api.PageResponse;
+import com.eastapp.backend.common.api.DeletionPreviewResponse;
 import com.eastapp.backend.common.api.CsvImportResponse;
 import com.eastapp.backend.common.api.CsvPreviewResponse;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
@@ -295,6 +296,15 @@ public class StockController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/tags/{tagId}/deletion-preview")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
+    DeletionPreviewResponse previewTagDeletion(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable UUID tagId
+    ) {
+        return stockService.previewTagDeletion(principal, tagId);
+    }
+
     @PostMapping("/suppliers")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<StockSupplierResponse> createSupplier(
@@ -322,6 +332,15 @@ public class StockController {
     ) {
         stockService.deleteSupplier(principal, supplierId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/suppliers/{supplierId}/deletion-preview")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
+    DeletionPreviewResponse previewSupplierDeletion(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable UUID supplierId
+    ) {
+        return stockService.previewSupplierDeletion(principal, supplierId);
     }
 
     @PatchMapping("/suppliers/{supplierId}/balance")
@@ -360,6 +379,15 @@ public class StockController {
             @PathVariable UUID skuId
     ) {
         return stockService.deleteSku(principal, skuId);
+    }
+
+    @GetMapping("/skus/{skuId}/deletion-preview")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
+    DeletionPreviewResponse previewSkuDeletion(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable UUID skuId
+    ) {
+        return stockService.previewSkuDeletion(principal, skuId);
     }
 
     @GetMapping("/sku-change-requests")
