@@ -395,14 +395,6 @@ public class StockService {
                         principal.tenantId(), request.supplierName().trim())) {
             throw conflict("STOCK_SUPPLIER_EXISTS", "This supplier already exists.");
         }
-        if (Boolean.FALSE.equals(request.active())
-                && supplier.isActive()
-                && !StockSupplier.ORDER_NONE.equals(supplier.getOrderState())) {
-            throw conflict(
-                    "STOCK_SUPPLIER_HAS_ACTIVE_ORDER",
-                    "Finish the supplier's active order before deactivating it."
-            );
-        }
         supplier.update(
                 request.supplierName(), request.supplierItem(), request.contactPerson(),
                 request.phone(), request.address(), request.address2(),
@@ -1030,10 +1022,6 @@ public class StockService {
                 ),
                 skuChangeRequestRepository.countByTenantIdAndWorkflowStatus(
                         principal.tenantId(), StockWorkflowStatus.SUBMITTED
-                ),
-                supplierRepository.countByTenant_IdAndOrderStateIn(
-                        principal.tenantId(),
-                        List.of(StockSupplier.ORDERED, StockSupplier.ORDER_CORRECTION_REQUIRED)
                 )
         );
     }

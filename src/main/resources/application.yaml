@@ -36,6 +36,14 @@ management:
 
 
 eastapp:
+  error-report:
+    enabled: ${EASTAPP_ERROR_REPORT_ENABLED:false}
+    api-key: ${EASTAPP_RESEND_API_KEY:}
+    api-url: ${EASTAPP_RESEND_API_URL:https://api.resend.com/emails}
+    recipient: ${EASTAPP_ERROR_REPORT_RECIPIENT:}
+    from: ${EASTAPP_ERROR_REPORT_FROM:EastApp <onboarding@resend.dev>}
+    duplicate-window-seconds: ${EASTAPP_ERROR_REPORT_DUPLICATE_WINDOW_SECONDS:300}
+
   database:
     # Environment gate. A wipe also requires DATABASE_RESET_ALLOWED_BY_CODE=true.
     reset-on-start: ${EASTAPP_DATABASE_RESET_ON_START:false}

@@ -87,6 +87,25 @@ public class Tenant {
         return employeeIdPrefix + String.format(Locale.ROOT, "%04d", nextEmployeeNumber);
     }
 
+    public String reserveEmployeeId(String value) {
+        String employeeId = requireText(value, "employeeId").toUpperCase(Locale.ROOT);
+        if (employeeId.length() > 32) {
+            throw new IllegalArgumentException("employeeId must not exceed 32 characters");
+        }
+        if (employeeId.startsWith(employeeIdPrefix)) {
+            String suffix = employeeId.substring(employeeIdPrefix.length());
+            if (!suffix.isBlank() && suffix.chars().allMatch(Character::isDigit)) {
+                try {
+                    long number = Long.parseLong(suffix);
+                    nextEmployeeNumber = Math.max(nextEmployeeNumber, number + 1);
+                } catch (NumberFormatException ignored) {
+                    // A very large custom suffix remains valid without changing the sequence.
+                }
+            }
+        }
+        return employeeId;
+    }
+
     public void update(String businessName, boolean active) {
         this.businessName = requireText(businessName, "businessName");
         this.active = active;

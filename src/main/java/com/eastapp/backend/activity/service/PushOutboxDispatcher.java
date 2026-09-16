@@ -4,6 +4,7 @@ import com.eastapp.backend.activity.PushDevice;
 import com.eastapp.backend.activity.PushOutbox;
 import com.eastapp.backend.activity.PushOutboxRepository;
 import com.eastapp.backend.auth.UserSessionRepository;
+import com.eastapp.backend.support.service.ErrorReportService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -17,20 +18,32 @@ public class PushOutboxDispatcher {
     private final PushOutboxRepository outboxRepository;
     private final FirebasePushGateway pushGateway;
     private final UserSessionRepository sessionRepository;
+    private final ErrorReportService errorReportService;
 
     public PushOutboxDispatcher(
             PushOutboxRepository outboxRepository,
             FirebasePushGateway pushGateway,
-            UserSessionRepository sessionRepository
+            UserSessionRepository sessionRepository,
+            ErrorReportService errorReportService
     ) {
         this.outboxRepository = outboxRepository;
         this.pushGateway = pushGateway;
         this.sessionRepository = sessionRepository;
+        this.errorReportService = errorReportService;
     }
 
     @Scheduled(fixedDelayString = "${eastapp.notifications.dispatch-delay-ms:5000}")
     @Transactional
     public void dispatch() {
+        try {
+            dispatchDueNotifications();
+        } catch (RuntimeException | Error error) {
+            errorReportService.reportSystemError("Push outbox dispatcher", error);
+            throw error;
+        }
+    }
+
+    private void dispatchDueNotifications() {
         if (!pushGateway.isEnabled()) return;
         Instant now = Instant.now();
         List<PushOutbox> deliveries = outboxRepository.findDue(

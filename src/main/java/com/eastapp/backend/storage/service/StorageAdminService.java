@@ -1,6 +1,5 @@
 package com.eastapp.backend.storage.service;
 
-import com.eastapp.backend.auth.permission.SystemPermission;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.storage.api.StorageOverviewResponse;
@@ -420,7 +419,7 @@ public class StorageAdminService {
     }
 
     private void assertStorageAdmin(AuthenticatedUser principal) {
-        if (!principal.hasPermission(SystemPermission.STORAGE_ADMIN)) {
+        if (!principal.isAdmin()) {
             throw forbidden();
         }
     }
@@ -471,7 +470,7 @@ public class StorageAdminService {
             case "attendance_events" -> "Check-in/out, device and location records";
             case "stock_media" -> "SKU, count and receivable image bytes";
             case "stock_tags" -> "Stock categories";
-            case "stock_suppliers" -> "Supplier setup and purchase state";
+            case "stock_suppliers" -> "Supplier setup and purchase message template";
             case "stock_skus" -> "SKU setup and current balances";
             case "stock_sku_change_requests" -> "SKU approval requests";
             case "stock_sku_suppliers" -> "SKU-to-supplier links";

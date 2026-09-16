@@ -22,6 +22,8 @@ import com.eastapp.backend.people.api.UserResponse;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +43,7 @@ public class UserAccountService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmployeeIdService employeeIdService;
+    private final JdbcTemplate jdbcTemplate;
 
     public UserAccountService(
             UserAccountRepository userAccountRepository,
@@ -49,7 +52,8 @@ public class UserAccountService {
             TenantRepository tenantRepository,
             RoleRepository roleRepository,
             PasswordEncoder passwordEncoder,
-            EmployeeIdService employeeIdService
+            EmployeeIdService employeeIdService,
+            JdbcTemplate jdbcTemplate
     ) {
         this.userAccountRepository = userAccountRepository;
         this.loginIdentityRepository = loginIdentityRepository;
@@ -58,6 +62,7 @@ public class UserAccountService {
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.employeeIdService = employeeIdService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Transactional(readOnly = true)
@@ -99,6 +104,23 @@ public class UserAccountService {
 
     @Transactional
     public UserResponse create(AuthenticatedUser actor, CreateUserRequest request) {
+        return create(actor, request, null);
+    }
+
+    @Transactional
+    public UserResponse createImported(
+            AuthenticatedUser actor,
+            CreateUserRequest request,
+            String employeeId
+    ) {
+        return create(actor, request, employeeId);
+    }
+
+    private UserResponse create(
+            AuthenticatedUser actor,
+            CreateUserRequest request,
+            String importedEmployeeId
+    ) {
         assertUserManagementAccess(actor);
 
         UUID tenantId = actor.tenantId();
@@ -113,9 +135,13 @@ public class UserAccountService {
                 .map(existing -> reuseIdentity(existing, request, tenantId))
                 .orElseGet(() -> createIdentity(request, phoneE164));
 
-        UserAccount membership = createUserAccount(
-                tenant, identity, employeeIdService.allocate(tenantId), role, request
-        );
+        String employeeId = importedEmployeeId == null
+                ? employeeIdService.allocate(tenantId)
+                : tenant.reserveEmployeeId(importedEmployeeId);
+        if (userAccountRepository.existsByTenant_IdAndEmployeeId(tenantId, employeeId)) {
+            throw conflict("EMPLOYEE_ID_EXISTS", "This employee ID already exists in the current business.");
+        }
+        UserAccount membership = createUserAccount(tenant, identity, employeeId, role, request);
         membership = userAccountRepository.save(membership);
 
         return UserResponse.from(membership);
@@ -167,6 +193,46 @@ public class UserAccountService {
         assertActorMayManageUser(actor, target);
         target.getIdentity().changePasswordHash(passwordEncoder.encode(request.password()));
         revokeIdentitySessions(target.getIdentity().getId());
+    }
+
+    @Transactional
+    public void delete(AuthenticatedUser actor, UUID userId) {
+        UserAccount target = findVisibleUser(actor, userId);
+        assertActorMayManageUser(actor, target);
+        if (target.getId().equals(actor.userId())) {
+            throw conflict("USER_SELF_DELETE_DENIED", "The current signed-in user cannot be deleted.");
+        }
+        if (target.getRole().getSystemKey() == SystemRole.ADMIN) {
+            throw conflict("ADMIN_ACCOUNT_PROTECTED", "The founding administrator cannot be deleted.");
+        }
+
+        UUID identityId = target.getIdentity().getId();
+        try {
+            jdbcTemplate.update(
+                    """
+                    delete from push_outbox
+                    where device_id in (select id from push_devices where user_id = ?)
+                       or notification_id in (select id from user_notifications where recipient_user_id = ?)
+                    """,
+                    userId,
+                    userId
+            );
+            jdbcTemplate.update("delete from push_devices where user_id = ?", userId);
+            jdbcTemplate.update("delete from user_notifications where recipient_user_id = ?", userId);
+            jdbcTemplate.update("delete from stock_tag_assignees where user_id = ?", userId);
+            jdbcTemplate.update("delete from user_sessions where active_user_id = ?", userId);
+            userAccountRepository.delete(target);
+            userAccountRepository.flush();
+            if (!userAccountRepository.existsByIdentity_Id(identityId)) {
+                loginIdentityRepository.deleteById(identityId);
+                loginIdentityRepository.flush();
+            }
+        } catch (DataIntegrityViolationException exception) {
+            throw conflict(
+                    "USER_HAS_BUSINESS_HISTORY",
+                    "This user has business history or protected references and cannot be permanently deleted. Deactivate the user instead."
+            );
+        }
     }
 
     private static List<SystemRole> visibleRoles(AuthenticatedUser actor) {

@@ -97,6 +97,7 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     Optional<UserAccount> findFirstByTenant_IdOrderByCreatedAtAscIdAsc(UUID tenantId);
 
     boolean existsByIdentity_IdAndTenant_Id(UUID identityId, UUID tenantId);
+    boolean existsByIdentity_Id(UUID identityId);
     boolean existsByTenant_IdAndEmployeeId(UUID tenantId, String employeeId);
     long countByRole_Id(UUID roleId);
 

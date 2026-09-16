@@ -382,8 +382,25 @@ public class BusinessReportService {
             AuthenticatedUser principal,
             UpsertSalesReportRequest request
     ) {
+        return saveSales(principal, request, true);
+    }
+
+    @Transactional
+    public SalesReportResponse importSales(
+            AuthenticatedUser principal,
+            UpsertSalesReportRequest request
+    ) {
+        SalesReportResponse saved = saveSales(principal, request, false);
+        return submitSales(principal, saved.id());
+    }
+
+    private SalesReportResponse saveSales(
+            AuthenticatedUser principal,
+            UpsertSalesReportRequest request,
+            boolean validateEditableDate
+    ) {
         requireSalesAccess(principal);
-        validateEditableDate(principal, request.reportDate());
+        if (validateEditableDate) validateEditableDate(principal, request.reportDate());
         UserAccount cashReceiver = requireCashRecipient(
                 principal.tenantId(),
                 request.cashReceivedByUserId()
