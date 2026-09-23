@@ -54,7 +54,6 @@ import java.util.UUID;
 @Service
 public class StockSkuCsvService {
     private static final String FORMAT_NAME = "EASTAPP_SKU_CSV";
-    private static final int FORMAT_VERSION = 3;
     private static final String LANGUAGES = "ENGLISH|CHINESE";
     private static final int MAX_FILE_BYTES = 2 * 1024 * 1024;
     private static final int MAX_ROWS = 1_000;
@@ -66,13 +65,13 @@ public class StockSkuCsvService {
     );
     private static final List<String> HEADERS = List.of(
             "eastapp_format",
-            "format_version",
             "languages",
             "sku_name",
             "tag_1",
             "tag_2",
             "unit",
             "minimum_balance",
+            "current_balance",
             "maximum_balance",
             "recovery_percent",
             "minimum_price_rm",
@@ -134,13 +133,13 @@ public class StockSkuCsvService {
                             .toList();
                     printer.printRecord(
                             FORMAT_NAME,
-                            FORMAT_VERSION,
                             LANGUAGES,
                             sku.getName(),
                             sku.getTag1() == null ? "" : sku.getTag1().getTag(),
                             sku.getTag2() == null ? "" : sku.getTag2().getTag(),
                             sku.getUnit(),
                             decimal(sku.getMinimumBalanceValue()),
+                            decimal(sku.getCurrentBalanceValue()),
                             decimal(sku.getMaximumBalanceValue()),
                             sku.getRecoveryPercent(),
                             decimal(sku.getMinimumPriceRm()),
@@ -261,7 +260,7 @@ public class StockSkuCsvService {
                     row.unit(),
                     row.minimumBalance(),
                     row.maximumBalance(),
-                    BigDecimal.ZERO,
+                    row.currentBalance(),
                     row.recoveryPercent(),
                     row.minimumPrice(),
                     row.maximumPrice(),
@@ -381,9 +380,6 @@ public class StockSkuCsvService {
         if (!FORMAT_NAME.equals(text(record, "eastapp_format"))) {
             throw invalid("eastapp_format must be " + FORMAT_NAME + ".");
         }
-        if (integer(record, "format_version", FORMAT_VERSION, FORMAT_VERSION) != FORMAT_VERSION) {
-            throw invalid("Unsupported format_version.");
-        }
         if (!LANGUAGES.equals(text(record, "languages"))) {
             throw invalid("languages must be " + LANGUAGES + ".");
         }
@@ -392,6 +388,7 @@ public class StockSkuCsvService {
         String tag2 = optionalText(record, "tag_2", 80);
         String unit = requiredText(record, "unit", 32);
         BigDecimal minimumBalance = decimal(record, "minimum_balance");
+        BigDecimal currentBalance = decimal(record, "current_balance");
         BigDecimal maximumBalance = decimal(record, "maximum_balance");
         if (maximumBalance.compareTo(minimumBalance) < 0) {
             throw invalid("maximum_balance must be at least minimum_balance.");
@@ -453,6 +450,7 @@ public class StockSkuCsvService {
                 tag2,
                 unit,
                 minimumBalance,
+                currentBalance,
                 maximumBalance,
                 recoveryPercent,
                 minimumPrice,
@@ -543,7 +541,7 @@ public class StockSkuCsvService {
                 || !headers.containsAll(HEADERS)) {
             throw badRequest(
                     "SKU_CSV_FORMAT_NOT_RECOGNISED",
-                    "The selected file is not a recognised EastApp SKU CSV v" + FORMAT_VERSION + "."
+                    "The selected file is not a recognised EastApp SKU CSV."
             );
         }
     }
@@ -657,6 +655,7 @@ public class StockSkuCsvService {
             String tag2,
             String unit,
             BigDecimal minimumBalance,
+            BigDecimal currentBalance,
             BigDecimal maximumBalance,
             int recoveryPercent,
             BigDecimal minimumPrice,
@@ -682,7 +681,6 @@ public class StockSkuCsvService {
         StockSkuCsvPreviewResponse preview() {
             return new StockSkuCsvPreviewResponse(
                     FORMAT_NAME,
-                    FORMAT_VERSION,
                     totalRows,
                     readyRows.size(),
                     duplicateRows,

@@ -4,7 +4,6 @@ import java.util.List;
 
 public record StockSkuCsvPreviewResponse(
         String format,
-        int formatVersion,
         int totalRows,
         int readyRows,
         int duplicateRows,
