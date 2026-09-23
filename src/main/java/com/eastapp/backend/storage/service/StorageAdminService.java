@@ -138,6 +138,11 @@ public class StorageAdminService {
                     "Oldest completed SKU approval requests. Pending approval requests remain protected.",
                     "candidate.workflow_status = 'DONE'", "candidate.updated_at, candidate.id", true
             )),
+            Map.entry("stock_sku_csv_requests", new CleanupPolicy(
+                    "Oldest approved or rejected SKU CSV requests. Pending requests and the current approved export remain protected.",
+                    "candidate.status in ('APPROVED', 'REJECTED') and not exists (select 1 from stock_sku_export_snapshots snapshot where snapshot.approved_request_id = candidate.id)",
+                    "candidate.updated_at, candidate.id", true
+            )),
             Map.entry("stock_count_submissions", new CleanupPolicy(
                     "Oldest completed stock counts. Their checklist and remark rows are removed automatically.",
                     "candidate.review_status = 'DONE'", "candidate.captured_at, candidate.id", true
@@ -473,6 +478,8 @@ public class StorageAdminService {
             case "stock_suppliers" -> "Supplier setup and purchase message template";
             case "stock_skus" -> "SKU setup and current balances";
             case "stock_sku_change_requests" -> "SKU approval requests";
+            case "stock_sku_csv_requests" -> "Staged SKU CSV import and export approvals";
+            case "stock_sku_export_snapshots" -> "Current approved SKU CSV download";
             case "stock_sku_suppliers" -> "SKU-to-supplier links";
             case "stock_sku_assignees" -> "SKU assignee names";
             case "stock_sku_receivable_checklist" -> "SKU receivable checklist templates";

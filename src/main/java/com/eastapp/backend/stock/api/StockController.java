@@ -202,11 +202,11 @@ public class StockController {
     }
 
     @GetMapping(value = "/skus/export", produces = "text/csv")
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     ResponseEntity<byte[]> exportSkus(
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
-        StockSkuCsvService.CsvExport export = stockSkuCsvService.exportSkus(principal);
+        StockSkuCsvService.CsvExport export = stockSkuCsvService.approvedExport(principal);
         return ResponseEntity.ok()
                 .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
                 .header(
@@ -216,11 +216,20 @@ public class StockController {
                 .body(export.bytes());
     }
 
+    @PostMapping("/skus/export-requests")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
+    ResponseEntity<StockSkuCsvRequestResponse> requestSkuExport(
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(stockSkuCsvService.requestExport(principal));
+    }
+
     @PostMapping(
             value = "/skus/import/preview",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
     StockSkuCsvPreviewResponse previewSkuImport(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam("file") MultipartFile file
@@ -232,13 +241,31 @@ public class StockController {
             value = "/skus/import",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    @PreAuthorize("hasRole('OWNER')")
-    ResponseEntity<StockSkuCsvImportResponse> importSkus(
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
+    ResponseEntity<StockSkuCsvRequestResponse> importSkus(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam("file") MultipartFile file
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(stockSkuCsvService.importSkus(principal, file));
+                .body(stockSkuCsvService.requestImport(principal, file));
+    }
+
+    @GetMapping("/sku-csv-requests")
+    @PreAuthorize("hasAnyRole('OWNER', 'HEAD')")
+    List<StockSkuCsvRequestResponse> skuCsvRequests(
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return stockSkuCsvService.listRequests(principal);
+    }
+
+    @PatchMapping("/sku-csv-requests/{requestId}/review")
+    @PreAuthorize("hasRole('OWNER')")
+    StockSkuCsvRequestResponse reviewSkuCsvRequest(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @PathVariable UUID requestId,
+            @Valid @RequestBody ReviewStockSkuCsvRequest request
+    ) {
+        return stockSkuCsvService.review(principal, requestId, request);
     }
 
     @GetMapping("/counts")

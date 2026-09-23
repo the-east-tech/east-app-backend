@@ -35,6 +35,10 @@ public class DeletionPreviewService {
                 "Stock > Setup > SKU", "stock_skus", "created_by_user_id", "last_updated_by_user_id");
         addByUser(items, tenantId, userId, "SKU_REQUESTS", "SKU change requests",
                 "Stock > Setup > SKU", "stock_sku_change_requests", "requested_by_user_id", "reviewed_by_user_id");
+        addByUser(items, tenantId, userId, "SKU_CSV_REQUESTS", "SKU CSV requests",
+                "Stock > Setup > SKU", "stock_sku_csv_requests", "requested_by_user_id", "reviewed_by_user_id");
+        addByUser(items, tenantId, userId, "SKU_CSV_EXPORT", "Approved SKU CSV export",
+                "Stock > Setup > SKU", "stock_sku_export_snapshots", "approved_by_user_id");
         addByUser(items, tenantId, userId, "STOCK_COUNTS", "Stock Count records",
                 "Stock > Count", "stock_count_submissions", "submitted_by_user_id", "reviewed_by_user_id");
         addByUser(items, tenantId, userId, "RECEIVABLES", "Receivable records",
