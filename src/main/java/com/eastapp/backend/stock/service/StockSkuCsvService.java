@@ -1,5 +1,6 @@
 package com.eastapp.backend.stock.service;
 
+import com.eastapp.backend.activity.service.WorkflowActivityService;
 import com.eastapp.backend.auth.security.AuthenticatedUser;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.Tenant;
@@ -10,14 +11,20 @@ import com.eastapp.backend.stock.StockCheckSchedule;
 import com.eastapp.backend.stock.StockMedia;
 import com.eastapp.backend.stock.StockMediaRepository;
 import com.eastapp.backend.stock.StockSku;
+import com.eastapp.backend.stock.StockSkuCsvOperation;
+import com.eastapp.backend.stock.StockSkuCsvRequest;
+import com.eastapp.backend.stock.StockSkuCsvRequestRepository;
+import com.eastapp.backend.stock.StockSkuCsvRequestStatus;
+import com.eastapp.backend.stock.StockSkuExportSnapshot;
+import com.eastapp.backend.stock.StockSkuExportSnapshotRepository;
 import com.eastapp.backend.stock.StockSkuRepository;
 import com.eastapp.backend.stock.StockSupplier;
 import com.eastapp.backend.stock.StockSupplierRepository;
 import com.eastapp.backend.stock.StockTag;
 import com.eastapp.backend.stock.StockTagRepository;
-import com.eastapp.backend.stock.api.StockSkuCsvImportResponse;
 import com.eastapp.backend.stock.api.StockSkuCsvPreviewResponse;
-import com.eastapp.backend.stock.api.UpsertStockSkuRequest;
+import com.eastapp.backend.stock.api.StockSkuCsvRequestResponse;
+import com.eastapp.backend.stock.api.ReviewStockSkuCsvRequest;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.csv.CSVFormat;
@@ -91,7 +98,9 @@ public class StockSkuCsvService {
     private final StockSupplierRepository supplierRepository;
     private final StockSkuRepository skuRepository;
     private final StockMediaRepository mediaRepository;
-    private final StockService stockService;
+    private final StockSkuCsvRequestRepository requestRepository;
+    private final StockSkuExportSnapshotRepository snapshotRepository;
+    private final WorkflowActivityService workflowActivityService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public StockSkuCsvService(
@@ -101,7 +110,9 @@ public class StockSkuCsvService {
             StockSupplierRepository supplierRepository,
             StockSkuRepository skuRepository,
             StockMediaRepository mediaRepository,
-            StockService stockService
+            StockSkuCsvRequestRepository requestRepository,
+            StockSkuExportSnapshotRepository snapshotRepository,
+            WorkflowActivityService workflowActivityService
     ) {
         this.tenantRepository = tenantRepository;
         this.userAccountRepository = userAccountRepository;
@@ -109,14 +120,53 @@ public class StockSkuCsvService {
         this.supplierRepository = supplierRepository;
         this.skuRepository = skuRepository;
         this.mediaRepository = mediaRepository;
-        this.stockService = stockService;
+        this.requestRepository = requestRepository;
+        this.snapshotRepository = snapshotRepository;
+        this.workflowActivityService = workflowActivityService;
+    }
+
+    @Transactional
+    public StockSkuCsvRequestResponse requestExport(AuthenticatedUser principal) {
+        requireSubmitter(principal);
+        ensureNoPending(principal.tenantId(), StockSkuCsvOperation.EXPORT);
+        GeneratedCsv export = buildExport(principal.tenantId());
+        StockSkuCsvRequest request = requestRepository.saveAndFlush(
+                new StockSkuCsvRequest(
+                        principal.tenantId(),
+                        StockSkuCsvOperation.EXPORT,
+                        export.fileName(),
+                        new String(export.bytes(), StandardCharsets.UTF_8),
+                        export.rowCount(),
+                        export.rowCount(),
+                        0,
+                        0,
+                        0,
+                        principal.userId()
+                )
+        );
+        recordSubmitted(principal, request);
+        return requestResponse(principal.tenantId(), request);
     }
 
     @Transactional(readOnly = true)
-    public CsvExport exportSkus(AuthenticatedUser principal) {
-        requireOwner(principal);
+    public CsvExport approvedExport(AuthenticatedUser principal) {
+        requireSubmitter(principal);
+        StockSkuExportSnapshot snapshot = snapshotRepository
+                .findById(principal.tenantId())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "SKU_CSV_APPROVED_EXPORT_NOT_FOUND",
+                        "No approved SKU export is available yet."
+                ));
+        return new CsvExport(
+                snapshot.getFileName(),
+                snapshot.getCsvContent().getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    private GeneratedCsv buildExport(UUID tenantId) {
         List<StockSku> skus = skuRepository.findAllByTenant_IdOrderByNameAsc(
-                principal.tenantId()
+                tenantId
         );
         try {
             StringWriter writer = new StringWriter();
@@ -157,9 +207,10 @@ public class StockSkuCsvService {
             String fileName = "eastapp-skus-"
                     + LocalDate.now(ZONE_ID)
                     + ".csv";
-            return new CsvExport(
+            return new GeneratedCsv(
                     fileName,
-                    writer.toString().getBytes(StandardCharsets.UTF_8)
+                    writer.toString().getBytes(StandardCharsets.UTF_8),
+                    skus.size()
             );
         } catch (IOException exception) {
             throw new ApiException(
@@ -175,18 +226,20 @@ public class StockSkuCsvService {
             AuthenticatedUser principal,
             MultipartFile file
     ) {
-        requireOwner(principal);
-        Analysis analysis = analyse(principal.tenantId(), file);
+        requireSubmitter(principal);
+        Analysis analysis = analyse(principal.tenantId(), readCsv(file));
         return analysis.preview();
     }
 
     @Transactional
-    public StockSkuCsvImportResponse importSkus(
+    public StockSkuCsvRequestResponse requestImport(
             AuthenticatedUser principal,
             MultipartFile file
     ) {
-        requireOwner(principal);
-        Analysis analysis = analyse(principal.tenantId(), file);
+        requireSubmitter(principal);
+        ensureNoPending(principal.tenantId(), StockSkuCsvOperation.IMPORT);
+        String csv = readCsv(file);
+        Analysis analysis = analyse(principal.tenantId(), csv);
         if (analysis.invalidRows() > 0) {
             throw badRequest(
                     "SKU_CSV_INVALID_ROWS",
@@ -194,16 +247,116 @@ public class StockSkuCsvService {
             );
         }
         if (analysis.readyRows().isEmpty()) {
-            return new StockSkuCsvImportResponse(
-                    0,
-                    analysis.duplicateRows(),
-                    0,
-                    0
+            throw badRequest(
+                    "SKU_CSV_NO_IMPORTABLE_ROWS",
+                    "The SKU CSV contains no new rows to submit."
+            );
+        }
+        StockSkuCsvRequest request = requestRepository.saveAndFlush(
+                new StockSkuCsvRequest(
+                        principal.tenantId(),
+                        StockSkuCsvOperation.IMPORT,
+                        sourceFileName(file),
+                        csv,
+                        analysis.totalRows(),
+                        analysis.readyRows().size(),
+                        analysis.duplicateRows(),
+                        analysis.newTagCount(),
+                        analysis.unmatchedSupplierNames().size(),
+                        principal.userId()
+                )
+        );
+        recordSubmitted(principal, request);
+        return requestResponse(principal.tenantId(), request);
+    }
+
+    @Transactional(readOnly = true)
+    public List<StockSkuCsvRequestResponse> listRequests(AuthenticatedUser principal) {
+        requireSubmitter(principal);
+        List<StockSkuCsvRequest> requests = requestRepository
+                .findAllByTenantIdOrderByUpdatedAtDesc(principal.tenantId());
+        Map<UUID, String> names = userNames(principal.tenantId(), requests);
+        return requests.stream()
+                .map(request -> requestResponse(request, names))
+                .toList();
+    }
+
+    @Transactional
+    public StockSkuCsvRequestResponse review(
+            AuthenticatedUser principal,
+            UUID requestId,
+            ReviewStockSkuCsvRequest review
+    ) {
+        requireOwner(principal);
+        StockSkuCsvRequest request = requestRepository
+                .findLockedByIdAndTenantId(requestId, principal.tenantId())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "SKU_CSV_REQUEST_NOT_FOUND",
+                        "SKU CSV request not found."
+                ));
+        if (request.getStatus() != StockSkuCsvRequestStatus.SUBMITTED) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "SKU_CSV_REQUEST_ALREADY_REVIEWED",
+                    "This SKU CSV request has already been reviewed."
+            );
+        }
+        StockSkuCsvRequestStatus decision = review.status();
+        if (decision == StockSkuCsvRequestStatus.APPROVED) {
+            if (request.getOperation() == StockSkuCsvOperation.IMPORT) {
+                applyImport(request);
+            } else {
+                approveExport(principal, request);
+            }
+            request.approve(principal.userId(), review.note());
+        } else if (decision == StockSkuCsvRequestStatus.REJECTED) {
+            if (review.note() == null || review.note().isBlank()) {
+                throw badRequest(
+                        "SKU_CSV_REJECTION_REASON_REQUIRED",
+                        "A reason is required when rejecting a SKU CSV request."
+                );
+            }
+            request.reject(principal.userId(), review.note());
+        } else {
+            throw badRequest(
+                    "SKU_CSV_REVIEW_DECISION_INVALID",
+                    "CSV request status must be APPROVED or REJECTED."
+            );
+        }
+        workflowActivityService.recordTransition(
+                principal,
+                "Stock",
+                "SKU CSV " + request.getOperation().name().toLowerCase(Locale.ROOT),
+                request.getId(),
+                request.getFileName(),
+                StockSkuCsvRequestStatus.SUBMITTED,
+                request.getStatus(),
+                "/api/v1/stock/sku-csv-requests/" + request.getId()
+        );
+        return requestResponse(principal.tenantId(), request);
+    }
+
+    private void applyImport(StockSkuCsvRequest request) {
+        Analysis analysis = analyse(request.getTenantId(), request.getCsvContent());
+        if (analysis.invalidRows() > 0
+                || analysis.readyRows().size() != request.getReadyRows()
+                || analysis.duplicateRows() != request.getDuplicateRows()) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "SKU_CSV_IMPORT_CHANGED",
+                    "SKU data changed after submission. Reject this request and submit a new CSV."
             );
         }
 
-        Tenant tenant = tenant(principal.tenantId());
-        UserAccount actor = actor(principal);
+        Tenant tenant = tenant(request.getTenantId());
+        UserAccount actor = userAccountRepository
+                .findByIdAndTenant_Id(request.getRequestedByUserId(), request.getTenantId())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "USER_NOT_FOUND",
+                        "Requesting user not found."
+                ));
         StockMedia noImage = mediaRepository.save(new StockMedia(
                 tenant,
                 StockMedia.SKU_IMPORT_PLACEHOLDER_PREFIX + UUID.randomUUID(),
@@ -211,17 +364,14 @@ public class StockSkuCsvService {
                 TRANSPARENT_PNG
         ));
         Map<String, StockTag> tagsByName = new LinkedHashMap<>();
-        tagRepository.findAllByTenant_IdOrderByTagAsc(principal.tenantId())
+        tagRepository.findAllByTenant_IdOrderByTagAsc(request.getTenantId())
                 .forEach(tag -> tagsByName.put(normalise(tag.getTag()), tag));
         Map<String, StockSupplier> suppliersByName = new LinkedHashMap<>();
-        supplierRepository.findAllByTenant_IdOrderBySupplierNameAsc(principal.tenantId())
+        supplierRepository.findAllByTenant_IdOrderBySupplierNameAsc(request.getTenantId())
                 .forEach(supplier -> suppliersByName.put(
                         normalise(supplier.getSupplierName()), supplier
                 ));
 
-        int createdTags = 0;
-        int importedRows = 0;
-        int unmatchedSupplierLinks = 0;
         for (ParsedSku row : analysis.readyRows()) {
             StockTag tag1 = null;
             if (!row.tag1().isBlank()) {
@@ -229,7 +379,6 @@ public class StockSkuCsvService {
                 if (tag1 == null) {
                     tag1 = tagRepository.saveAndFlush(new StockTag(tenant, row.tag1(), actor));
                     tagsByName.put(normalise(row.tag1()), tag1);
-                    createdTags += 1;
                 }
             }
 
@@ -239,24 +388,20 @@ public class StockSkuCsvService {
                 if (tag2 == null) {
                     tag2 = tagRepository.saveAndFlush(new StockTag(tenant, row.tag2(), actor));
                     tagsByName.put(normalise(row.tag2()), tag2);
-                    createdTags += 1;
                 }
             }
 
             Set<StockSupplier> suppliers = new LinkedHashSet<>();
             for (String supplierName : row.supplierNames()) {
                 StockSupplier supplier = suppliersByName.get(normalise(supplierName));
-                if (supplier == null) {
-                    unmatchedSupplierLinks += 1;
-                } else {
-                    suppliers.add(supplier);
-                }
+                if (supplier != null) suppliers.add(supplier);
             }
 
-            stockService.createSku(principal, new UpsertStockSkuRequest(
+            skuRepository.save(new StockSku(
+                    tenant,
                     row.name(),
-                    tag1 == null ? null : tag1.getId(),
-                    tag2 == null ? null : tag2.getId(),
+                    tag1,
+                    tag2,
                     row.unit(),
                     row.minimumBalance(),
                     row.maximumBalance(),
@@ -264,29 +409,48 @@ public class StockSkuCsvService {
                     row.recoveryPercent(),
                     row.minimumPrice(),
                     row.maximumPrice(),
-                    suppliers.stream().map(StockSupplier::getId).toList(),
-                    noImage.getStorageKey(),
+                    suppliers,
+                    noImage,
                     List.of(),
                     row.receivableChecklist(),
                     row.stockCheckSchedule(),
                     row.stockCheckDay(),
                     row.stockCheckDate(),
                     row.active(),
-                    row.coolingPeriod()
+                    row.coolingPeriod(),
+                    actor
             ));
-            importedRows += 1;
         }
-
-        return new StockSkuCsvImportResponse(
-                importedRows,
-                analysis.duplicateRows(),
-                createdTags,
-                unmatchedSupplierLinks
-        );
+        skuRepository.flush();
     }
 
-    private Analysis analyse(UUID tenantId, MultipartFile file) {
-        String csv = readCsv(file);
+    private void approveExport(
+            AuthenticatedUser principal,
+            StockSkuCsvRequest request
+    ) {
+        StockSkuExportSnapshot snapshot = snapshotRepository
+                .findById(principal.tenantId())
+                .orElse(null);
+        if (snapshot == null) {
+            snapshot = new StockSkuExportSnapshot(
+                    principal.tenantId(),
+                    request.getFileName(),
+                    request.getCsvContent(),
+                    request.getId(),
+                    principal.userId()
+            );
+        } else {
+            snapshot.overwrite(
+                    request.getFileName(),
+                    request.getCsvContent(),
+                    request.getId(),
+                    principal.userId()
+            );
+        }
+        snapshotRepository.save(snapshot);
+    }
+
+    private Analysis analyse(UUID tenantId, String csv) {
         Set<String> existingSkuNames = new HashSet<>();
         skuRepository.findAllByTenant_IdOrderByNameAsc(tenantId)
                 .forEach(sku -> existingSkuNames.add(normalise(sku.getName())));
@@ -609,12 +773,114 @@ public class StockSkuCsvService {
         return value.trim().toLowerCase(Locale.ROOT);
     }
 
+    private void requireSubmitter(AuthenticatedUser principal) {
+        if (!principal.isHead()) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "SKU_CSV_SUBMITTER_REQUIRED",
+                    "Only Admin, Head or Owner users may submit SKU CSV requests."
+            );
+        }
+    }
+
+    private void ensureNoPending(UUID tenantId, StockSkuCsvOperation operation) {
+        if (requestRepository.existsByTenantIdAndOperationAndStatus(
+                tenantId,
+                operation,
+                StockSkuCsvRequestStatus.SUBMITTED
+        )) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "SKU_CSV_REQUEST_ALREADY_PENDING",
+                    "A " + operation.name().toLowerCase(Locale.ROOT)
+                            + " request is already waiting for approval."
+            );
+        }
+    }
+
+    private static String sourceFileName(MultipartFile file) {
+        String name = file.getOriginalFilename();
+        if (name == null || name.isBlank()) return "eastapp-skus-import.csv";
+        String clean = name.replace('\\', '/');
+        int slash = clean.lastIndexOf('/');
+        clean = slash >= 0 ? clean.substring(slash + 1) : clean;
+        return clean.length() <= 255 ? clean : clean.substring(clean.length() - 255);
+    }
+
+    private void recordSubmitted(
+            AuthenticatedUser principal,
+            StockSkuCsvRequest request
+    ) {
+        workflowActivityService.recordTransition(
+                principal,
+                "Stock",
+                "SKU CSV " + request.getOperation().name().toLowerCase(Locale.ROOT),
+                request.getId(),
+                request.getFileName(),
+                null,
+                StockSkuCsvRequestStatus.SUBMITTED,
+                "/api/v1/stock/sku-csv-requests/" + request.getId()
+        );
+    }
+
+    private StockSkuCsvRequestResponse requestResponse(
+            UUID tenantId,
+            StockSkuCsvRequest request
+    ) {
+        return requestResponse(request, userNames(tenantId, List.of(request)));
+    }
+
+    private Map<UUID, String> userNames(
+            UUID tenantId,
+            List<StockSkuCsvRequest> requests
+    ) {
+        Set<UUID> userIds = new LinkedHashSet<>();
+        requests.forEach(request -> {
+            userIds.add(request.getRequestedByUserId());
+            if (request.getReviewedByUserId() != null) {
+                userIds.add(request.getReviewedByUserId());
+            }
+        });
+        Map<UUID, String> names = new LinkedHashMap<>();
+        if (!userIds.isEmpty()) {
+            userAccountRepository.findAllByTenant_IdAndIdIn(tenantId, userIds)
+                    .forEach(user -> names.put(user.getId(), user.getFullName()));
+        }
+        return names;
+    }
+
+    private static StockSkuCsvRequestResponse requestResponse(
+            StockSkuCsvRequest request,
+            Map<UUID, String> names
+    ) {
+        return new StockSkuCsvRequestResponse(
+                request.getId(),
+                request.getOperation(),
+                request.getStatus(),
+                request.getFileName(),
+                request.getTotalRows(),
+                request.getReadyRows(),
+                request.getDuplicateRows(),
+                request.getNewTagCount(),
+                request.getUnmatchedSupplierCount(),
+                request.getRequestedByUserId(),
+                names.getOrDefault(request.getRequestedByUserId(), "Unknown user"),
+                request.getSubmittedAt(),
+                request.getReviewedByUserId(),
+                request.getReviewedByUserId() == null
+                        ? null
+                        : names.getOrDefault(request.getReviewedByUserId(), "Unknown user"),
+                request.getReviewedAt(),
+                request.getReviewNote()
+        );
+    }
+
     private void requireOwner(AuthenticatedUser principal) {
         if (!principal.isOwner()) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "OWNER_REQUIRED",
-                    "Only Owner users may import or export SKU files."
+                    "Only Admin or Owner users may approve or reject SKU CSV requests."
             );
         }
     }
@@ -628,17 +894,6 @@ public class StockSkuCsvService {
                 ));
     }
 
-    private UserAccount actor(AuthenticatedUser principal) {
-        return userAccountRepository.findByIdAndTenant_Id(
-                        principal.userId(), principal.tenantId()
-                )
-                .orElseThrow(() -> new ApiException(
-                        HttpStatus.NOT_FOUND,
-                        "USER_NOT_FOUND",
-                        "User not found."
-                ));
-    }
-
     private static RowValidationException invalid(String message) {
         return new RowValidationException(message);
     }
@@ -648,6 +903,8 @@ public class StockSkuCsvService {
     }
 
     public record CsvExport(String fileName, byte[] bytes) {}
+
+    private record GeneratedCsv(String fileName, byte[] bytes, int rowCount) {}
 
     private record ParsedSku(
             String name,

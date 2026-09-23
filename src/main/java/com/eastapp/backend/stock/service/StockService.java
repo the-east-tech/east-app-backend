@@ -24,6 +24,8 @@ import com.eastapp.backend.stock.StockSku;
 import com.eastapp.backend.stock.StockSkuChangeRequest;
 import com.eastapp.backend.stock.StockSkuChangeRequestRepository;
 import com.eastapp.backend.stock.StockSkuChangeType;
+import com.eastapp.backend.stock.StockSkuCsvRequestRepository;
+import com.eastapp.backend.stock.StockSkuCsvRequestStatus;
 import com.eastapp.backend.stock.StockSkuRepository;
 import com.eastapp.backend.stock.StockSupplier;
 import com.eastapp.backend.stock.StockSupplierRepository;
@@ -90,6 +92,7 @@ public class StockService {
     private final StockSupplierRepository supplierRepository;
     private final StockSkuRepository skuRepository;
     private final StockSkuChangeRequestRepository skuChangeRequestRepository;
+    private final StockSkuCsvRequestRepository skuCsvRequestRepository;
     private final StockCountSubmissionRepository countRepository;
     private final StockReceivableRepository receivableRepository;
     private final WorkflowActivityService workflowActivityService;
@@ -105,6 +108,7 @@ public class StockService {
             StockSupplierRepository supplierRepository,
             StockSkuRepository skuRepository,
             StockSkuChangeRequestRepository skuChangeRequestRepository,
+            StockSkuCsvRequestRepository skuCsvRequestRepository,
             StockCountSubmissionRepository countRepository,
             StockReceivableRepository receivableRepository,
             WorkflowActivityService workflowActivityService,
@@ -118,6 +122,7 @@ public class StockService {
         this.supplierRepository = supplierRepository;
         this.skuRepository = skuRepository;
         this.skuChangeRequestRepository = skuChangeRequestRepository;
+        this.skuCsvRequestRepository = skuCsvRequestRepository;
         this.countRepository = countRepository;
         this.receivableRepository = receivableRepository;
         this.workflowActivityService = workflowActivityService;
@@ -995,9 +1000,18 @@ public class StockService {
                         principal.tenantId(), StockWorkflowStatus.SUBMITTED,
                         fromInclusive, toExclusive
                 );
+        long skuCsvTotal = skuCsvRequestRepository
+                .countByTenantIdAndUpdatedAtGreaterThanEqualAndUpdatedAtLessThan(
+                        principal.tenantId(), fromInclusive, toExclusive
+                );
+        long skuCsvPending = skuCsvRequestRepository
+                .countByTenantIdAndStatusAndUpdatedAtGreaterThanEqualAndUpdatedAtLessThan(
+                        principal.tenantId(), StockSkuCsvRequestStatus.SUBMITTED,
+                        fromInclusive, toExclusive
+                );
 
-        long total = countTotal + receivableTotal + skuChangeTotal;
-        long pending = countPending + receivablePending + skuChangePending;
+        long total = countTotal + receivableTotal + skuChangeTotal + skuCsvTotal;
+        long pending = countPending + receivablePending + skuChangePending + skuCsvPending;
         return new StockReviewSummaryResponse(
                 pending,
                 total - pending,
@@ -1010,6 +1024,8 @@ public class StockService {
                 ),
                 skuChangeRequestRepository.countByTenantIdAndWorkflowStatus(
                         principal.tenantId(), StockWorkflowStatus.SUBMITTED
+                ) + skuCsvRequestRepository.countByTenantIdAndStatus(
+                        principal.tenantId(), StockSkuCsvRequestStatus.SUBMITTED
                 )
         );
     }

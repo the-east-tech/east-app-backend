@@ -384,6 +384,67 @@ CREATE UNIQUE INDEX uq_stock_sku_changes_pending_create_name
     ON stock_sku_change_requests (tenant_id, LOWER(sku_name))
     WHERE sku_id IS NULL AND change_type = 'CREATE';
 
+CREATE TABLE stock_sku_csv_requests (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    tenant_id UUID NOT NULL,
+    operation VARCHAR(16) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    csv_content TEXT NOT NULL,
+    total_rows INTEGER NOT NULL,
+    ready_rows INTEGER NOT NULL,
+    duplicate_rows INTEGER NOT NULL,
+    new_tag_count INTEGER NOT NULL,
+    unmatched_supplier_count INTEGER NOT NULL,
+    requested_by_user_id UUID NOT NULL,
+    submitted_at TIMESTAMPTZ NOT NULL,
+    reviewed_by_user_id UUID,
+    reviewed_at TIMESTAMPTZ,
+    review_note VARCHAR(1000) NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_stock_sku_csv_requests_tenant
+        FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_sku_csv_requests_requester_same_tenant
+        FOREIGN KEY (tenant_id, requested_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_sku_csv_requests_reviewer_same_tenant
+        FOREIGN KEY (tenant_id, reviewed_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT ck_stock_sku_csv_requests_operation
+        CHECK (operation IN ('IMPORT', 'EXPORT')),
+    CONSTRAINT ck_stock_sku_csv_requests_status
+        CHECK (status IN ('SUBMITTED', 'APPROVED', 'REJECTED')),
+    CONSTRAINT ck_stock_sku_csv_requests_counts
+        CHECK (
+            total_rows >= 0 AND ready_rows >= 0 AND duplicate_rows >= 0
+            AND new_tag_count >= 0 AND unmatched_supplier_count >= 0
+        ),
+    CONSTRAINT uq_stock_sku_csv_requests_tenant_id_id UNIQUE (tenant_id, id)
+);
+CREATE INDEX ix_stock_sku_csv_requests_tenant_status_time
+    ON stock_sku_csv_requests (tenant_id, status, updated_at DESC);
+CREATE UNIQUE INDEX uq_stock_sku_csv_requests_pending_operation
+    ON stock_sku_csv_requests (tenant_id, operation)
+    WHERE status = 'SUBMITTED';
+
+CREATE TABLE stock_sku_export_snapshots (
+    tenant_id UUID PRIMARY KEY,
+    file_name VARCHAR(255) NOT NULL,
+    csv_content TEXT NOT NULL,
+    approved_request_id UUID NOT NULL,
+    approved_by_user_id UUID NOT NULL,
+    approved_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT fk_stock_sku_export_snapshots_tenant
+        FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_sku_export_snapshots_request_same_tenant
+        FOREIGN KEY (tenant_id, approved_request_id)
+        REFERENCES stock_sku_csv_requests (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_sku_export_snapshots_approver_same_tenant
+        FOREIGN KEY (tenant_id, approved_by_user_id)
+        REFERENCES users (tenant_id, id) ON DELETE RESTRICT
+);
+
 CREATE TABLE stock_sku_suppliers (
     sku_id UUID NOT NULL,
     supplier_id UUID NOT NULL,

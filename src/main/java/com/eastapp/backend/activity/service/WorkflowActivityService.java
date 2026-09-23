@@ -48,6 +48,8 @@ public class WorkflowActivityService {
 
     private static String action(String previous, String next) {
         if ("SUBMITTED".equals(next)) return "submitted";
+        if ("APPROVED".equals(next)) return "approved";
+        if ("REJECTED".equals(next)) return "rejected";
         if ("DONE".equals(next)) return "completed";
         if ("DONE".equals(previous) && "PENDING".equals(next)) return "amended";
         if ("PENDING".equals(next)) return "returned";

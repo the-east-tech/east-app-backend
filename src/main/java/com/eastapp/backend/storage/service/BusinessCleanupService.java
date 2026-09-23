@@ -114,6 +114,16 @@ public class BusinessCleanupService {
             and request.updated_at < :cutoffAt
             and request.updated_at <= :asOf
             """;
+    private static final String SKU_CSV_REQUEST_ELIGIBLE = """
+            csv_request.tenant_id = :tenantId
+            and csv_request.status in ('APPROVED', 'REJECTED')
+            and csv_request.updated_at < :cutoffAt
+            and csv_request.updated_at <= :asOf
+            and not exists (
+                select 1 from stock_sku_export_snapshots snapshot
+                where snapshot.approved_request_id = csv_request.id
+            )
+            """;
     private static final String REPORT_ELIGIBLE = """
             report.tenant_id = :tenantId
             and report.workflow_status = 'DONE'
@@ -177,7 +187,7 @@ public class BusinessCleanupService {
 
     private static final Map<BusinessCleanupDataType, String> DESCRIPTIONS = Map.of(
             BusinessCleanupDataType.INACTIVE_SETUP, "Inactive SKUs, suppliers, tags and task templates without protected references, plus old advertisements.",
-            BusinessCleanupDataType.STOCK_HISTORY, "Completed stock counts, receivables and SKU requests before the cutoff date.",
+            BusinessCleanupDataType.STOCK_HISTORY, "Completed stock counts, receivables, SKU changes and CSV requests before the cutoff date.",
             BusinessCleanupDataType.REPORTS, "Completed business reports before the cutoff date and their details.",
             BusinessCleanupDataType.TASKS, "Completed task records before the cutoff date and their checklist results.",
             BusinessCleanupDataType.ATTENDANCE, "Attendance events before the cutoff date.",
@@ -369,6 +379,7 @@ public class BusinessCleanupService {
         deleteEvents(current.linkedActivityIds(), principal.tenantId());
 
         deletedRecords += deleteByIds("stock_sku_change_requests", ids, principal.tenantId());
+        deletedRecords += deleteByIds("stock_sku_csv_requests", ids, principal.tenantId());
         deletedRecords += deleteByIds("stock_count_submissions", ids, principal.tenantId());
         deletedRecords += deleteByIds("stock_receivables", ids, principal.tenantId());
         deletedRecords += deleteByIds("business_reports", ids, principal.tenantId());
@@ -436,6 +447,7 @@ public class BusinessCleanupService {
         }
         if (request.dataTypes().contains(BusinessCleanupDataType.STOCK_HISTORY)) {
             addRefs(refs, BusinessCleanupDataType.STOCK_HISTORY, "stock_sku_change_requests", "request", SKU_REQUEST_ELIGIBLE, parameters);
+            addRefs(refs, BusinessCleanupDataType.STOCK_HISTORY, "stock_sku_csv_requests", "csv_request", SKU_CSV_REQUEST_ELIGIBLE, parameters);
             addRefs(refs, BusinessCleanupDataType.STOCK_HISTORY, "stock_count_submissions", "count_record", COUNT_ELIGIBLE, parameters);
             addRefs(refs, BusinessCleanupDataType.STOCK_HISTORY, "stock_receivables", "receivable", RECEIVABLE_ELIGIBLE, parameters);
         }
@@ -569,6 +581,7 @@ public class BusinessCleanupService {
         addTenantTable(zip, "inactive_setup", "advertisements", ids, tenant);
 
         addTenantTable(zip, "stock_history", "stock_sku_change_requests", ids, tenant);
+        addTenantTable(zip, "stock_history", "stock_sku_csv_requests", ids, tenant);
         addTenantTable(zip, "stock_history", "stock_count_submissions", ids, tenant);
         addByParent(zip, "stock_history", "stock_count_submission_checks", "submission_id", ids.get("stock_count_submissions"));
         addByParent(zip, "stock_history", "stock_count_submission_remarks", "submission_id", ids.get("stock_count_submissions"));
