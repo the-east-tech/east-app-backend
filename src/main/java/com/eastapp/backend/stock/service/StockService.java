@@ -643,7 +643,7 @@ public class StockService {
         sku.update(
                 request.name(), tag1, tag2, request.unit(),
                 request.minimumBalanceValue(), request.maximumBalanceValue(),
-                sku.getCurrentBalanceValue(), request.recoveryPercent(),
+                request.currentBalanceValue(), request.recoveryPercent(),
                 request.minimumPriceRm(), request.maximumPriceRm(),
                 suppliers(principal.tenantId(), request.supplierIds(), existingSupplierIds),
                 thumbnail, request.assignedStaffNames(),
