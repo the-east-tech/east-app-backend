@@ -4,6 +4,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -63,6 +65,12 @@ public interface StockSkuRepository extends JpaRepository<StockSku, UUID> {
             "tag1", "tag2"
     })
     Optional<StockSku> findByIdAndTenant_Id(UUID id, UUID tenantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select sku from StockSku sku where sku.id = :id and sku.tenant.id = :tenantId")
+    Optional<StockSku> findLockedByIdAndTenantId(
+            @Param("id") UUID id, @Param("tenantId") UUID tenantId
+    );
 
     @EntityGraph(attributePaths = {"tenant", "suppliers"})
     List<StockSku> findAllByTenant_IdAndIdIn(UUID tenantId, Collection<UUID> ids);

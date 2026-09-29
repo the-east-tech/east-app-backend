@@ -30,6 +30,7 @@ public record UpsertStockSkuRequest(
         List<@Size(max = 300) String> receivableChecklist,
         @NotNull StockCheckSchedule stockCheckSchedule,
         Integer stockCheckDay,
+        Integer stockCheckDay2,
         LocalDate stockCheckDate,
         boolean active,
         boolean coolingPeriod

@@ -50,6 +50,9 @@ public class StockReceivable {
     @OneToMany(mappedBy = "receivable", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")
     private List<StockReceivableItem> items = new ArrayList<>();
+    @Column(name = "balance_applied_at_submission", nullable = false)
+    private boolean balanceAppliedAtSubmission;
+
     @Column(name = "review_status", nullable = false, length = 24)
     @Enumerated(EnumType.STRING)
     private StockWorkflowStatus workflowStatus = StockWorkflowStatus.SUBMITTED;
@@ -93,14 +96,6 @@ public class StockReceivable {
             throw new IllegalArgumentException("Stock receivable status must be DONE or PENDING.");
         }
         UserAccount reviewer = Objects.requireNonNull(actor);
-        if (next == StockWorkflowStatus.PENDING) {
-            for (StockReceivableItem item : items) {
-                StockSku sku = item.getSku();
-                BigDecimal reverted = sku.getCurrentBalanceValue().subtract(item.getReceivedQuantity());
-                if (reverted.signum() < 0) reverted = BigDecimal.ZERO;
-                sku.updateBalance(reverted, reviewer);
-            }
-        }
         this.workflowStatus = next;
         this.reviewNote = text(note);
         this.reviewedBy = reviewer;
@@ -116,6 +111,7 @@ public class StockReceivable {
     public String getGoodsPhotoName() { return goodsPhotoName; }
     public List<StockReceivableItem> getItems() { return items; }
     public StockWorkflowStatus getWorkflowStatus() { return workflowStatus; }
+    public boolean isBalanceAppliedAtSubmission() { return balanceAppliedAtSubmission; }
     public UserAccount getReviewedBy() { return reviewedBy; }
     public Instant getReviewedAt() { return reviewedAt; }
     public String getReviewNote() { return reviewNote; }

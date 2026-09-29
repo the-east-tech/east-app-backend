@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import java.time.Instant;
 import java.util.UUID;
@@ -34,6 +35,21 @@ public interface StockSkuChangeRequestRepository
     Optional<StockSkuChangeRequest> findLockedByIdAndTenantId(
             @Param("id") UUID id,
             @Param("tenantId") UUID tenantId
+    );
+
+    @Query("""
+            select distinct request.skuId from StockSkuChangeRequest request
+            where request.tenantId = :tenantId and request.workflowStatus = :status
+              and request.skuId in :skuIds
+            """)
+    List<UUID> submittedSkuIds(
+            @Param("tenantId") UUID tenantId,
+            @Param("status") StockWorkflowStatus status,
+            @Param("skuIds") Collection<UUID> skuIds
+    );
+
+    boolean existsByTenantIdAndSkuIdAndWorkflowStatus(
+            UUID tenantId, UUID skuId, StockWorkflowStatus workflowStatus
     );
 
     long countByTenantIdAndUpdatedAtGreaterThanEqualAndUpdatedAtLessThan(

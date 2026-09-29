@@ -65,6 +65,9 @@ public class StockCountSubmission {
     @MapKeyColumn(name = "remark_key", length = 120)
     @Column(name = "remark_value", nullable = false, length = 1000)
     private Map<String, String> remarks = new LinkedHashMap<>();
+    @Column(name = "balance_applied_at_submission", nullable = false)
+    private boolean balanceAppliedAtSubmission;
+
     @Column(name = "review_status", nullable = false, length = 24)
     @Enumerated(EnumType.STRING)
     private StockWorkflowStatus workflowStatus = StockWorkflowStatus.SUBMITTED;
@@ -111,9 +114,6 @@ public class StockCountSubmission {
             throw new IllegalArgumentException("Stock count status must be DONE or PENDING.");
         }
         UserAccount reviewer = Objects.requireNonNull(actor);
-        if (next == StockWorkflowStatus.PENDING) {
-            sku.updateBalance(previousBalanceValue, reviewer);
-        }
         this.workflowStatus = next;
         this.reviewNote = text(note);
         this.reviewedBy = reviewer;
@@ -134,6 +134,7 @@ public class StockCountSubmission {
     public Map<String, Boolean> getCheckedItems() { return checkedItems; }
     public Map<String, String> getRemarks() { return remarks; }
     public StockWorkflowStatus getWorkflowStatus() { return workflowStatus; }
+    public boolean isBalanceAppliedAtSubmission() { return balanceAppliedAtSubmission; }
     public UserAccount getReviewedBy() { return reviewedBy; }
     public Instant getReviewedAt() { return reviewedAt; }
     public String getReviewNote() { return reviewNote; }

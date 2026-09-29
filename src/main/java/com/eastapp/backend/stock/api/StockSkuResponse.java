@@ -27,13 +27,19 @@ public record StockSkuResponse(
         List<String> receivableChecklist,
         StockCheckSchedule stockCheckSchedule,
         Integer stockCheckDay,
+        Integer stockCheckDay2,
         LocalDate stockCheckDate,
         String lastUpdatedAt,
         String lastUpdatedBy,
         boolean active,
-        boolean coolingPeriod
+        boolean coolingPeriod,
+        String approvalHoldReason
 ) {
     public static StockSkuResponse from(StockSku item, String photoPath) {
+        return from(item, photoPath, "");
+    }
+
+    public static StockSkuResponse from(StockSku item, String photoPath, String approvalHoldReason) {
         return new StockSkuResponse(
                 item.getId(), item.getName(),
                 item.getTag1() == null ? null : item.getTag1().getId(), item.getCategory(),
@@ -45,9 +51,9 @@ public record StockSkuResponse(
                 item.getSuppliers().stream().map(supplier -> supplier.getId()).toList(),
                 photoPath, List.copyOf(item.getAssignedStaffNames()),
                 List.copyOf(item.getReceivableChecklist()),
-                item.getStockCheckSchedule(), item.getStockCheckDay(), item.getStockCheckDate(),
+                item.getStockCheckSchedule(), item.getStockCheckDay(), item.getStockCheckDay2(), item.getStockCheckDate(),
                 StockResponseSupport.label(item.getUpdatedAt()),
-                StockResponseSupport.employeeId(item.getLastUpdatedBy()), item.isActive(), item.isCoolingPeriod()
+                StockResponseSupport.employeeId(item.getLastUpdatedBy()), item.isActive(), item.isCoolingPeriod(), approvalHoldReason
         );
     }
 }

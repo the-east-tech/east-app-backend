@@ -145,12 +145,14 @@ public class StockService {
         List<StockSku> responseSkus = new ArrayList<>(skus);
         counts.forEach(count -> responseSkus.add(count.getSku()));
         Map<UUID, String> photoPaths = skuPhotoPaths(tenantId, responseSkus);
+        Map<UUID, String> holds = approvalHolds(tenantId, skus.stream().map(StockSku::getId).toList());
         return new StockSnapshotResponse(
                 tagResponses(tenantId, tags),
                 supplierRepository.findAllByTenant_IdOrderBySupplierNameAsc(tenantId)
                         .stream().map(StockSupplierResponse::from).toList(),
                 skus.stream()
-                        .map(sku -> StockSkuResponse.from(sku, photoPath(sku, photoPaths)))
+                        .map(sku -> StockSkuResponse.from(sku, photoPath(sku, photoPaths),
+                                holds.getOrDefault(sku.getId(), "")))
                         .toList(),
                 counts.stream()
                         .map(count -> StockCountSubmissionResponse.from(
@@ -210,10 +212,14 @@ public class StockService {
                 principal.tenantId(),
                 source.getContent()
         );
+        Map<UUID, String> holds = approvalHolds(
+                principal.tenantId(), source.getContent().stream().map(StockSku::getId).toList()
+        );
         return PageResponse.from(
                 source,
                 source.getContent().stream()
-                        .map(sku -> StockSkuResponse.from(sku, photoPath(sku, photoPaths)))
+                        .map(sku -> StockSkuResponse.from(sku, photoPath(sku, photoPaths),
+                                holds.getOrDefault(sku.getId(), "")))
                         .toList()
         );
     }
@@ -436,7 +442,8 @@ public class StockService {
             UUID skuId,
             UpsertStockSkuRequest request
     ) {
-        StockSku sku = sku(skuId, principal.tenantId());
+        StockSku sku = lockedSku(skuId, principal.tenantId());
+        assertSkuAvailable(principal.tenantId(), skuId);
         if (!sku.getName().equalsIgnoreCase(request.name().trim())
                 && skuRepository.existsByTenant_IdAndNameIgnoreCase(principal.tenantId(), request.name().trim())) {
             throw conflict("STOCK_SKU_EXISTS", "This SKU already exists.");
@@ -448,8 +455,52 @@ public class StockService {
     }
 
     @Transactional
+    public StockSku importSkuNow(
+            AuthenticatedUser principal,
+            UUID existingSkuId,
+            UpsertStockSkuRequest request
+    ) {
+        if (!principal.isOwner()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "OWNER_REQUIRED",
+                    "Only Owner users may import SKU files.");
+        }
+        if (existingSkuId == null) {
+            StockSkuChangeRequest pendingCreate = skuChangeRequestRepository
+                    .findFirstByTenantIdAndChangeTypeAndSkuNameIgnoreCaseOrderByUpdatedAtDesc(
+                            principal.tenantId(), StockSkuChangeType.CREATE,
+                            request.name().trim()
+                    ).orElse(null);
+            if (pendingCreate != null
+                    && pendingCreate.getWorkflowStatus() == StockWorkflowStatus.SUBMITTED) {
+                throw conflict("STOCK_SKU_AWAITING_APPROVAL",
+                        "This SKU is frozen while its creation awaits approval. "
+                                + "Ask a reviewer to approve or return it before importing.");
+            }
+            StockSku created = createSkuNow(principal, request, true);
+            workflowActivityService.recordChange(
+                    principal, "Stock", "SKU import", created.getId(), created.getName(),
+                    "/api/v1/stock/skus/" + created.getId(),
+                    "SKU: new -> " + created.getName()
+                            + "; Current balance: new -> "
+                            + created.getCurrentBalanceValue().toPlainString()
+            );
+            return created;
+        }
+        StockSku existing = lockedSku(existingSkuId, principal.tenantId());
+        assertSkuAvailable(principal.tenantId(), existingSkuId);
+        String details = skuUpdateDetails(existing, request, true);
+        StockSku updated = updateSkuNow(principal, existingSkuId, request, true);
+        workflowActivityService.recordChange(
+                principal, "Stock", "SKU import", existingSkuId, updated.getName(),
+                "/api/v1/stock/skus/" + existingSkuId, details
+        );
+        return updated;
+    }
+
+    @Transactional
     public StockSkuChangeRequestResponse deleteSku(AuthenticatedUser principal, UUID skuId) {
-        StockSku sku = sku(skuId, principal.tenantId());
+        StockSku sku = lockedSku(skuId, principal.tenantId());
+        assertSkuAvailable(principal.tenantId(), skuId);
         assertDeletable(deletionPreviewService.sku(principal.tenantId(), skuId),
                 "STOCK_SKU_HAS_DEPENDENCIES", "SKU");
         StockSkuChangeRequest change = skuChangeRequestRepository
@@ -505,6 +556,8 @@ public class StockService {
                     "Only a submitted SKU change can be reviewed."
             );
         }
+        String changes = next == StockWorkflowStatus.DONE
+                ? skuChangeDetails(principal, change) : "";
         if (next == StockWorkflowStatus.DONE) {
             applySkuChange(principal, change);
         }
@@ -516,7 +569,7 @@ public class StockService {
         workflowActivityService.recordTransition(
                 principal, "Stock", "SKU change", change.getId(), change.getSkuName(),
                 StockWorkflowStatus.SUBMITTED, next,
-                "/api/v1/stock/sku-change-requests/" + change.getId()
+                "/api/v1/stock/sku-change-requests/" + change.getId(), changes
         );
         return skuChangeResponse(principal.tenantId(), change);
     }
@@ -558,11 +611,11 @@ public class StockService {
 
     private void applySkuChange(AuthenticatedUser principal, StockSkuChangeRequest change) {
         switch (change.getChangeType()) {
-            case CREATE -> change.attachSku(createSkuNow(principal, readSkuPayload(change)).getId());
+            case CREATE -> change.attachSku(createSkuNow(principal, readSkuPayload(change), false).getId());
             case UPDATE -> updateSkuNow(
                     principal,
                     requireSkuId(change),
-                    readSkuPayload(change)
+                    readSkuPayload(change), false
             );
             case DELETE -> hardDeleteSku(principal, change);
         }
@@ -592,7 +645,7 @@ public class StockService {
         throw conflict(code, "Remove linked records before deleting this " + entityLabel + ": " + dependencies);
     }
 
-    private StockSku createSkuNow(AuthenticatedUser principal, UpsertStockSkuRequest request) {
+    private StockSku createSkuNow(AuthenticatedUser principal, UpsertStockSkuRequest request, boolean csvImport) {
         if (skuRepository.existsByTenant_IdAndNameIgnoreCase(principal.tenantId(), request.name().trim())) {
             throw conflict("STOCK_SKU_EXISTS", "This SKU already exists.");
         }
@@ -604,12 +657,13 @@ public class StockService {
         return skuRepository.save(new StockSku(
                 tenant, request.name(), tag1, tag2, request.unit(),
                 request.minimumBalanceValue(), request.maximumBalanceValue(),
-                request.currentBalanceValue(), request.recoveryPercent(),
+                csvImport ? request.currentBalanceValue() : BigDecimal.ZERO,
+                request.recoveryPercent(),
                 request.minimumPriceRm(), request.maximumPriceRm(),
                 suppliers(principal.tenantId(), request.supplierIds(), Set.of()),
                 thumbnail, request.assignedStaffNames(),
                 request.receivableChecklist(), request.stockCheckSchedule(),
-                request.stockCheckDay(), request.stockCheckDate(),
+                request.stockCheckDay(), request.stockCheckDay2(), request.stockCheckDate(),
                 request.active(), request.coolingPeriod(), actor
         ));
     }
@@ -617,7 +671,8 @@ public class StockService {
     private StockSku updateSkuNow(
             AuthenticatedUser principal,
             UUID skuId,
-            UpsertStockSkuRequest request
+            UpsertStockSkuRequest request,
+            boolean csvImport
     ) {
         StockSku sku = sku(skuId, principal.tenantId());
         String oldName = sku.getName();
@@ -643,16 +698,76 @@ public class StockService {
         sku.update(
                 request.name(), tag1, tag2, request.unit(),
                 request.minimumBalanceValue(), request.maximumBalanceValue(),
-                request.currentBalanceValue(), request.recoveryPercent(),
+                csvImport ? request.currentBalanceValue() : sku.getCurrentBalanceValue(),
+                request.recoveryPercent(),
                 request.minimumPriceRm(), request.maximumPriceRm(),
                 suppliers(principal.tenantId(), request.supplierIds(), existingSupplierIds),
-                thumbnail, request.assignedStaffNames(),
+                thumbnail, csvImport ? List.copyOf(sku.getAssignedStaffNames()) : request.assignedStaffNames(),
                 request.receivableChecklist(), request.stockCheckSchedule(),
-                request.stockCheckDay(), request.stockCheckDate(),
+                request.stockCheckDay(), request.stockCheckDay2(), request.stockCheckDate(),
                 request.active(), request.coolingPeriod(),
                 actor(principal)
         );
         return sku;
+    }
+
+    private String skuChangeDetails(AuthenticatedUser principal, StockSkuChangeRequest change) {
+        if (change.getChangeType() == StockSkuChangeType.DELETE) {
+            return "SKU: " + change.getSkuName() + " -> deleted";
+        }
+        UpsertStockSkuRequest proposed = readSkuPayload(change);
+        if (change.getChangeType() == StockSkuChangeType.CREATE) {
+            return "SKU: new -> " + proposed.name()
+                    + "; Current balance: new -> " + BigDecimal.ZERO.toPlainString();
+        }
+        StockSku previous = sku(requireSkuId(change), principal.tenantId());
+        return skuUpdateDetails(previous, proposed, false);
+    }
+
+    private String skuUpdateDetails(
+            StockSku previous, UpsertStockSkuRequest proposed, boolean importBalance
+    ) {
+        List<String> details = new ArrayList<>();
+        addChange(details, "Name", previous.getName(), proposed.name());
+        addChange(details, "Tag 1", previous.getTag1() == null ? null : previous.getTag1().getId(), proposed.tag1Id());
+        addChange(details, "Tag 2", previous.getTag2() == null ? null : previous.getTag2().getId(), proposed.tag2Id());
+        addChange(details, "Unit", previous.getUnit(), proposed.unit());
+        addChange(details, "Minimum balance", previous.getMinimumBalanceValue(), proposed.minimumBalanceValue());
+        if (importBalance) {
+            addChange(details, "Current balance", previous.getCurrentBalanceValue(), proposed.currentBalanceValue());
+        }
+        addChange(details, "Maximum balance", previous.getMaximumBalanceValue(), proposed.maximumBalanceValue());
+        addChange(details, "Recovery", previous.getRecoveryPercent(), proposed.recoveryPercent());
+        addChange(details, "Minimum price", previous.getMinimumPriceRm(), proposed.minimumPriceRm());
+        addChange(details, "Maximum price", previous.getMaximumPriceRm(), proposed.maximumPriceRm());
+        addChange(details, "Suppliers", previous.getSuppliers().stream().map(StockSupplier::getId)
+                .map(UUID::toString).sorted().toList(),
+                proposed.supplierIds() == null ? List.of() : proposed.supplierIds().stream()
+                        .map(UUID::toString).sorted().toList());
+        if (!importBalance) {
+            addChange(details, "Assigned staff", previous.getAssignedStaffNames(), proposed.assignedStaffNames());
+        }
+        addChange(details, "Receivable checklist", previous.getReceivableChecklist(), proposed.receivableChecklist());
+        addChange(details, "Stock check schedule", previous.getStockCheckSchedule(), proposed.stockCheckSchedule());
+        addChange(details, "Stock check day", previous.getStockCheckDay(), proposed.stockCheckDay());
+        addChange(details, "Second stock check day", previous.getStockCheckDay2(), proposed.stockCheckDay2());
+        addChange(details, "Stock check date", previous.getStockCheckDate(), proposed.stockCheckDate());
+        addChange(details, "Active", previous.isActive(), proposed.active());
+        addChange(details, "Cooling period", previous.isCoolingPeriod(), proposed.coolingPeriod());
+        if (proposed.photoPath() != null && !proposed.photoPath().isBlank()) {
+            addChange(details, "Thumbnail", previous.getThumbnailMedia().getStorageKey(), proposed.photoPath());
+        }
+        return String.join("; ", details);
+    }
+
+    private static void addChange(List<String> details, String label, Object before, Object after) {
+        if (!Objects.equals(before, after)) {
+            details.add(label + ": " + String.valueOf(before) + " -> " + String.valueOf(after));
+        }
+    }
+
+    private static String balanceDetail(BigDecimal before, BigDecimal after) {
+        return "Current balance: " + before.toPlainString() + " -> " + after.toPlainString();
     }
 
     private String writeSkuPayload(UpsertStockSkuRequest request) {
@@ -734,7 +849,8 @@ public class StockService {
             AuthenticatedUser principal,
             CreateStockCountRequest request
     ) {
-        StockSku sku = sku(request.skuId(), principal.tenantId());
+        StockSku sku = lockedSku(request.skuId(), principal.tenantId());
+        assertSkuAvailable(principal.tenantId(), sku.getId());
         UserAccount actor = actor(principal);
         if (!principal.isHead() && !principal.isManager()
                 && !sku.getAssignedStaffNames().isEmpty()
@@ -767,7 +883,6 @@ public class StockService {
             );
         }
         BigDecimal previous = sku.getCurrentBalanceValue();
-        sku.updateBalance(request.currentBalanceValue(), actor);
         StockCountSubmission submission = countRepository.save(new StockCountSubmission(
                 sku.getTenant(), sku, actor, request.capturedAt(), cycleStartedAt,
                 request.stockPhotoName(), request.invoicePhotoName(), previous,
@@ -791,18 +906,38 @@ public class StockService {
             ReviewStockRecordRequest request
     ) {
         StockCountSubmission submission = countRepository
-                .findByIdAndTenant_Id(submissionId, principal.tenantId())
+                .findLockedByIdAndTenantId(submissionId, principal.tenantId())
                 .orElseThrow(() -> notFound("STOCK_COUNT_NOT_FOUND", "Stock count not found."));
         if (submission.getWorkflowStatus() != StockWorkflowStatus.SUBMITTED) {
             throw conflict("STOCK_COUNT_ALREADY_REVIEWED", "This stock count has already been reviewed.");
         }
         StockWorkflowStatus next = requireReviewDecision(request.status());
-        submission.review(next, request.note(), actor(principal));
+        UserAccount reviewer = actor(principal);
+        if (!submission.isBalanceAppliedAtSubmission()
+                && next == StockWorkflowStatus.DONE) {
+            StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
+            sku.updateBalance(submission.getCurrentBalanceValue(), reviewer);
+        } else if (submission.isBalanceAppliedAtSubmission()
+                && next == StockWorkflowStatus.PENDING) {
+            StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
+            sku.updateBalance(submission.getPreviousBalanceValue(), reviewer);
+        }
+        submission.review(next, request.note(), reviewer);
         workflowActivityService.recordTransition(
                 principal, "Stock", "stock count", submission.getId(),
                 submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,
                 next,
-                "/api/v1/stock/counts/" + submission.getId()
+                "/api/v1/stock/counts/" + submission.getId(),
+                next == StockWorkflowStatus.DONE ? (
+                        submission.isBalanceAppliedAtSubmission()
+                                ? "Balance applied before this approval: "
+                                        + balanceDetail(submission.getPreviousBalanceValue(),
+                                                submission.getCurrentBalanceValue())
+                                : balanceDetail(submission.getPreviousBalanceValue(),
+                                        submission.getCurrentBalanceValue()))
+                        : submission.isBalanceAppliedAtSubmission()
+                                ? balanceDetail(submission.getCurrentBalanceValue(),
+                                        submission.getPreviousBalanceValue()) : ""
         );
         return StockCountSubmissionResponse.from(
                 submission,
@@ -862,12 +997,31 @@ public class StockService {
         );
         List<StockCountSubmissionResponse> responses = new ArrayList<>();
         for (StockCountSubmission submission : ordered) {
+            if ((!submission.isBalanceAppliedAtSubmission()
+                    && next == StockWorkflowStatus.DONE)
+                    || (submission.isBalanceAppliedAtSubmission()
+                    && next == StockWorkflowStatus.PENDING)) {
+                StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
+                sku.updateBalance(next == StockWorkflowStatus.DONE
+                        ? submission.getCurrentBalanceValue()
+                        : submission.getPreviousBalanceValue(), reviewer);
+            }
             submission.review(next, note, reviewer);
             workflowActivityService.recordTransition(
                     principal, "Stock", "stock count", submission.getId(),
                     submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,
                     next,
-                    "/api/v1/stock/counts/" + submission.getId()
+                    "/api/v1/stock/counts/" + submission.getId(),
+                    next == StockWorkflowStatus.DONE ? (
+                            submission.isBalanceAppliedAtSubmission()
+                                    ? "Balance applied before this approval: "
+                                            + balanceDetail(submission.getPreviousBalanceValue(),
+                                                    submission.getCurrentBalanceValue())
+                                    : balanceDetail(submission.getPreviousBalanceValue(),
+                                            submission.getCurrentBalanceValue()))
+                            : submission.isBalanceAppliedAtSubmission()
+                                    ? balanceDetail(submission.getCurrentBalanceValue(),
+                                            submission.getPreviousBalanceValue()) : ""
             );
             responses.add(StockCountSubmissionResponse.from(
                     submission,
@@ -903,10 +1057,12 @@ public class StockService {
                 );
             }
         }
-        Map<UUID, StockSku> skusById = skuRepository
-                .findAllByTenant_IdAndIdIn(principal.tenantId(), receivedSkuIds)
-                .stream()
-                .collect(Collectors.toMap(StockSku::getId, item -> item));
+        Map<UUID, StockSku> skusById = new LinkedHashMap<>();
+        for (UUID skuId : receivedSkuIds.stream().sorted().toList()) {
+            StockSku sku = lockedSku(skuId, principal.tenantId());
+            assertSkuAvailable(principal.tenantId(), skuId);
+            skusById.put(skuId, sku);
+        }
         if (skusById.size() != receivedSkuIds.size()) {
             throw notFound("STOCK_SKU_NOT_FOUND", "One or more selected SKUs were not found.");
         }
@@ -918,9 +1074,6 @@ public class StockService {
                         "The selected SKU is not assigned to this supplier."
                 );
             }
-            BigDecimal previous = sku.getCurrentBalanceValue();
-            BigDecimal next = previous.add(itemRequest.receivedQuantity());
-            sku.updateBalance(next, actor);
             receivable.addItem(new StockReceivableItem(
                     sku, itemRequest.invoiceQuantity(), itemRequest.receivedQuantity(),
                     itemRequest.condition(), itemRequest.note()
@@ -942,18 +1095,35 @@ public class StockService {
             ReviewStockRecordRequest request
     ) {
         StockReceivable receivable = receivableRepository
-                .findByIdAndTenant_Id(receivableId, principal.tenantId())
+                .findLockedByIdAndTenantId(receivableId, principal.tenantId())
                 .orElseThrow(() -> notFound("STOCK_RECEIVING_NOT_FOUND", "Receivable record not found."));
         if (receivable.getWorkflowStatus() != StockWorkflowStatus.SUBMITTED) {
             throw conflict("STOCK_RECEIVING_ALREADY_REVIEWED", "This receivable record has already been reviewed.");
         }
         StockWorkflowStatus next = requireReviewDecision(request.status());
-        receivable.review(next, request.note(), actor(principal));
+        UserAccount reviewer = actor(principal);
+        List<String> balanceChanges = new ArrayList<>();
+        if ((next == StockWorkflowStatus.DONE && !receivable.isBalanceAppliedAtSubmission())
+                || (next == StockWorkflowStatus.PENDING && receivable.isBalanceAppliedAtSubmission())) {
+            for (StockReceivableItem item : receivable.getItems().stream()
+                    .sorted(java.util.Comparator.comparing(value -> value.getSku().getId())).toList()) {
+                StockSku sku = lockedSku(item.getSku().getId(), principal.tenantId());
+                BigDecimal previous = sku.getCurrentBalanceValue();
+                BigDecimal updated = receivable.isBalanceAppliedAtSubmission()
+                        ? previous.subtract(item.getReceivedQuantity()).max(BigDecimal.ZERO)
+                        : previous.add(item.getReceivedQuantity());
+                sku.updateBalance(updated, reviewer);
+                balanceChanges.add(sku.getName() + " balance: " + previous.toPlainString()
+                        + " -> " + updated.toPlainString());
+            }
+        }
+        receivable.review(next, request.note(), reviewer);
         workflowActivityService.recordTransition(
                 principal, "Stock", "stock receivable", receivable.getId(),
                 receivable.getSupplier().getSupplierName(), StockWorkflowStatus.SUBMITTED,
                 next,
-                "/api/v1/stock/receivables/" + receivable.getId()
+                "/api/v1/stock/receivables/" + receivable.getId(),
+                String.join("; ", balanceChanges)
         );
         return StockReceivableResponse.from(receivable);
     }
@@ -1223,6 +1393,35 @@ public class StockService {
                 .orElseThrow(() -> notFound("STOCK_SKU_NOT_FOUND", "SKU not found."));
     }
 
+    private StockSku lockedSku(UUID id, UUID tenantId) {
+        return skuRepository.findLockedByIdAndTenantId(id, tenantId)
+                .orElseThrow(() -> notFound("STOCK_SKU_NOT_FOUND", "SKU not found."));
+    }
+
+    private Map<UUID, String> approvalHolds(UUID tenantId, Collection<UUID> skuIds) {
+        if (skuIds.isEmpty()) return Map.of();
+        Map<UUID, String> result = new LinkedHashMap<>();
+        for (UUID id : countRepository.submittedSkuIds(tenantId, StockWorkflowStatus.SUBMITTED, skuIds)) {
+            result.put(id, "Stock Count");
+        }
+        for (UUID id : receivableRepository.submittedSkuIds(tenantId, StockWorkflowStatus.SUBMITTED, skuIds)) {
+            result.put(id, "Receivable");
+        }
+        for (UUID id : skuChangeRequestRepository.submittedSkuIds(tenantId, StockWorkflowStatus.SUBMITTED, skuIds)) {
+            result.put(id, "SKU change");
+        }
+        return result;
+    }
+
+    private void assertSkuAvailable(UUID tenantId, UUID skuId) {
+        String pending = approvalHolds(tenantId, List.of(skuId)).get(skuId);
+        if (pending != null) {
+            throw conflict("STOCK_SKU_AWAITING_APPROVAL",
+                    "This SKU is frozen while its " + pending
+                            + " awaits approval. Ask a reviewer to approve or return it before changing this SKU.");
+        }
+    }
+
     private Set<StockSupplier> suppliers(
             UUID tenantId,
             List<UUID> ids,
@@ -1309,9 +1508,10 @@ public class StockService {
         LocalDate cycleDate = switch (sku.getStockCheckSchedule()) {
             case AD_HOC -> sku.getStockCheckDate();
             case DAILY -> today;
-            case WEEKLY -> today.minusDays(Math.floorMod(
-                    today.getDayOfWeek().getValue() - sku.getStockCheckDay(),
-                    7
+            case WEEKLY -> today.minusDays(Math.min(
+                    Math.floorMod(today.getDayOfWeek().getValue() - sku.getStockCheckDay(), 7),
+                    sku.getStockCheckDay2() == null ? 7 : Math.floorMod(
+                            today.getDayOfWeek().getValue() - sku.getStockCheckDay2(), 7)
             ));
             case MONTHLY -> {
                 int day = sku.getStockCheckDay() == null ? 31 : sku.getStockCheckDay();

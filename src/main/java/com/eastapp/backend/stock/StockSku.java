@@ -110,6 +110,9 @@ public class StockSku {
     @Column(name = "stock_check_day")
     private Integer stockCheckDay;
 
+    @Column(name = "stock_check_day_2")
+    private Integer stockCheckDay2;
+
     @Column(name = "stock_check_date")
     private LocalDate stockCheckDate;
 
@@ -156,6 +159,7 @@ public class StockSku {
             List<String> receivableChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
+            Integer stockCheckDay2,
             LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod,
@@ -168,7 +172,7 @@ public class StockSku {
                 minimumBalanceValue, maximumBalanceValue, currentBalanceValue,
                 recoveryPercent, minimumPriceRm, maximumPriceRm,
                 suppliers, thumbnailMedia, assignedStaffNames, receivableChecklist,
-                stockCheckSchedule, stockCheckDay, stockCheckDate, active, coolingPeriod, actor
+                stockCheckSchedule, stockCheckDay, stockCheckDay2, stockCheckDate, active, coolingPeriod, actor
         );
     }
 
@@ -189,6 +193,7 @@ public class StockSku {
             List<String> receivableChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
+            Integer stockCheckDay2,
             LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod,
@@ -199,7 +204,7 @@ public class StockSku {
                 minimumBalanceValue, maximumBalanceValue, currentBalanceValue,
                 recoveryPercent, minimumPriceRm, maximumPriceRm,
                 suppliers, thumbnailMedia, assignedStaffNames, receivableChecklist,
-                stockCheckSchedule, stockCheckDay, stockCheckDate, active, coolingPeriod, actor
+                stockCheckSchedule, stockCheckDay, stockCheckDay2, stockCheckDate, active, coolingPeriod, actor
         );
     }
 
@@ -220,6 +225,7 @@ public class StockSku {
             List<String> receivableChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
+            Integer stockCheckDay2,
             LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod,
@@ -269,6 +275,11 @@ public class StockSku {
                 "stockCheckSchedule must not be null"
         );
         this.stockCheckDay = normaliseStockCheckDay(stockCheckSchedule, stockCheckDay);
+        if (stockCheckDay2 != null && (stockCheckSchedule != StockCheckSchedule.WEEKLY
+                || stockCheckDay2 < 1 || stockCheckDay2 > 7 || stockCheckDay2.equals(this.stockCheckDay))) {
+            throw new IllegalArgumentException("stockCheckDay2 must be a different weekday between 1 and 7");
+        }
+        this.stockCheckDay2 = stockCheckDay2;
         this.stockCheckDate = normaliseStockCheckDate(stockCheckSchedule, stockCheckDate);
         this.active = active;
         this.coolingPeriod = coolingPeriod;
@@ -307,6 +318,7 @@ public class StockSku {
     public List<String> getReceivableChecklist() { return receivableChecklist; }
     public StockCheckSchedule getStockCheckSchedule() { return stockCheckSchedule; }
     public Integer getStockCheckDay() { return stockCheckDay; }
+    public Integer getStockCheckDay2() { return stockCheckDay2; }
     public LocalDate getStockCheckDate() { return stockCheckDate; }
     public boolean isActive() { return active; }
     public boolean isCoolingPeriod() { return coolingPeriod; }
