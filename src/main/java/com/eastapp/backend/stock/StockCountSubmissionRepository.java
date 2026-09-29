@@ -27,7 +27,7 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             where submission.tenant.id = :tenantId
               and (:filterBySubmittedBy = false or submission.submittedBy.id = :submittedByUserId)
               and (
-                    (:filterByWorkflowStatus = false and submission.workflowStatus <> :pendingStatus)
+                    (:filterByWorkflowStatus = false and submission.workflowStatus <> :rejectedStatus)
                     or (:filterByWorkflowStatus = true and submission.workflowStatus = :workflowStatus)
                   )
               and (:filterByFrom = false or submission.capturedAt >= :fromInclusive)
@@ -40,7 +40,7 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             @Param("submittedByUserId") UUID submittedByUserId,
             @Param("filterByWorkflowStatus") boolean filterByWorkflowStatus,
             @Param("workflowStatus") StockWorkflowStatus workflowStatus,
-            @Param("pendingStatus") StockWorkflowStatus pendingStatus,
+            @Param("rejectedStatus") StockWorkflowStatus rejectedStatus,
             @Param("filterByFrom") boolean filterByFrom,
             @Param("fromInclusive") Instant fromInclusive,
             @Param("filterByTo") boolean filterByTo,

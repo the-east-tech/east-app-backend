@@ -243,7 +243,7 @@ public class StockService {
                 submittedByUserId,
                 workflowStatus != null,
                 workflowStatus,
-                StockWorkflowStatus.PENDING,
+                StockWorkflowStatus.REJECTED,
                 range.filterByFrom(),
                 range.fromInclusive(),
                 range.filterByTo(),
@@ -875,7 +875,7 @@ public class StockService {
                 principal.tenantId(),
                 sku.getId(),
                 cycleStartedAt,
-                StockWorkflowStatus.PENDING
+                StockWorkflowStatus.REJECTED
         )) {
             throw conflict(
                     "STOCK_COUNT_ALREADY_SUBMITTED",
@@ -918,7 +918,7 @@ public class StockService {
             StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
             sku.updateBalance(submission.getCurrentBalanceValue(), reviewer);
         } else if (submission.isBalanceAppliedAtSubmission()
-                && next == StockWorkflowStatus.PENDING) {
+                && next == StockWorkflowStatus.REJECTED) {
             StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
             sku.updateBalance(submission.getPreviousBalanceValue(), reviewer);
         }
@@ -1000,7 +1000,7 @@ public class StockService {
             if ((!submission.isBalanceAppliedAtSubmission()
                     && next == StockWorkflowStatus.DONE)
                     || (submission.isBalanceAppliedAtSubmission()
-                    && next == StockWorkflowStatus.PENDING)) {
+                    && next == StockWorkflowStatus.REJECTED)) {
                 StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
                 sku.updateBalance(next == StockWorkflowStatus.DONE
                         ? submission.getCurrentBalanceValue()
@@ -1104,7 +1104,7 @@ public class StockService {
         UserAccount reviewer = actor(principal);
         List<String> balanceChanges = new ArrayList<>();
         if ((next == StockWorkflowStatus.DONE && !receivable.isBalanceAppliedAtSubmission())
-                || (next == StockWorkflowStatus.PENDING && receivable.isBalanceAppliedAtSubmission())) {
+                || (next == StockWorkflowStatus.REJECTED && receivable.isBalanceAppliedAtSubmission())) {
             for (StockReceivableItem item : receivable.getItems().stream()
                     .sorted(java.util.Comparator.comparing(value -> value.getSku().getId())).toList()) {
                 StockSku sku = lockedSku(item.getSku().getId(), principal.tenantId());
@@ -1193,12 +1193,12 @@ public class StockService {
     }
 
     private static StockWorkflowStatus requireReviewDecision(StockWorkflowStatus status) {
-        if (status == StockWorkflowStatus.DONE || status == StockWorkflowStatus.PENDING) {
+        if (status == StockWorkflowStatus.DONE || status == StockWorkflowStatus.REJECTED) {
             return status;
         }
         throw badRequest(
                 "INVALID_WORKFLOW_STATUS",
-                "Workflow status must be DONE or PENDING."
+                "Workflow status must be DONE or REJECTED."
         );
     }
 

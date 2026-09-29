@@ -82,6 +82,7 @@ public class WorkflowActivityService {
         if ("DONE".equals(next)) return "completed";
         if ("DONE".equals(previous) && "PENDING".equals(next)) return "amended";
         if ("PENDING".equals(next)) return "returned";
+        if ("REJECTED".equals(next)) return "rejected";
         throw new IllegalArgumentException(
                 "Unsupported workflow transition: " + previous + " -> " + next
         );

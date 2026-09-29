@@ -110,8 +110,8 @@ public class StockCountSubmission {
         if (workflowStatus != StockWorkflowStatus.SUBMITTED) {
             throw new IllegalStateException("Only a submitted stock count may be reviewed.");
         }
-        if (next != StockWorkflowStatus.DONE && next != StockWorkflowStatus.PENDING) {
-            throw new IllegalArgumentException("Stock count status must be DONE or PENDING.");
+        if (next != StockWorkflowStatus.DONE && next != StockWorkflowStatus.REJECTED) {
+            throw new IllegalArgumentException("Stock count status must be DONE or REJECTED.");
         }
         UserAccount reviewer = Objects.requireNonNull(actor);
         this.workflowStatus = next;
