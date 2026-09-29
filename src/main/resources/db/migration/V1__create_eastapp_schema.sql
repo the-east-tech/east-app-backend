@@ -372,7 +372,7 @@ CREATE TABLE stock_sku_change_requests (
     CONSTRAINT ck_stock_sku_changes_type
         CHECK (change_type IN ('CREATE', 'UPDATE', 'DELETE')),
     CONSTRAINT ck_stock_sku_changes_status
-        CHECK (workflow_status IN ('PENDING', 'SUBMITTED', 'DONE')),
+        CHECK (workflow_status IN ('REJECTED', 'SUBMITTED', 'DONE')),
     CONSTRAINT uq_stock_sku_changes_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE INDEX ix_stock_sku_changes_tenant_status_time
@@ -441,7 +441,7 @@ CREATE TABLE stock_count_submissions (
 );
 CREATE UNIQUE INDEX uq_stock_counts_tenant_sku_cycle_active
     ON stock_count_submissions (tenant_id, sku_id, count_cycle_started_at)
-    WHERE review_status <> 'PENDING';
+    WHERE review_status <> 'REJECTED';
 CREATE INDEX ix_stock_counts_tenant_captured_at ON stock_count_submissions (tenant_id, captured_at DESC);
 CREATE INDEX ix_stock_counts_tenant_review_captured_at ON stock_count_submissions (tenant_id, review_status, captured_at DESC);
 CREATE INDEX ix_stock_counts_tenant_submitter_captured_at
