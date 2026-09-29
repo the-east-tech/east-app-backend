@@ -19,4 +19,4 @@ echo "Database reset environment gate: ${EASTAPP_DATABASE_RESET_ON_START}."
 echo "A reset occurs only when this gate and DATABASE_RESET_ALLOWED_BY_CODE are both true."
 echo "EastApp local translation provider: ${EASTAPP_TRANSLATION_PROVIDER_ENABLED}."
 docker compose up -d postgres
-./mvnw spring-boot:run
+./mvnw clean spring-boot:run
