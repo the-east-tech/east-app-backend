@@ -25,6 +25,21 @@ public class WorkflowActivityService {
             Object nextStatus,
             String route
     ) {
+        recordTransition(actor, module, entityType, targetId, subject,
+                previousStatus, nextStatus, route, "");
+    }
+
+    public void recordTransition(
+            AuthenticatedUser actor,
+            String module,
+            String entityType,
+            UUID targetId,
+            String subject,
+            Object previousStatus,
+            Object nextStatus,
+            String route,
+            String changes
+    ) {
         String previous = status(previousStatus);
         String next = status(nextStatus);
         if (Objects.equals(previous, next)) return;
@@ -35,9 +50,25 @@ public class WorkflowActivityService {
                 action(previous, next),
                 entityType,
                 subject,
-                "Workflow status: " + (previous.isEmpty() ? "NEW" : previous) + " -> " + next,
+                "Workflow status: " + (previous.isEmpty() ? "NEW" : previous) + " -> " + next
+                        + (changes == null || changes.isBlank() ? "" : "; " + changes),
                 targetId,
                 route
+        );
+    }
+
+    public void recordChange(
+            AuthenticatedUser actor,
+            String module,
+            String entityType,
+            UUID targetId,
+            String subject,
+            String route,
+            String changes
+    ) {
+        activityService.record(
+                actor, module, "imported", entityType, subject,
+                changes == null ? "" : changes, targetId, route
         );
     }
 

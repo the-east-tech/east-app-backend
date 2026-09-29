@@ -82,7 +82,8 @@ public class StockSkuCsvService {
             "stock_check_day",
             "stock_check_date",
             "active",
-            "cooling_period"
+            "cooling_period",
+            "stock_check_day_2"
     );
 
     private final TenantRepository tenantRepository;
@@ -150,7 +151,8 @@ public class StockSkuCsvService {
                             sku.getStockCheckDay() == null ? "" : sku.getStockCheckDay(),
                             sku.getStockCheckDate() == null ? "" : sku.getStockCheckDate(),
                             sku.isActive(),
-                            sku.isCoolingPeriod()
+                            sku.isCoolingPeriod(),
+                            sku.getStockCheckDay2() == null ? "" : sku.getStockCheckDay2()
                     );
                 }
             }
@@ -204,12 +206,18 @@ public class StockSkuCsvService {
 
         Tenant tenant = tenant(principal.tenantId());
         UserAccount actor = actor(principal);
-        StockMedia noImage = mediaRepository.save(new StockMedia(
-                tenant,
-                StockMedia.SKU_IMPORT_PLACEHOLDER_PREFIX + UUID.randomUUID(),
-                "image/png",
-                TRANSPARENT_PNG
-        ));
+        Map<String, StockSku> existingSkus = new LinkedHashMap<>();
+        skuRepository.findAllByTenant_IdOrderByNameAsc(principal.tenantId())
+                .forEach(sku -> existingSkus.put(normalise(sku.getName()), sku));
+        boolean createsNewSku = analysis.readyRows().stream()
+                .anyMatch(row -> !existingSkus.containsKey(normalise(row.name())));
+        StockMedia noImage = createsNewSku
+                ? mediaRepository.save(new StockMedia(
+                        tenant,
+                        StockMedia.SKU_IMPORT_PLACEHOLDER_PREFIX + UUID.randomUUID(),
+                        "image/png",
+                        TRANSPARENT_PNG
+                )) : null;
         Map<String, StockTag> tagsByName = new LinkedHashMap<>();
         tagRepository.findAllByTenant_IdOrderByTagAsc(principal.tenantId())
                 .forEach(tag -> tagsByName.put(normalise(tag.getTag()), tag));
@@ -253,7 +261,8 @@ public class StockSkuCsvService {
                 }
             }
 
-            stockService.createSku(principal, new UpsertStockSkuRequest(
+            StockSku existing = existingSkus.get(normalise(row.name()));
+            UpsertStockSkuRequest proposed = new UpsertStockSkuRequest(
                     row.name(),
                     tag1 == null ? null : tag1.getId(),
                     tag2 == null ? null : tag2.getId(),
@@ -265,15 +274,18 @@ public class StockSkuCsvService {
                     row.minimumPrice(),
                     row.maximumPrice(),
                     suppliers.stream().map(StockSupplier::getId).toList(),
-                    noImage.getStorageKey(),
+                    existing == null ? noImage.getStorageKey() : null,
                     List.of(),
                     row.receivableChecklist(),
                     row.stockCheckSchedule(),
                     row.stockCheckDay(),
+                    row.stockCheckDay2(),
                     row.stockCheckDate(),
                     row.active(),
                     row.coolingPeriod()
-            ));
+            );
+            stockService.importSkuNow(principal,
+                    existing == null ? null : existing.getId(), proposed);
             importedRows += 1;
         }
 
@@ -287,9 +299,6 @@ public class StockSkuCsvService {
 
     private Analysis analyse(UUID tenantId, MultipartFile file) {
         String csv = readCsv(file);
-        Set<String> existingSkuNames = new HashSet<>();
-        skuRepository.findAllByTenant_IdOrderByNameAsc(tenantId)
-                .forEach(sku -> existingSkuNames.add(normalise(sku.getName())));
         Set<String> existingTagNames = new HashSet<>();
         tagRepository.findAllByTenant_IdOrderByTagAsc(tenantId)
                 .forEach(tag -> existingTagNames.add(normalise(tag.getTag())));
@@ -326,8 +335,7 @@ public class StockSkuCsvService {
                 try {
                     ParsedSku row = parseRow(record);
                     String normalisedName = normalise(row.name());
-                    if (!namesInFile.add(normalisedName)
-                            || existingSkuNames.contains(normalisedName)) {
+                    if (!namesInFile.add(normalisedName)) {
                         duplicateRows += 1;
                         continue;
                     }
@@ -388,7 +396,9 @@ public class StockSkuCsvService {
         String tag2 = optionalText(record, "tag_2", 80);
         String unit = requiredText(record, "unit", 32);
         BigDecimal minimumBalance = decimal(record, "minimum_balance");
-        BigDecimal currentBalance = decimal(record, "current_balance");
+        BigDecimal currentBalance = record.isMapped("current_balance")
+                && !text(record, "current_balance").isEmpty()
+                ? decimal(record, "current_balance") : BigDecimal.ZERO;
         BigDecimal maximumBalance = decimal(record, "maximum_balance");
         if (maximumBalance.compareTo(minimumBalance) < 0) {
             throw invalid("maximum_balance must be at least minimum_balance.");
@@ -416,6 +426,7 @@ public class StockSkuCsvService {
         String dayText = text(record, "stock_check_day");
         String dateText = text(record, "stock_check_date");
         Integer stockCheckDay = null;
+        Integer stockCheckDay2 = null;
         LocalDate stockCheckDate = null;
         switch (stockCheckSchedule) {
             case AD_HOC -> {
@@ -431,6 +442,13 @@ public class StockSkuCsvService {
             }
             case WEEKLY -> {
                 stockCheckDay = integer(record, "stock_check_day", 1, 7);
+                if (record.isMapped("stock_check_day_2")
+                        && !text(record, "stock_check_day_2").isEmpty()) {
+                    stockCheckDay2 = integer(record, "stock_check_day_2", 1, 7);
+                    if (stockCheckDay2.equals(stockCheckDay)) {
+                        throw invalid("stock_check_day_2 must differ from stock_check_day.");
+                    }
+                }
                 if (!dateText.isEmpty()) {
                     throw invalid("stock_check_date must be blank for WEEKLY.");
                 }
@@ -443,6 +461,11 @@ public class StockSkuCsvService {
                     throw invalid("stock_check_date must be blank for MONTHLY.");
                 }
             }
+        }
+        if (stockCheckSchedule != StockCheckSchedule.WEEKLY
+                && record.isMapped("stock_check_day_2")
+                && !text(record, "stock_check_day_2").isEmpty()) {
+            throw invalid("stock_check_day_2 is only valid for WEEKLY.");
         }
         return new ParsedSku(
                 name,
@@ -459,6 +482,7 @@ public class StockSkuCsvService {
                 checklist,
                 stockCheckSchedule,
                 stockCheckDay,
+                stockCheckDay2,
                 stockCheckDate,
                 bool(record, "active"),
                 bool(record, "cooling_period")
@@ -538,7 +562,9 @@ public class StockSkuCsvService {
 
     private static void validateHeaders(List<String> headers) {
         if (headers.size() != new LinkedHashSet<>(headers).size()
-                || !headers.containsAll(HEADERS)) {
+                || !headers.containsAll(HEADERS.stream()
+                        .filter(name -> !name.equals("current_balance")
+                                && !name.equals("stock_check_day_2")).toList())) {
             throw badRequest(
                     "SKU_CSV_FORMAT_NOT_RECOGNISED",
                     "The selected file is not a recognised EastApp SKU CSV."
@@ -664,6 +690,7 @@ public class StockSkuCsvService {
             List<String> receivableChecklist,
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
+            Integer stockCheckDay2,
             LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod

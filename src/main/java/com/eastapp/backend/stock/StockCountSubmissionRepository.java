@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -56,12 +57,33 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
 
     boolean existsByTenant_IdAndSku_Id(UUID tenantId, UUID skuId);
 
+    @Query("""
+            select distinct submission.sku.id from StockCountSubmission submission
+            where submission.tenant.id = :tenantId and submission.workflowStatus = :status
+              and submission.sku.id in :skuIds
+            """)
+    List<UUID> submittedSkuIds(
+            @Param("tenantId") UUID tenantId,
+            @Param("status") StockWorkflowStatus status,
+            @Param("skuIds") Collection<UUID> skuIds
+    );
+
+    boolean existsByTenant_IdAndSku_IdAndWorkflowStatus(
+            UUID tenantId, UUID skuId, StockWorkflowStatus workflowStatus
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = {"tenant", "sku", "submittedBy", "reviewedBy"})
     List<StockCountSubmission> findAllByTenant_IdAndIdIn(UUID tenantId, List<UUID> ids);
 
     @EntityGraph(attributePaths = {"tenant", "sku", "submittedBy", "reviewedBy"})
     Optional<StockCountSubmission> findByIdAndTenant_Id(UUID id, UUID tenantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select submission from StockCountSubmission submission where submission.id = :id and submission.tenant.id = :tenantId")
+    Optional<StockCountSubmission> findLockedByIdAndTenantId(
+            @Param("id") UUID id, @Param("tenantId") UUID tenantId
+    );
 
     @EntityGraph(attributePaths = {"tenant", "sku", "submittedBy", "reviewedBy"})
     List<StockCountSubmission> findAllByTenant_IdAndWorkflowStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtAsc(
