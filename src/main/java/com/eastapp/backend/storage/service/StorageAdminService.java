@@ -139,7 +139,7 @@ public class StorageAdminService {
                     "candidate.workflow_status = 'DONE'", "candidate.updated_at, candidate.id", true
             )),
             Map.entry("stock_count_submissions", new CleanupPolicy(
-                    "Oldest completed stock counts. Their checklist and remark rows are removed automatically.",
+                    "Completed latest stock counts. Their approval dates, checklist and remarks are removed automatically.",
                     "candidate.review_status = 'DONE'", "candidate.captured_at, candidate.id", true
             )),
             Map.entry("stock_receivables", new CleanupPolicy(
@@ -476,7 +476,7 @@ public class StorageAdminService {
             case "stock_sku_suppliers" -> "SKU-to-supplier links";
             case "stock_sku_assignees" -> "SKU assignee names";
             case "stock_sku_receivable_checklist" -> "SKU receivable checklist templates";
-            case "stock_count_submissions" -> "Daily stock count history";
+            case "stock_count_submissions" -> "Latest stock count records";
             case "stock_count_submission_checks" -> "Daily count checklist results";
             case "stock_count_submission_remarks" -> "Daily count remarks";
             case "stock_receivables" -> "Receivable history and review status";

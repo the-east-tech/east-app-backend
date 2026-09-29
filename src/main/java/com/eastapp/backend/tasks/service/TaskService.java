@@ -311,10 +311,10 @@ public class TaskService {
             materialiseActiveTemplates(principal.tenantId(), taskDate);
             List<TaskRecord> records = recordRepository
                     .findAllByTenantIdAndTaskDateAndStatusOrderByTagNameAscTitleAsc(
-                            principal.tenantId(), taskDate, TaskStatus.PENDING
+                            principal.tenantId(), taskDate, TaskStatus.NONE
                     );
             for (TaskRecord record : records) {
-                if (record.getStatus() != TaskStatus.PENDING
+                if (record.getStatus() != TaskStatus.NONE
                         || tagId != null && !tagId.equals(record.getTagId())
                         || !oversight && !principal.isOwner()
                             && !assignedTagIds.contains(record.getTagId())) {
@@ -415,7 +415,7 @@ public class TaskService {
     ) {
         requireTaskContribution(principal);
         TaskRecord record = requireRecordForUpdate(principal.tenantId(), recordId);
-        if (record.getStatus() != TaskStatus.PENDING) {
+        if (record.getStatus() != TaskStatus.NONE) {
             requireCanView(principal, record);
             String submitter = record.getSubmittedByUserId() == null
                     ? "another user"
@@ -467,7 +467,7 @@ public class TaskService {
         record.submit(principal.userId(), principal.systemRole(), submittedAt);
         workflowActivityService.recordTransition(
                 principal, "Task", "task", recordId, record.getTitle(),
-                TaskStatus.PENDING, TaskStatus.SUBMITTED,
+                TaskStatus.NONE, TaskStatus.SUBMITTED,
                 "/api/v1/tasks/records/" + recordId
         );
         return toRecordResponse(principal, record);
@@ -773,7 +773,7 @@ public class TaskService {
         boolean requirementsMet = photos.size() >= record.getRequiredPhotoCount()
                 && !checks.isEmpty()
                 && checks.stream().allMatch(TaskRecordChecklistItem::isCompleted);
-        boolean canContribute = record.getStatus() == TaskStatus.PENDING
+        boolean canContribute = record.getStatus() == TaskStatus.NONE
                 && record.getTaskDate().equals(today())
                 && (principal.isOwner() || assignedTagIds.contains(record.getTagId()));
         boolean canRate = record.getStatus() == TaskStatus.SUBMITTED
@@ -836,17 +836,17 @@ public class TaskService {
     }
 
     private TaskOverviewResponse overviewOf(List<TaskRecord> records) {
-        int pending = 0;
+        int none = 0;
         int submitted = 0;
         int done = 0;
         for (TaskRecord record : records) {
             switch (record.getStatus()) {
-                case PENDING -> pending++;
+                case NONE -> none++;
                 case SUBMITTED -> submitted++;
                 case DONE -> done++;
             }
         }
-        return new TaskOverviewResponse(records.size(), pending, submitted, done);
+        return new TaskOverviewResponse(records.size(), none, submitted, done);
     }
 
     private Set<UUID> assignedTagIds(AuthenticatedUser principal) {

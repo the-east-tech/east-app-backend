@@ -444,15 +444,21 @@ CREATE TABLE stock_count_submissions (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_counts_reviewed_by FOREIGN KEY (tenant_id, reviewed_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_counts_tenant_id_id UNIQUE (tenant_id, id)
+    CONSTRAINT uq_stock_counts_tenant_id_id UNIQUE (tenant_id, id),
+    CONSTRAINT uq_stock_counts_tenant_sku UNIQUE (tenant_id, sku_id)
 );
-CREATE UNIQUE INDEX uq_stock_counts_tenant_sku_cycle_active
-    ON stock_count_submissions (tenant_id, sku_id, count_cycle_started_at)
-    WHERE review_status <> 'REJECTED';
 CREATE INDEX ix_stock_counts_tenant_captured_at ON stock_count_submissions (tenant_id, captured_at DESC);
 CREATE INDEX ix_stock_counts_tenant_review_captured_at ON stock_count_submissions (tenant_id, review_status, captured_at DESC);
 CREATE INDEX ix_stock_counts_tenant_submitter_captured_at
     ON stock_count_submissions (tenant_id, submitted_by_user_id, captured_at DESC);
+
+CREATE TABLE stock_count_approved_days (
+    submission_id UUID NOT NULL,
+    count_date DATE NOT NULL,
+    PRIMARY KEY (submission_id, count_date),
+    CONSTRAINT fk_stock_count_approved_days_submission
+        FOREIGN KEY (submission_id) REFERENCES stock_count_submissions (id) ON DELETE CASCADE
+);
 
 CREATE TABLE stock_count_submission_checks (
     submission_id UUID NOT NULL,
@@ -904,7 +910,7 @@ CREATE TABLE task_records (
     tag_name VARCHAR(80) NOT NULL,
     required_photo_count INTEGER NOT NULL,
     schedule_type VARCHAR(16) NOT NULL,
-    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    status VARCHAR(16) NOT NULL DEFAULT 'NONE',
     submitted_by_user_id UUID,
     submitted_by_role VARCHAR(32),
     submitted_at TIMESTAMPTZ,

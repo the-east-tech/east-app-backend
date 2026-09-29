@@ -5,6 +5,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -48,11 +49,34 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             Pageable pageable
     );
 
-    boolean existsByTenant_IdAndSku_IdAndCountCycleStartedAtAndWorkflowStatusNot(
-            UUID tenantId,
-            UUID skuId,
-            Instant countCycleStartedAt,
-            StockWorkflowStatus excludedWorkflowStatus
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select submission from StockCountSubmission submission where submission.tenant.id = :tenantId and submission.sku.id = :skuId")
+    Optional<StockCountSubmission> findLockedByTenantIdAndSkuId(
+            @Param("tenantId") UUID tenantId, @Param("skuId") UUID skuId
+    );
+
+    @Modifying
+    @Query(value = """
+            INSERT INTO stock_count_approved_days (submission_id, count_date)
+            VALUES (:submissionId, :countDate)
+            ON CONFLICT DO NOTHING
+            """, nativeQuery = true)
+    void recordApprovedDay(
+            @Param("submissionId") UUID submissionId,
+            @Param("countDate") java.time.LocalDate countDate
+    );
+
+    @Query(value = """
+            SELECT submission.sku_id
+            FROM stock_count_approved_days days
+            JOIN stock_count_submissions submission ON submission.id = days.submission_id
+            WHERE submission.tenant_id = :tenantId
+              AND days.count_date BETWEEN :fromDate AND :toDate
+            """, nativeQuery = true)
+    List<UUID> approvedSkuIdsForDays(
+            @Param("tenantId") UUID tenantId,
+            @Param("fromDate") java.time.LocalDate fromDate,
+            @Param("toDate") java.time.LocalDate toDate
     );
 
     boolean existsByTenant_IdAndSku_Id(UUID tenantId, UUID skuId);
@@ -83,14 +107,6 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
     @Query("select submission from StockCountSubmission submission where submission.id = :id and submission.tenant.id = :tenantId")
     Optional<StockCountSubmission> findLockedByIdAndTenantId(
             @Param("id") UUID id, @Param("tenantId") UUID tenantId
-    );
-
-    @EntityGraph(attributePaths = {"tenant", "sku", "submittedBy", "reviewedBy"})
-    List<StockCountSubmission> findAllByTenant_IdAndWorkflowStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtAsc(
-            UUID tenantId,
-            StockWorkflowStatus workflowStatus,
-            Instant fromInclusive,
-            Instant toExclusive
     );
 
     long countByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(

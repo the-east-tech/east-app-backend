@@ -54,11 +54,9 @@ import com.eastapp.backend.reports.api.WasteOverviewResponse;
 import com.eastapp.backend.reports.api.WasteReportResponse;
 import com.eastapp.backend.reports.api.WorkforceIntelligenceResponse;
 import com.eastapp.backend.reports.config.ReportProperties;
-import com.eastapp.backend.stock.StockCountSubmission;
 import com.eastapp.backend.stock.StockCountSubmissionRepository;
 import com.eastapp.backend.stock.StockSku;
 import com.eastapp.backend.stock.StockSkuRepository;
-import com.eastapp.backend.stock.StockWorkflowStatus;
 import com.eastapp.backend.tasks.api.TaskOverviewResponse;
 import com.eastapp.backend.tasks.service.TaskService;
 import org.springframework.http.HttpStatus;
@@ -72,7 +70,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -1075,8 +1072,6 @@ public class BusinessReportService {
             LocalDate from,
             LocalDate to
     ) {
-        Instant fromInclusive = from.atStartOfDay(properties.zoneId()).toInstant();
-        Instant toExclusive = to.plusDays(1).atStartOfDay(properties.zoneId()).toInstant();
         List<StockSku> activeSkus = skuRepository.findAllByTenant_IdOrderByNameAsc(tenantId)
                 .stream()
                 .filter(StockSku::isActive)
@@ -1084,23 +1079,9 @@ public class BusinessReportService {
         Set<UUID> activeSkuIds = activeSkus.stream()
                 .map(StockSku::getId)
                 .collect(Collectors.toSet());
-        List<StockCountSubmission> approvedCounts = stockCountRepository
-                .findAllByTenant_IdAndWorkflowStatusAndCapturedAtGreaterThanEqualAndCapturedAtLessThanOrderByCapturedAtAsc(
-                        tenantId,
-                        StockWorkflowStatus.DONE,
-                        fromInclusive,
-                        toExclusive
-                );
-
-        Set<String> countedSkuDays = new HashSet<>();
-        for (StockCountSubmission submission : approvedCounts) {
-            UUID skuId = submission.getSku().getId();
-            if (!activeSkuIds.contains(skuId)) continue;
-            LocalDate countDate = submission.getCapturedAt()
-                    .atZone(properties.zoneId())
-                    .toLocalDate();
-            countedSkuDays.add(skuId + ":" + countDate);
-        }
+        long counted = stockCountRepository.approvedSkuIdsForDays(tenantId, from, to).stream()
+                .filter(activeSkuIds::contains)
+                .count();
 
         long expectedSkuDays = 0;
         for (StockSku sku : activeSkus) {
@@ -1114,7 +1095,6 @@ public class BusinessReportService {
             }
         }
 
-        long counted = countedSkuDays.size();
         long missing = Math.max(0, expectedSkuDays - counted);
         BigDecimal coveragePercent = expectedSkuDays == 0
                 ? HUNDRED

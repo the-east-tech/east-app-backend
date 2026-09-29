@@ -59,7 +59,7 @@ public class TaskRecord {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
-    private TaskStatus status = TaskStatus.PENDING;
+    private TaskStatus status = TaskStatus.NONE;
 
     @Column(name = "submitted_by_user_id")
     private UUID submittedByUserId;
@@ -112,8 +112,8 @@ public class TaskRecord {
     }
 
     public void submit(UUID userId, SystemRole role, Instant when) {
-        if (status != TaskStatus.PENDING) {
-            throw new IllegalStateException("Only a pending task may be submitted.");
+        if (status != TaskStatus.NONE) {
+            throw new IllegalStateException("Only a task with no submission may be submitted.");
         }
         submittedByUserId = Objects.requireNonNull(userId, "userId must not be null");
         submittedByRole = Objects.requireNonNull(role, "role must not be null");

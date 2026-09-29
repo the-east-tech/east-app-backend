@@ -871,27 +871,38 @@ public class StockService {
             );
         }
         Instant cycleStartedAt = countCycleStartedAt(sku, now);
-        if (countRepository.existsByTenant_IdAndSku_IdAndCountCycleStartedAtAndWorkflowStatusNot(
-                principal.tenantId(),
-                sku.getId(),
-                cycleStartedAt,
-                StockWorkflowStatus.REJECTED
-        )) {
+        StockCountSubmission existing = countRepository
+                .findLockedByTenantIdAndSkuId(principal.tenantId(), sku.getId())
+                .orElse(null);
+        if (existing != null
+                && existing.getWorkflowStatus() != StockWorkflowStatus.REJECTED
+                && cycleStartedAt.equals(existing.getCountCycleStartedAt())) {
             throw conflict(
                     "STOCK_COUNT_ALREADY_SUBMITTED",
                     "This SKU has already been counted for the current stock-check cycle."
             );
         }
         BigDecimal previous = sku.getCurrentBalanceValue();
-        StockCountSubmission submission = countRepository.save(new StockCountSubmission(
-                sku.getTenant(), sku, actor, request.capturedAt(), cycleStartedAt,
-                request.stockPhotoName(), request.invoicePhotoName(), previous,
-                request.currentBalanceValue(), request.checkedItems(), request.remarks()
-        ));
+        StockWorkflowStatus previousStatus = existing == null ? null : existing.getWorkflowStatus();
+        StockCountSubmission submission;
+        if (existing == null) {
+            submission = countRepository.save(new StockCountSubmission(
+                    sku.getTenant(), sku, actor, request.capturedAt(), cycleStartedAt,
+                    request.stockPhotoName(), request.invoicePhotoName(), previous,
+                    request.currentBalanceValue(), request.checkedItems(), request.remarks()
+            ));
+        } else {
+            existing.resubmit(actor, request.capturedAt(), cycleStartedAt,
+                    request.stockPhotoName(), request.invoicePhotoName(), previous,
+                    request.currentBalanceValue(), request.checkedItems(), request.remarks());
+            submission = existing;
+        }
         workflowActivityService.recordTransition(
                 principal, "Stock", "stock count", submission.getId(), sku.getName(),
-                null, StockWorkflowStatus.SUBMITTED,
-                "/api/v1/stock/counts/" + submission.getId()
+                previousStatus, StockWorkflowStatus.SUBMITTED,
+                "/api/v1/stock/counts/" + submission.getId(),
+                "Count submitted: " + previous.toPlainString() + " -> "
+                        + request.currentBalanceValue().toPlainString()
         );
         return StockCountSubmissionResponse.from(
                 submission,
@@ -918,6 +929,10 @@ public class StockService {
             sku.updateBalance(submission.getCurrentBalanceValue(), reviewer);
         }
         submission.review(next, request.note(), reviewer);
+        if (next == StockWorkflowStatus.DONE) {
+            countRepository.recordApprovedDay(submission.getId(),
+                    submission.getCapturedAt().atZone(ZONE_ID).toLocalDate());
+        }
         workflowActivityService.recordTransition(
                 principal, "Stock", "stock count", submission.getId(),
                 submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,
@@ -991,6 +1006,10 @@ public class StockService {
                 sku.updateBalance(submission.getCurrentBalanceValue(), reviewer);
             }
             submission.review(next, note, reviewer);
+            if (next == StockWorkflowStatus.DONE) {
+                countRepository.recordApprovedDay(submission.getId(),
+                        submission.getCapturedAt().atZone(ZONE_ID).toLocalDate());
+            }
             workflowActivityService.recordTransition(
                     principal, "Stock", "stock count", submission.getId(),
                     submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,

@@ -1,7 +1,7 @@
 package com.eastapp.backend.tasks;
 
 public enum TaskStatus {
-    PENDING,
+    NONE,
     SUBMITTED,
     DONE
 }
