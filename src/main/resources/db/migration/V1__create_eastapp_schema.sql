@@ -320,6 +320,7 @@ CREATE TABLE stock_skus (
     thumbnail_media_id UUID NOT NULL,
     stock_check_schedule VARCHAR(16) NOT NULL DEFAULT 'DAILY',
     stock_check_day INTEGER,
+    stock_check_day_2 INTEGER,
     stock_check_date DATE,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     cooling_period BOOLEAN NOT NULL DEFAULT TRUE,
@@ -338,6 +339,12 @@ CREATE TABLE stock_skus (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_skus_created_by FOREIGN KEY (tenant_id, created_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT ck_stock_skus_second_weekday
+        CHECK (stock_check_day_2 IS NULL OR (
+            stock_check_schedule = 'WEEKLY'
+            AND stock_check_day_2 BETWEEN 1 AND 7
+            AND stock_check_day_2 <> stock_check_day
+        )),
     CONSTRAINT uq_stock_skus_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE INDEX ix_stock_skus_tenant_tag1 ON stock_skus (tenant_id, tag1_id);

@@ -65,8 +65,6 @@ public class StockCountSubmission {
     @MapKeyColumn(name = "remark_key", length = 120)
     @Column(name = "remark_value", nullable = false, length = 1000)
     private Map<String, String> remarks = new LinkedHashMap<>();
-    @Column(name = "balance_applied_at_submission", nullable = false)
-    private boolean balanceAppliedAtSubmission;
 
     @Column(name = "review_status", nullable = false, length = 24)
     @Enumerated(EnumType.STRING)
@@ -134,7 +132,6 @@ public class StockCountSubmission {
     public Map<String, Boolean> getCheckedItems() { return checkedItems; }
     public Map<String, String> getRemarks() { return remarks; }
     public StockWorkflowStatus getWorkflowStatus() { return workflowStatus; }
-    public boolean isBalanceAppliedAtSubmission() { return balanceAppliedAtSubmission; }
     public UserAccount getReviewedBy() { return reviewedBy; }
     public Instant getReviewedAt() { return reviewedAt; }
     public String getReviewNote() { return reviewNote; }

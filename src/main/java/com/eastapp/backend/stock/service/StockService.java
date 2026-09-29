@@ -913,14 +913,9 @@ public class StockService {
         }
         StockWorkflowStatus next = requireReviewDecision(request.status());
         UserAccount reviewer = actor(principal);
-        if (!submission.isBalanceAppliedAtSubmission()
-                && next == StockWorkflowStatus.DONE) {
+        if (next == StockWorkflowStatus.DONE) {
             StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
             sku.updateBalance(submission.getCurrentBalanceValue(), reviewer);
-        } else if (submission.isBalanceAppliedAtSubmission()
-                && next == StockWorkflowStatus.REJECTED) {
-            StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
-            sku.updateBalance(submission.getPreviousBalanceValue(), reviewer);
         }
         submission.review(next, request.note(), reviewer);
         workflowActivityService.recordTransition(
@@ -928,16 +923,10 @@ public class StockService {
                 submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,
                 next,
                 "/api/v1/stock/counts/" + submission.getId(),
-                next == StockWorkflowStatus.DONE ? (
-                        submission.isBalanceAppliedAtSubmission()
-                                ? "Balance applied before this approval: "
-                                        + balanceDetail(submission.getPreviousBalanceValue(),
-                                                submission.getCurrentBalanceValue())
-                                : balanceDetail(submission.getPreviousBalanceValue(),
-                                        submission.getCurrentBalanceValue()))
-                        : submission.isBalanceAppliedAtSubmission()
-                                ? balanceDetail(submission.getCurrentBalanceValue(),
-                                        submission.getPreviousBalanceValue()) : ""
+                next == StockWorkflowStatus.DONE
+                            ? balanceDetail(submission.getPreviousBalanceValue(),
+                                    submission.getCurrentBalanceValue())
+                            : ""
         );
         return StockCountSubmissionResponse.from(
                 submission,
@@ -997,14 +986,9 @@ public class StockService {
         );
         List<StockCountSubmissionResponse> responses = new ArrayList<>();
         for (StockCountSubmission submission : ordered) {
-            if ((!submission.isBalanceAppliedAtSubmission()
-                    && next == StockWorkflowStatus.DONE)
-                    || (submission.isBalanceAppliedAtSubmission()
-                    && next == StockWorkflowStatus.REJECTED)) {
+            if (next == StockWorkflowStatus.DONE) {
                 StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
-                sku.updateBalance(next == StockWorkflowStatus.DONE
-                        ? submission.getCurrentBalanceValue()
-                        : submission.getPreviousBalanceValue(), reviewer);
+                sku.updateBalance(submission.getCurrentBalanceValue(), reviewer);
             }
             submission.review(next, note, reviewer);
             workflowActivityService.recordTransition(
@@ -1012,16 +996,10 @@ public class StockService {
                     submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,
                     next,
                     "/api/v1/stock/counts/" + submission.getId(),
-                    next == StockWorkflowStatus.DONE ? (
-                            submission.isBalanceAppliedAtSubmission()
-                                    ? "Balance applied before this approval: "
-                                            + balanceDetail(submission.getPreviousBalanceValue(),
-                                                    submission.getCurrentBalanceValue())
-                                    : balanceDetail(submission.getPreviousBalanceValue(),
-                                            submission.getCurrentBalanceValue()))
-                            : submission.isBalanceAppliedAtSubmission()
-                                    ? balanceDetail(submission.getCurrentBalanceValue(),
-                                            submission.getPreviousBalanceValue()) : ""
+                    next == StockWorkflowStatus.DONE
+                            ? balanceDetail(submission.getPreviousBalanceValue(),
+                                    submission.getCurrentBalanceValue())
+                            : ""
             );
             responses.add(StockCountSubmissionResponse.from(
                     submission,
@@ -1103,15 +1081,12 @@ public class StockService {
         StockWorkflowStatus next = requireReviewDecision(request.status());
         UserAccount reviewer = actor(principal);
         List<String> balanceChanges = new ArrayList<>();
-        if ((next == StockWorkflowStatus.DONE && !receivable.isBalanceAppliedAtSubmission())
-                || (next == StockWorkflowStatus.REJECTED && receivable.isBalanceAppliedAtSubmission())) {
+        if (next == StockWorkflowStatus.DONE) {
             for (StockReceivableItem item : receivable.getItems().stream()
                     .sorted(java.util.Comparator.comparing(value -> value.getSku().getId())).toList()) {
                 StockSku sku = lockedSku(item.getSku().getId(), principal.tenantId());
                 BigDecimal previous = sku.getCurrentBalanceValue();
-                BigDecimal updated = receivable.isBalanceAppliedAtSubmission()
-                        ? previous.subtract(item.getReceivedQuantity()).max(BigDecimal.ZERO)
-                        : previous.add(item.getReceivedQuantity());
+                BigDecimal updated = previous.add(item.getReceivedQuantity());
                 sku.updateBalance(updated, reviewer);
                 balanceChanges.add(sku.getName() + " balance: " + previous.toPlainString()
                         + " -> " + updated.toPlainString());
