@@ -35,6 +35,7 @@ import com.eastapp.backend.stock.StockWorkflowStatus;
 import com.eastapp.backend.stock.api.BulkReviewStockCountsResponse;
 import com.eastapp.backend.stock.api.BulkReviewStockCountsRequest;
 import com.eastapp.backend.stock.api.CreateStockCountRequest;
+import com.eastapp.backend.stock.api.CreateStockCountsRequest;
 import com.eastapp.backend.stock.api.CreateStockReceivableItemRequest;
 import com.eastapp.backend.stock.api.CreateStockReceivableRequest;
 import com.eastapp.backend.stock.api.CreateStockSupplierRequest;
@@ -474,7 +475,7 @@ public class StockService {
                     && pendingCreate.getWorkflowStatus() == StockWorkflowStatus.SUBMITTED) {
                 throw conflict("STOCK_SKU_AWAITING_APPROVAL",
                         "This SKU is frozen while its creation awaits approval. "
-                                + "Ask a reviewer to approve or return it before importing.");
+                                + "Ask a reviewer to approve or reject it before importing.");
             }
             StockSku created = createSkuNow(principal, request, true);
             workflowActivityService.recordChange(
@@ -849,65 +850,142 @@ public class StockService {
             AuthenticatedUser principal,
             CreateStockCountRequest request
     ) {
-        StockSku sku = lockedSku(request.skuId(), principal.tenantId());
-        assertSkuAvailable(principal.tenantId(), sku.getId());
-        UserAccount actor = actor(principal);
-        if (!principal.isHead() && !principal.isManager()
-                && !sku.getAssignedStaffNames().isEmpty()
-                && !sku.getAssignedStaffNames().contains(actor.getFullName())) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    "STOCK_SKU_NOT_ASSIGNED",
-                    "This SKU is not assigned to the current user."
+        return createCounts(
+                principal,
+                new CreateStockCountsRequest(List.of(request))
+        ).getFirst();
+    }
+
+    @Transactional
+    public List<StockCountSubmissionResponse> createCounts(
+            AuthenticatedUser principal,
+            CreateStockCountsRequest request
+    ) {
+        List<CreateStockCountRequest> countRequests = request.counts();
+        LinkedHashSet<UUID> requestedSkuIds = countRequests.stream()
+                .map(CreateStockCountRequest::skuId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (requestedSkuIds.size() != countRequests.size()) {
+            throw badRequest(
+                    "STOCK_COUNT_DUPLICATE_SKU",
+                    "Each SKU can appear only once in a stock count submission."
             );
         }
+
+        Map<UUID, StockSku> skusById = skuRepository
+                .findAllLockedByTenantIdAndIds(principal.tenantId(), requestedSkuIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        StockSku::getId,
+                        item -> item,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+        if (skusById.size() != requestedSkuIds.size()) {
+            throw notFound(
+                    "STOCK_SKU_NOT_FOUND",
+                    "One or more selected SKUs were not found."
+            );
+        }
+        Map<UUID, String> holds = approvalHolds(principal.tenantId(), requestedSkuIds);
+        for (UUID skuId : requestedSkuIds) {
+            String pending = holds.get(skuId);
+            if (pending != null) {
+                throw conflict(
+                        "STOCK_SKU_AWAITING_APPROVAL",
+                        "This SKU is frozen while its " + pending
+                                + " awaits approval. Ask a reviewer to approve or reject it before changing this SKU."
+                );
+            }
+        }
+
+        Map<UUID, StockCountSubmission> existingBySkuId = countRepository
+                .findAllLockedByTenantIdAndSkuIds(principal.tenantId(), requestedSkuIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        item -> item.getSku().getId(),
+                        item -> item,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+        UserAccount actor = actor(principal);
         Instant now = Instant.now();
         LocalDate today = now.atZone(ZONE_ID).toLocalDate();
-        if (sku.getStockCheckSchedule() == StockCheckSchedule.AD_HOC
-                && today.isBefore(sku.getStockCheckDate())) {
-            throw conflict(
-                    "STOCK_CHECK_NOT_DUE",
-                    "This ad hoc stock check is not due yet."
+        List<StockCountSubmission> submissions = new ArrayList<>(countRequests.size());
+        Map<UUID, StockWorkflowStatus> previousStatuses = new LinkedHashMap<>();
+
+        for (CreateStockCountRequest countRequest : countRequests) {
+            StockSku sku = skusById.get(countRequest.skuId());
+            if (!principal.isHead() && !principal.isManager()
+                    && !sku.getAssignedStaffNames().isEmpty()
+                    && !sku.getAssignedStaffNames().contains(actor.getFullName())) {
+                throw new ApiException(
+                        HttpStatus.FORBIDDEN,
+                        "STOCK_SKU_NOT_ASSIGNED",
+                        "This SKU is not assigned to the current user."
+                );
+            }
+            if (sku.getStockCheckSchedule() == StockCheckSchedule.AD_HOC
+                    && today.isBefore(sku.getStockCheckDate())) {
+                throw conflict(
+                        "STOCK_CHECK_NOT_DUE",
+                        "This ad hoc stock check is not due yet."
+                );
+            }
+
+            Instant cycleStartedAt = countCycleStartedAt(sku, now);
+            StockCountSubmission existing = existingBySkuId.get(sku.getId());
+            if (existing != null
+                    && existing.getWorkflowStatus() != StockWorkflowStatus.REJECTED
+                    && cycleStartedAt.equals(existing.getCountCycleStartedAt())) {
+                throw conflict(
+                        "STOCK_COUNT_ALREADY_SUBMITTED",
+                        "This SKU has already been counted for the current stock-check cycle."
+                );
+            }
+
+            BigDecimal previous = sku.getCurrentBalanceValue();
+            previousStatuses.put(
+                    sku.getId(),
+                    existing == null ? null : existing.getWorkflowStatus()
             );
+            if (existing == null) {
+                submissions.add(new StockCountSubmission(
+                        sku.getTenant(), sku, actor, countRequest.capturedAt(), cycleStartedAt,
+                        countRequest.stockPhotoName(), countRequest.invoicePhotoName(), previous,
+                        countRequest.currentBalanceValue(), countRequest.checkedItems(), countRequest.remarks()
+                ));
+            } else {
+                existing.resubmit(actor, countRequest.capturedAt(), cycleStartedAt,
+                        countRequest.stockPhotoName(), countRequest.invoicePhotoName(), previous,
+                        countRequest.currentBalanceValue(), countRequest.checkedItems(), countRequest.remarks());
+                submissions.add(existing);
+            }
         }
-        Instant cycleStartedAt = countCycleStartedAt(sku, now);
-        StockCountSubmission existing = countRepository
-                .findLockedByTenantIdAndSkuId(principal.tenantId(), sku.getId())
-                .orElse(null);
-        if (existing != null
-                && existing.getWorkflowStatus() != StockWorkflowStatus.REJECTED
-                && cycleStartedAt.equals(existing.getCountCycleStartedAt())) {
-            throw conflict(
-                    "STOCK_COUNT_ALREADY_SUBMITTED",
-                    "This SKU has already been counted for the current stock-check cycle."
+
+        countRepository.saveAllAndFlush(submissions);
+        Map<UUID, String> photoPaths = skuPhotoPaths(
+                principal.tenantId(),
+                submissions.stream().map(StockCountSubmission::getSku).toList()
+        );
+        List<StockCountSubmissionResponse> responses = new ArrayList<>(submissions.size());
+        for (StockCountSubmission submission : submissions) {
+            workflowActivityService.recordTransition(
+                    principal, "Stock", "stock count", submission.getId(),
+                    submission.getSku().getName(),
+                    previousStatuses.get(submission.getSku().getId()),
+                    StockWorkflowStatus.SUBMITTED,
+                    "/api/v1/stock/counts/" + submission.getId(),
+                    "Count submitted: "
+                            + submission.getPreviousBalanceValue().toPlainString()
+                            + " -> " + submission.getCurrentBalanceValue().toPlainString()
             );
-        }
-        BigDecimal previous = sku.getCurrentBalanceValue();
-        StockWorkflowStatus previousStatus = existing == null ? null : existing.getWorkflowStatus();
-        StockCountSubmission submission;
-        if (existing == null) {
-            submission = countRepository.save(new StockCountSubmission(
-                    sku.getTenant(), sku, actor, request.capturedAt(), cycleStartedAt,
-                    request.stockPhotoName(), request.invoicePhotoName(), previous,
-                    request.currentBalanceValue(), request.checkedItems(), request.remarks()
+            responses.add(StockCountSubmissionResponse.from(
+                    submission,
+                    photoPath(submission.getSku(), photoPaths)
             ));
-        } else {
-            existing.resubmit(actor, request.capturedAt(), cycleStartedAt,
-                    request.stockPhotoName(), request.invoicePhotoName(), previous,
-                    request.currentBalanceValue(), request.checkedItems(), request.remarks());
-            submission = existing;
         }
-        workflowActivityService.recordTransition(
-                principal, "Stock", "stock count", submission.getId(), sku.getName(),
-                previousStatus, StockWorkflowStatus.SUBMITTED,
-                "/api/v1/stock/counts/" + submission.getId(),
-                "Count submitted: " + previous.toPlainString() + " -> "
-                        + request.currentBalanceValue().toPlainString()
-        );
-        return StockCountSubmissionResponse.from(
-                submission,
-                photoPath(sku, skuPhotoPaths(principal.tenantId(), List.of(sku)))
-        );
+        return List.copyOf(responses);
     }
 
     @Transactional
@@ -1412,7 +1490,7 @@ public class StockService {
         if (pending != null) {
             throw conflict("STOCK_SKU_AWAITING_APPROVAL",
                     "This SKU is frozen while its " + pending
-                            + " awaits approval. Ask a reviewer to approve or return it before changing this SKU.");
+                            + " awaits approval. Ask a reviewer to approve or reject it before changing this SKU.");
         }
     }
 

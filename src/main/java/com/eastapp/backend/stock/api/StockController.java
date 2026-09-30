@@ -416,6 +416,15 @@ public class StockController {
         return ResponseEntity.status(HttpStatus.CREATED).body(stockService.createCount(principal, request));
     }
 
+    @PostMapping("/counts/batch")
+    ResponseEntity<List<StockCountSubmissionResponse>> createCounts(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody CreateStockCountsRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(stockService.createCounts(principal, request));
+    }
+
     @PatchMapping("/counts/{submissionId}/review")
     @PreAuthorize("hasAnyRole('OWNER', 'HEAD', 'MANAGER')")
     StockCountSubmissionResponse reviewCount(

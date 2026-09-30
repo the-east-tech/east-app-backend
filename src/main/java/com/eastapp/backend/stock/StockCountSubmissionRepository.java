@@ -50,9 +50,9 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
     );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select submission from StockCountSubmission submission where submission.tenant.id = :tenantId and submission.sku.id = :skuId")
-    Optional<StockCountSubmission> findLockedByTenantIdAndSkuId(
-            @Param("tenantId") UUID tenantId, @Param("skuId") UUID skuId
+    @Query("select submission from StockCountSubmission submission where submission.tenant.id = :tenantId and submission.sku.id in :skuIds")
+    List<StockCountSubmission> findAllLockedByTenantIdAndSkuIds(
+            @Param("tenantId") UUID tenantId, @Param("skuIds") Collection<UUID> skuIds
     );
 
     @Modifying
