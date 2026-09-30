@@ -1,6 +1,7 @@
 package com.eastapp.backend.stock.service;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.common.csv.CsvSupport;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.stock.StockSupplier;
 import com.eastapp.backend.stock.StockSupplierRepository;
@@ -35,17 +36,11 @@ import java.util.Set;
 
 @Service
 public class StockSupplierCsvService {
-    private static final String FORMAT_NAME = "EASTAPP_SUPPLIER_CSV";
-    private static final int FORMAT_VERSION = 1;
-    private static final String LANGUAGES = "ENGLISH|CHINESE";
     private static final int MAX_FILE_BYTES = 2 * 1024 * 1024;
     private static final int MAX_ROWS = 1_000;
     private static final int MAX_MESSAGES = 20;
     private static final ZoneId ZONE_ID = ZoneId.of("Asia/Kuala_Lumpur");
     private static final List<String> HEADERS = List.of(
-            "eastapp_format",
-            "format_version",
-            "languages",
             "supplier_name",
             "supplier_item",
             "contact_person",
@@ -88,9 +83,6 @@ public class StockSupplierCsvService {
             try (CSVPrinter printer = new CSVPrinter(writer, format)) {
                 for (StockSupplier supplier : suppliers) {
                     printer.printRecord(
-                            FORMAT_NAME,
-                            FORMAT_VERSION,
-                            LANGUAGES,
                             supplier.getSupplierName(),
                             supplier.getSupplierItem(),
                             supplier.getContactPerson(),
@@ -109,7 +101,8 @@ public class StockSupplierCsvService {
                 }
             }
             return new CsvExport(
-                    "eastapp-suppliers-" + LocalDate.now(ZONE_ID) + ".csv",
+                    CsvSupport.exportFileName(
+                            principal.tenantCode(), "suppliers", LocalDate.now(ZONE_ID)),
                     writer.toString().getBytes(StandardCharsets.UTF_8)
             );
         } catch (IOException exception) {
@@ -220,7 +213,7 @@ public class StockSupplierCsvService {
         } catch (IOException | UncheckedIOException | IllegalArgumentException exception) {
             throw badRequest(
                     "SUPPLIER_CSV_MALFORMED",
-                    "The selected file is not a valid EastApp Supplier CSV."
+                    "The selected file is not a valid Supplier CSV."
             );
         }
         if (totalRows == 0) {
@@ -239,15 +232,6 @@ public class StockSupplierCsvService {
     }
 
     private static ParsedSupplier parseRow(CSVRecord record) {
-        if (!FORMAT_NAME.equals(text(record, "eastapp_format"))) {
-            throw invalid("eastapp_format must be " + FORMAT_NAME + ".");
-        }
-        if (integer(record, "format_version") != FORMAT_VERSION) {
-            throw invalid("Unsupported format_version.");
-        }
-        if (!LANGUAGES.equals(text(record, "languages"))) {
-            throw invalid("languages must be " + LANGUAGES + ".");
-        }
         BigDecimal minimumBalance = decimal(record, "minimum_balance");
         BigDecimal maximumBalance = decimal(record, "maximum_balance");
         if (maximumBalance.compareTo(minimumBalance) < 0) {
@@ -316,11 +300,10 @@ public class StockSupplierCsvService {
 
     private static void validateHeaders(List<String> headers) {
         if (headers.size() != new LinkedHashSet<>(headers).size()
-                || !headers.containsAll(HEADERS)) {
+                || !headers.equals(HEADERS)) {
             throw badRequest(
                     "SUPPLIER_CSV_FORMAT_NOT_RECOGNISED",
-                    "The selected file is not a recognised EastApp Supplier CSV v"
-                            + FORMAT_VERSION + "."
+                    "The selected file is not a recognised Supplier CSV."
             );
         }
     }
@@ -350,14 +333,6 @@ public class StockSupplierCsvService {
             return value;
         } catch (NumberFormatException exception) {
             throw invalid(header + " must be a valid number.");
-        }
-    }
-
-    private static int integer(CSVRecord record, String header) {
-        try {
-            return new BigDecimal(requiredText(record, header, 20)).intValueExact();
-        } catch (ArithmeticException | NumberFormatException exception) {
-            throw invalid(header + " must be a whole number.");
         }
     }
 
@@ -415,8 +390,6 @@ public class StockSupplierCsvService {
     ) {
         StockSupplierCsvPreviewResponse preview() {
             return new StockSupplierCsvPreviewResponse(
-                    FORMAT_NAME,
-                    FORMAT_VERSION,
                     totalRows,
                     readyRows.size(),
                     duplicateRows,

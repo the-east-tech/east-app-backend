@@ -1101,7 +1101,7 @@ public class BusinessCleanupService {
 
     private static String fileName(AuthenticatedUser principal, Instant createdAt) {
         String tenant = principal.tenantCode().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "-");
-        return "eastapp-business-backup-" + tenant + '-'
+        return tenant + "-business-backup-"
                 + FILE_TIME.format(createdAt.atZone(BUSINESS_ZONE)) + ".zip";
     }
 

@@ -1,6 +1,7 @@
 package com.eastapp.backend.stock.service;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import com.eastapp.backend.common.csv.CsvSupport;
 import com.eastapp.backend.common.error.ApiException;
 import com.eastapp.backend.organisation.Tenant;
 import com.eastapp.backend.organisation.TenantRepository;
@@ -53,8 +54,6 @@ import java.util.UUID;
 
 @Service
 public class StockSkuCsvService {
-    private static final String FORMAT_NAME = "EASTAPP_SKU_CSV";
-    private static final String LANGUAGES = "ENGLISH|CHINESE";
     private static final int MAX_FILE_BYTES = 2 * 1024 * 1024;
     private static final int MAX_ROWS = 1_000;
     private static final int MAX_MESSAGES = 20;
@@ -64,8 +63,6 @@ public class StockSkuCsvService {
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
     );
     private static final List<String> HEADERS = List.of(
-            "eastapp_format",
-            "languages",
             "sku_name",
             "tag_1",
             "tag_2",
@@ -133,8 +130,6 @@ public class StockSkuCsvService {
                             .sorted(String.CASE_INSENSITIVE_ORDER)
                             .toList();
                     printer.printRecord(
-                            FORMAT_NAME,
-                            LANGUAGES,
                             sku.getName(),
                             sku.getTag1() == null ? "" : sku.getTag1().getTag(),
                             sku.getTag2() == null ? "" : sku.getTag2().getTag(),
@@ -156,9 +151,8 @@ public class StockSkuCsvService {
                     );
                 }
             }
-            String fileName = "eastapp-skus-"
-                    + LocalDate.now(ZONE_ID)
-                    + ".csv";
+            String fileName = CsvSupport.exportFileName(
+                    principal.tenantCode(), "skus", LocalDate.now(ZONE_ID));
             return new CsvExport(
                     fileName,
                     writer.toString().getBytes(StandardCharsets.UTF_8)
@@ -366,7 +360,7 @@ public class StockSkuCsvService {
         } catch (IOException | UncheckedIOException | IllegalArgumentException exception) {
             throw badRequest(
                     "SKU_CSV_MALFORMED",
-                    "The selected file is not a valid EastApp SKU CSV."
+                    "The selected file is not a valid SKU CSV."
             );
         }
 
@@ -385,12 +379,6 @@ public class StockSkuCsvService {
     }
 
     private ParsedSku parseRow(CSVRecord record) {
-        if (!FORMAT_NAME.equals(text(record, "eastapp_format"))) {
-            throw invalid("eastapp_format must be " + FORMAT_NAME + ".");
-        }
-        if (!LANGUAGES.equals(text(record, "languages"))) {
-            throw invalid("languages must be " + LANGUAGES + ".");
-        }
         String name = requiredText(record, "sku_name", 120);
         String tag1 = optionalText(record, "tag_1", 80);
         String tag2 = optionalText(record, "tag_2", 80);
@@ -561,13 +549,15 @@ public class StockSkuCsvService {
     }
 
     private static void validateHeaders(List<String> headers) {
+        List<String> requiredHeaders = HEADERS.stream()
+                .filter(name -> !name.equals("current_balance")
+                        && !name.equals("stock_check_day_2")).toList();
         if (headers.size() != new LinkedHashSet<>(headers).size()
-                || !headers.containsAll(HEADERS.stream()
-                        .filter(name -> !name.equals("current_balance")
-                                && !name.equals("stock_check_day_2")).toList())) {
+                || !headers.containsAll(requiredHeaders)
+                || !HEADERS.containsAll(headers)) {
             throw badRequest(
                     "SKU_CSV_FORMAT_NOT_RECOGNISED",
-                    "The selected file is not a recognised EastApp SKU CSV."
+                    "The selected file is not a recognised SKU CSV."
             );
         }
     }
@@ -707,7 +697,6 @@ public class StockSkuCsvService {
     ) {
         StockSkuCsvPreviewResponse preview() {
             return new StockSkuCsvPreviewResponse(
-                    FORMAT_NAME,
                     totalRows,
                     readyRows.size(),
                     duplicateRows,
