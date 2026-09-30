@@ -2,7 +2,7 @@ package com.eastapp.backend.tasks.api;
 
 public record TaskOverviewResponse(
         int total,
-        int pending,
+        int none,
         int submitted,
         int done
 ) {

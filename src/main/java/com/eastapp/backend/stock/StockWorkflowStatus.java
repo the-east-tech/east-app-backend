@@ -1,7 +1,8 @@
 package com.eastapp.backend.stock;
 
 public enum StockWorkflowStatus {
-    PENDING,
+    NONE,
+    REJECTED,
     SUBMITTED,
     DONE
 }

@@ -320,6 +320,7 @@ CREATE TABLE stock_skus (
     thumbnail_media_id UUID NOT NULL,
     stock_check_schedule VARCHAR(16) NOT NULL DEFAULT 'DAILY',
     stock_check_day INTEGER,
+    stock_check_day_2 INTEGER,
     stock_check_date DATE,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     cooling_period BOOLEAN NOT NULL DEFAULT TRUE,
@@ -338,6 +339,12 @@ CREATE TABLE stock_skus (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_skus_created_by FOREIGN KEY (tenant_id, created_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT ck_stock_skus_second_weekday
+        CHECK (stock_check_day_2 IS NULL OR (
+            stock_check_schedule = 'WEEKLY'
+            AND stock_check_day_2 BETWEEN 1 AND 7
+            AND stock_check_day_2 <> stock_check_day
+        )),
     CONSTRAINT uq_stock_skus_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE INDEX ix_stock_skus_tenant_tag1 ON stock_skus (tenant_id, tag1_id);
@@ -372,7 +379,7 @@ CREATE TABLE stock_sku_change_requests (
     CONSTRAINT ck_stock_sku_changes_type
         CHECK (change_type IN ('CREATE', 'UPDATE', 'DELETE')),
     CONSTRAINT ck_stock_sku_changes_status
-        CHECK (workflow_status IN ('PENDING', 'SUBMITTED', 'DONE')),
+        CHECK (workflow_status IN ('REJECTED', 'SUBMITTED', 'DONE')),
     CONSTRAINT uq_stock_sku_changes_tenant_id_id UNIQUE (tenant_id, id)
 );
 CREATE INDEX ix_stock_sku_changes_tenant_status_time
@@ -437,15 +444,21 @@ CREATE TABLE stock_count_submissions (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_counts_reviewed_by FOREIGN KEY (tenant_id, reviewed_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_counts_tenant_id_id UNIQUE (tenant_id, id)
+    CONSTRAINT uq_stock_counts_tenant_id_id UNIQUE (tenant_id, id),
+    CONSTRAINT uq_stock_counts_tenant_sku UNIQUE (tenant_id, sku_id)
 );
-CREATE UNIQUE INDEX uq_stock_counts_tenant_sku_cycle_active
-    ON stock_count_submissions (tenant_id, sku_id, count_cycle_started_at)
-    WHERE review_status <> 'PENDING';
 CREATE INDEX ix_stock_counts_tenant_captured_at ON stock_count_submissions (tenant_id, captured_at DESC);
 CREATE INDEX ix_stock_counts_tenant_review_captured_at ON stock_count_submissions (tenant_id, review_status, captured_at DESC);
 CREATE INDEX ix_stock_counts_tenant_submitter_captured_at
     ON stock_count_submissions (tenant_id, submitted_by_user_id, captured_at DESC);
+
+CREATE TABLE stock_count_approved_days (
+    submission_id UUID NOT NULL,
+    count_date DATE NOT NULL,
+    PRIMARY KEY (submission_id, count_date),
+    CONSTRAINT fk_stock_count_approved_days_submission
+        FOREIGN KEY (submission_id) REFERENCES stock_count_submissions (id) ON DELETE CASCADE
+);
 
 CREATE TABLE stock_count_submission_checks (
     submission_id UUID NOT NULL,
@@ -897,7 +910,7 @@ CREATE TABLE task_records (
     tag_name VARCHAR(80) NOT NULL,
     required_photo_count INTEGER NOT NULL,
     schedule_type VARCHAR(16) NOT NULL,
-    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    status VARCHAR(16) NOT NULL DEFAULT 'NONE',
     submitted_by_user_id UUID,
     submitted_by_role VARCHAR(32),
     submitted_at TIMESTAMPTZ,

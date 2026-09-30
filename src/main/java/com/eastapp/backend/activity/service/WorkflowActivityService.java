@@ -1,6 +1,7 @@
 package com.eastapp.backend.activity.service;
 
 import com.eastapp.backend.auth.security.AuthenticatedUser;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
@@ -9,10 +10,10 @@ import java.util.UUID;
 
 @Service
 public class WorkflowActivityService {
-    private final ActivityService activityService;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public WorkflowActivityService(ActivityService activityService) {
-        this.activityService = activityService;
+    public WorkflowActivityService(ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
     }
 
     public void recordTransition(
@@ -43,18 +44,20 @@ public class WorkflowActivityService {
         String previous = status(previousStatus);
         String next = status(nextStatus);
         if (Objects.equals(previous, next)) return;
+        String action = action(previous, next);
+        if (actor.isAdmin()) return;
 
-        activityService.record(
+        eventPublisher.publishEvent(new WorkflowActivityRequest(
                 actor,
                 module,
-                action(previous, next),
+                action,
                 entityType,
                 subject,
                 "Workflow status: " + (previous.isEmpty() ? "NEW" : previous) + " -> " + next
                         + (changes == null || changes.isBlank() ? "" : "; " + changes),
                 targetId,
                 route
-        );
+        ));
     }
 
     public void recordChange(
@@ -66,10 +69,11 @@ public class WorkflowActivityService {
             String route,
             String changes
     ) {
-        activityService.record(
+        if (actor.isAdmin()) return;
+        eventPublisher.publishEvent(new WorkflowActivityRequest(
                 actor, module, "imported", entityType, subject,
                 changes == null ? "" : changes, targetId, route
-        );
+        ));
     }
 
     private static String status(Object value) {
@@ -82,6 +86,7 @@ public class WorkflowActivityService {
         if ("DONE".equals(next)) return "completed";
         if ("DONE".equals(previous) && "PENDING".equals(next)) return "amended";
         if ("PENDING".equals(next)) return "returned";
+        if ("REJECTED".equals(next)) return "rejected";
         throw new IllegalArgumentException(
                 "Unsupported workflow transition: " + previous + " -> " + next
         );

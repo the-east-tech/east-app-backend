@@ -108,12 +108,12 @@ public class StockSkuChangeRequest {
         if (workflowStatus != StockWorkflowStatus.SUBMITTED) {
             throw new IllegalStateException("Only a submitted SKU change can be reviewed.");
         }
-        if (next != StockWorkflowStatus.DONE && next != StockWorkflowStatus.PENDING) {
-            throw new IllegalArgumentException("SKU change status must be DONE or PENDING.");
+        if (next != StockWorkflowStatus.DONE && next != StockWorkflowStatus.REJECTED) {
+            throw new IllegalArgumentException("SKU change status must be DONE or REJECTED.");
         }
         String normalised = note == null ? "" : note.trim();
-        if (next == StockWorkflowStatus.PENDING && normalised.isEmpty()) {
-            throw new IllegalArgumentException("A return reason is required.");
+        if (next == StockWorkflowStatus.REJECTED && normalised.isEmpty()) {
+            throw new IllegalArgumentException("A rejection reason is required.");
         }
         workflowStatus = next;
         reviewedByUserId = Objects.requireNonNull(reviewerUserId);

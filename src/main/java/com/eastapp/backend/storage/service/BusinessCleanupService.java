@@ -570,6 +570,7 @@ public class BusinessCleanupService {
 
         addTenantTable(zip, "stock_history", "stock_sku_change_requests", ids, tenant);
         addTenantTable(zip, "stock_history", "stock_count_submissions", ids, tenant);
+        addByParent(zip, "stock_history", "stock_count_approved_days", "submission_id", ids.get("stock_count_submissions"));
         addByParent(zip, "stock_history", "stock_count_submission_checks", "submission_id", ids.get("stock_count_submissions"));
         addByParent(zip, "stock_history", "stock_count_submission_remarks", "submission_id", ids.get("stock_count_submissions"));
         addTenantTable(zip, "stock_history", "stock_receivables", ids, tenant);

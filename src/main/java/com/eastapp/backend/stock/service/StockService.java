@@ -243,7 +243,7 @@ public class StockService {
                 submittedByUserId,
                 workflowStatus != null,
                 workflowStatus,
-                StockWorkflowStatus.PENDING,
+                StockWorkflowStatus.REJECTED,
                 range.filterByFrom(),
                 range.fromInclusive(),
                 range.filterByTo(),
@@ -871,27 +871,38 @@ public class StockService {
             );
         }
         Instant cycleStartedAt = countCycleStartedAt(sku, now);
-        if (countRepository.existsByTenant_IdAndSku_IdAndCountCycleStartedAtAndWorkflowStatusNot(
-                principal.tenantId(),
-                sku.getId(),
-                cycleStartedAt,
-                StockWorkflowStatus.PENDING
-        )) {
+        StockCountSubmission existing = countRepository
+                .findLockedByTenantIdAndSkuId(principal.tenantId(), sku.getId())
+                .orElse(null);
+        if (existing != null
+                && existing.getWorkflowStatus() != StockWorkflowStatus.REJECTED
+                && cycleStartedAt.equals(existing.getCountCycleStartedAt())) {
             throw conflict(
                     "STOCK_COUNT_ALREADY_SUBMITTED",
                     "This SKU has already been counted for the current stock-check cycle."
             );
         }
         BigDecimal previous = sku.getCurrentBalanceValue();
-        StockCountSubmission submission = countRepository.save(new StockCountSubmission(
-                sku.getTenant(), sku, actor, request.capturedAt(), cycleStartedAt,
-                request.stockPhotoName(), request.invoicePhotoName(), previous,
-                request.currentBalanceValue(), request.checkedItems(), request.remarks()
-        ));
+        StockWorkflowStatus previousStatus = existing == null ? null : existing.getWorkflowStatus();
+        StockCountSubmission submission;
+        if (existing == null) {
+            submission = countRepository.save(new StockCountSubmission(
+                    sku.getTenant(), sku, actor, request.capturedAt(), cycleStartedAt,
+                    request.stockPhotoName(), request.invoicePhotoName(), previous,
+                    request.currentBalanceValue(), request.checkedItems(), request.remarks()
+            ));
+        } else {
+            existing.resubmit(actor, request.capturedAt(), cycleStartedAt,
+                    request.stockPhotoName(), request.invoicePhotoName(), previous,
+                    request.currentBalanceValue(), request.checkedItems(), request.remarks());
+            submission = existing;
+        }
         workflowActivityService.recordTransition(
                 principal, "Stock", "stock count", submission.getId(), sku.getName(),
-                null, StockWorkflowStatus.SUBMITTED,
-                "/api/v1/stock/counts/" + submission.getId()
+                previousStatus, StockWorkflowStatus.SUBMITTED,
+                "/api/v1/stock/counts/" + submission.getId(),
+                "Count submitted: " + previous.toPlainString() + " -> "
+                        + request.currentBalanceValue().toPlainString()
         );
         return StockCountSubmissionResponse.from(
                 submission,
@@ -913,31 +924,24 @@ public class StockService {
         }
         StockWorkflowStatus next = requireReviewDecision(request.status());
         UserAccount reviewer = actor(principal);
-        if (!submission.isBalanceAppliedAtSubmission()
-                && next == StockWorkflowStatus.DONE) {
+        if (next == StockWorkflowStatus.DONE) {
             StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
             sku.updateBalance(submission.getCurrentBalanceValue(), reviewer);
-        } else if (submission.isBalanceAppliedAtSubmission()
-                && next == StockWorkflowStatus.PENDING) {
-            StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
-            sku.updateBalance(submission.getPreviousBalanceValue(), reviewer);
         }
         submission.review(next, request.note(), reviewer);
+        if (next == StockWorkflowStatus.DONE) {
+            countRepository.recordApprovedDay(submission.getId(),
+                    submission.getCapturedAt().atZone(ZONE_ID).toLocalDate());
+        }
         workflowActivityService.recordTransition(
                 principal, "Stock", "stock count", submission.getId(),
                 submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,
                 next,
                 "/api/v1/stock/counts/" + submission.getId(),
-                next == StockWorkflowStatus.DONE ? (
-                        submission.isBalanceAppliedAtSubmission()
-                                ? "Balance applied before this approval: "
-                                        + balanceDetail(submission.getPreviousBalanceValue(),
-                                                submission.getCurrentBalanceValue())
-                                : balanceDetail(submission.getPreviousBalanceValue(),
-                                        submission.getCurrentBalanceValue()))
-                        : submission.isBalanceAppliedAtSubmission()
-                                ? balanceDetail(submission.getCurrentBalanceValue(),
-                                        submission.getPreviousBalanceValue()) : ""
+                next == StockWorkflowStatus.DONE
+                            ? balanceDetail(submission.getPreviousBalanceValue(),
+                                    submission.getCurrentBalanceValue())
+                            : ""
         );
         return StockCountSubmissionResponse.from(
                 submission,
@@ -997,31 +1001,24 @@ public class StockService {
         );
         List<StockCountSubmissionResponse> responses = new ArrayList<>();
         for (StockCountSubmission submission : ordered) {
-            if ((!submission.isBalanceAppliedAtSubmission()
-                    && next == StockWorkflowStatus.DONE)
-                    || (submission.isBalanceAppliedAtSubmission()
-                    && next == StockWorkflowStatus.PENDING)) {
+            if (next == StockWorkflowStatus.DONE) {
                 StockSku sku = lockedSku(submission.getSku().getId(), principal.tenantId());
-                sku.updateBalance(next == StockWorkflowStatus.DONE
-                        ? submission.getCurrentBalanceValue()
-                        : submission.getPreviousBalanceValue(), reviewer);
+                sku.updateBalance(submission.getCurrentBalanceValue(), reviewer);
             }
             submission.review(next, note, reviewer);
+            if (next == StockWorkflowStatus.DONE) {
+                countRepository.recordApprovedDay(submission.getId(),
+                        submission.getCapturedAt().atZone(ZONE_ID).toLocalDate());
+            }
             workflowActivityService.recordTransition(
                     principal, "Stock", "stock count", submission.getId(),
                     submission.getSku().getName(), StockWorkflowStatus.SUBMITTED,
                     next,
                     "/api/v1/stock/counts/" + submission.getId(),
-                    next == StockWorkflowStatus.DONE ? (
-                            submission.isBalanceAppliedAtSubmission()
-                                    ? "Balance applied before this approval: "
-                                            + balanceDetail(submission.getPreviousBalanceValue(),
-                                                    submission.getCurrentBalanceValue())
-                                    : balanceDetail(submission.getPreviousBalanceValue(),
-                                            submission.getCurrentBalanceValue()))
-                            : submission.isBalanceAppliedAtSubmission()
-                                    ? balanceDetail(submission.getCurrentBalanceValue(),
-                                            submission.getPreviousBalanceValue()) : ""
+                    next == StockWorkflowStatus.DONE
+                            ? balanceDetail(submission.getPreviousBalanceValue(),
+                                    submission.getCurrentBalanceValue())
+                            : ""
             );
             responses.add(StockCountSubmissionResponse.from(
                     submission,
@@ -1103,15 +1100,12 @@ public class StockService {
         StockWorkflowStatus next = requireReviewDecision(request.status());
         UserAccount reviewer = actor(principal);
         List<String> balanceChanges = new ArrayList<>();
-        if ((next == StockWorkflowStatus.DONE && !receivable.isBalanceAppliedAtSubmission())
-                || (next == StockWorkflowStatus.PENDING && receivable.isBalanceAppliedAtSubmission())) {
+        if (next == StockWorkflowStatus.DONE) {
             for (StockReceivableItem item : receivable.getItems().stream()
                     .sorted(java.util.Comparator.comparing(value -> value.getSku().getId())).toList()) {
                 StockSku sku = lockedSku(item.getSku().getId(), principal.tenantId());
                 BigDecimal previous = sku.getCurrentBalanceValue();
-                BigDecimal updated = receivable.isBalanceAppliedAtSubmission()
-                        ? previous.subtract(item.getReceivedQuantity()).max(BigDecimal.ZERO)
-                        : previous.add(item.getReceivedQuantity());
+                BigDecimal updated = previous.add(item.getReceivedQuantity());
                 sku.updateBalance(updated, reviewer);
                 balanceChanges.add(sku.getName() + " balance: " + previous.toPlainString()
                         + " -> " + updated.toPlainString());
@@ -1193,12 +1187,12 @@ public class StockService {
     }
 
     private static StockWorkflowStatus requireReviewDecision(StockWorkflowStatus status) {
-        if (status == StockWorkflowStatus.DONE || status == StockWorkflowStatus.PENDING) {
+        if (status == StockWorkflowStatus.DONE || status == StockWorkflowStatus.REJECTED) {
             return status;
         }
         throw badRequest(
                 "INVALID_WORKFLOW_STATUS",
-                "Workflow status must be DONE or PENDING."
+                "Workflow status must be DONE or REJECTED."
         );
     }
 

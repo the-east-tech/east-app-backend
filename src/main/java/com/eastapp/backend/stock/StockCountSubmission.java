@@ -39,11 +39,11 @@ public class StockCountSubmission {
     @JoinColumn(name = "sku_id", nullable = false, updatable = false)
     private StockSku sku;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "submitted_by_user_id", nullable = false, updatable = false)
+    @JoinColumn(name = "submitted_by_user_id", nullable = false)
     private UserAccount submittedBy;
-    @Column(name = "captured_at", nullable = false, updatable = false)
+    @Column(name = "captured_at", nullable = false)
     private Instant capturedAt;
-    @Column(name = "count_cycle_started_at", nullable = false, updatable = false)
+    @Column(name = "count_cycle_started_at", nullable = false)
     private Instant countCycleStartedAt;
     @Column(name = "stock_photo_name", nullable = false, length = 500)
     private String stockPhotoName;
@@ -65,8 +65,6 @@ public class StockCountSubmission {
     @MapKeyColumn(name = "remark_key", length = 120)
     @Column(name = "remark_value", nullable = false, length = 1000)
     private Map<String, String> remarks = new LinkedHashMap<>();
-    @Column(name = "balance_applied_at_submission", nullable = false)
-    private boolean balanceAppliedAtSubmission;
 
     @Column(name = "review_status", nullable = false, length = 24)
     @Enumerated(EnumType.STRING)
@@ -106,12 +104,39 @@ public class StockCountSubmission {
         this.workflowStatus = StockWorkflowStatus.SUBMITTED;
     }
 
+    public void resubmit(
+            UserAccount submitter, Instant capturedAt, Instant cycleStartedAt,
+            String stockPhotoName, String invoicePhotoName,
+            BigDecimal previousBalance, BigDecimal currentBalance,
+            Map<String, Boolean> checks, Map<String, String> newRemarks
+    ) {
+        if (workflowStatus == StockWorkflowStatus.SUBMITTED) {
+            throw new IllegalStateException("A submitted stock count is awaiting review.");
+        }
+        this.submittedBy = Objects.requireNonNull(submitter);
+        this.capturedAt = Objects.requireNonNull(capturedAt);
+        this.countCycleStartedAt = Objects.requireNonNull(cycleStartedAt);
+        this.stockPhotoName = text(stockPhotoName);
+        this.invoicePhotoName = text(invoicePhotoName);
+        this.previousBalanceValue = nonNegative(previousBalance);
+        this.currentBalanceValue = nonNegative(currentBalance);
+        this.belowMinimumBalance = currentBalance.compareTo(sku.getMinimumBalanceValue()) < 0;
+        checkedItems.clear();
+        if (checks != null) checkedItems.putAll(checks);
+        remarks.clear();
+        if (newRemarks != null) newRemarks.forEach((key, value) -> remarks.put(key, text(value)));
+        workflowStatus = StockWorkflowStatus.SUBMITTED;
+        reviewedBy = null;
+        reviewedAt = null;
+        reviewNote = "";
+    }
+
     public void review(StockWorkflowStatus next, String note, UserAccount actor) {
         if (workflowStatus != StockWorkflowStatus.SUBMITTED) {
             throw new IllegalStateException("Only a submitted stock count may be reviewed.");
         }
-        if (next != StockWorkflowStatus.DONE && next != StockWorkflowStatus.PENDING) {
-            throw new IllegalArgumentException("Stock count status must be DONE or PENDING.");
+        if (next != StockWorkflowStatus.DONE && next != StockWorkflowStatus.REJECTED) {
+            throw new IllegalArgumentException("Stock count status must be DONE or REJECTED.");
         }
         UserAccount reviewer = Objects.requireNonNull(actor);
         this.workflowStatus = next;
@@ -134,7 +159,6 @@ public class StockCountSubmission {
     public Map<String, Boolean> getCheckedItems() { return checkedItems; }
     public Map<String, String> getRemarks() { return remarks; }
     public StockWorkflowStatus getWorkflowStatus() { return workflowStatus; }
-    public boolean isBalanceAppliedAtSubmission() { return balanceAppliedAtSubmission; }
     public UserAccount getReviewedBy() { return reviewedBy; }
     public Instant getReviewedAt() { return reviewedAt; }
     public String getReviewNote() { return reviewNote; }
