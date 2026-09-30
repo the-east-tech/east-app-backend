@@ -25,18 +25,12 @@ public interface StockReceivableRepository extends JpaRepository<StockReceivable
             from StockReceivable receivable
             where receivable.tenant.id = :tenantId
               and (:filterByWorkflowStatus = false or receivable.workflowStatus = :workflowStatus)
-              and (:filterByFrom = false or receivable.capturedAt >= :fromInclusive)
-              and (:filterByTo = false or receivable.capturedAt < :toExclusive)
             order by receivable.capturedAt desc, receivable.id desc
             """)
     Page<StockReceivable> searchByTenant(
             @Param("tenantId") UUID tenantId,
             @Param("filterByWorkflowStatus") boolean filterByWorkflowStatus,
             @Param("workflowStatus") StockWorkflowStatus workflowStatus,
-            @Param("filterByFrom") boolean filterByFrom,
-            @Param("fromInclusive") Instant fromInclusive,
-            @Param("filterByTo") boolean filterByTo,
-            @Param("toExclusive") Instant toExclusive,
             Pageable pageable
     );
 
@@ -47,6 +41,13 @@ public interface StockReceivableRepository extends JpaRepository<StockReceivable
     @Query("select receivable from StockReceivable receivable where receivable.id = :id and receivable.tenant.id = :tenantId")
     Optional<StockReceivable> findLockedByIdAndTenantId(
             @Param("id") UUID id, @Param("tenantId") UUID tenantId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select receivable from StockReceivable receivable where receivable.tenant.id = :tenantId and receivable.supplier.id = :supplierId")
+    Optional<StockReceivable> findLockedByTenantIdAndSupplierId(
+            @Param("tenantId") UUID tenantId,
+            @Param("supplierId") UUID supplierId
     );
 
     boolean existsByTenant_IdAndSupplier_Id(UUID tenantId, UUID supplierId);

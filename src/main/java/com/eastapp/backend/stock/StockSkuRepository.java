@@ -72,6 +72,12 @@ public interface StockSkuRepository extends JpaRepository<StockSku, UUID> {
             @Param("id") UUID id, @Param("tenantId") UUID tenantId
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select sku from StockSku sku where sku.tenant.id = :tenantId and sku.id in :ids order by sku.id")
+    List<StockSku> findAllLockedByTenantIdAndIds(
+            @Param("tenantId") UUID tenantId, @Param("ids") Collection<UUID> ids
+    );
+
     @EntityGraph(attributePaths = {"tenant", "suppliers"})
     List<StockSku> findAllByTenant_IdAndIdIn(UUID tenantId, Collection<UUID> ids);
 

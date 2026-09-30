@@ -39,9 +39,9 @@ public class StockReceivable {
     @JoinColumn(name = "supplier_id", nullable = false, updatable = false)
     private StockSupplier supplier;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "received_by_user_id", nullable = false, updatable = false)
+    @JoinColumn(name = "received_by_user_id", nullable = false)
     private UserAccount receivedBy;
-    @Column(name = "captured_at", nullable = false, updatable = false)
+    @Column(name = "captured_at", nullable = false)
     private Instant capturedAt;
     @Column(name = "invoice_photo_name", nullable = false, length = 500)
     private String invoicePhotoName;
@@ -84,6 +84,27 @@ public class StockReceivable {
     public void addItem(StockReceivableItem item) {
         item.attachTo(this, items.size());
         items.add(item);
+    }
+
+    public void clearItems() {
+        items.clear();
+    }
+
+    public void resubmit(
+            UserAccount actor, Instant capturedAt,
+            String invoicePhotoName, String goodsPhotoName
+    ) {
+        if (workflowStatus == StockWorkflowStatus.SUBMITTED) {
+            throw new IllegalStateException("A receivable for this supplier is awaiting review.");
+        }
+        this.receivedBy = Objects.requireNonNull(actor);
+        this.capturedAt = Objects.requireNonNull(capturedAt);
+        this.invoicePhotoName = text(invoicePhotoName);
+        this.goodsPhotoName = text(goodsPhotoName);
+        this.workflowStatus = StockWorkflowStatus.SUBMITTED;
+        this.reviewedBy = null;
+        this.reviewedAt = null;
+        this.reviewNote = "";
     }
 
     public void review(StockWorkflowStatus next, String note, UserAccount actor) {

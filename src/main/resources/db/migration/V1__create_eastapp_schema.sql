@@ -499,12 +499,11 @@ CREATE TABLE stock_receivables (
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
     CONSTRAINT fk_stock_receivables_reviewed_by FOREIGN KEY (tenant_id, reviewed_by_user_id)
         REFERENCES users (tenant_id, id) ON DELETE RESTRICT,
-    CONSTRAINT uq_stock_receivables_tenant_id_id UNIQUE (tenant_id, id)
+    CONSTRAINT uq_stock_receivables_tenant_id_id UNIQUE (tenant_id, id),
+    CONSTRAINT uq_stock_receivables_tenant_supplier UNIQUE (tenant_id, supplier_id)
 );
 CREATE INDEX ix_stock_receivables_tenant_captured_at ON stock_receivables (tenant_id, captured_at DESC);
 CREATE INDEX ix_stock_receivables_tenant_review_captured_at ON stock_receivables (tenant_id, review_status, captured_at DESC);
-CREATE INDEX ix_stock_receivables_tenant_supplier
-    ON stock_receivables (tenant_id, supplier_id);
 CREATE TABLE stock_receivable_items (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     receivable_id UUID NOT NULL,

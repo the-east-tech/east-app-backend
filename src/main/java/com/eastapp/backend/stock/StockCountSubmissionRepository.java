@@ -31,8 +31,6 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
                     (:filterByWorkflowStatus = false and submission.workflowStatus <> :rejectedStatus)
                     or (:filterByWorkflowStatus = true and submission.workflowStatus = :workflowStatus)
                   )
-              and (:filterByFrom = false or submission.capturedAt >= :fromInclusive)
-              and (:filterByTo = false or submission.capturedAt < :toExclusive)
             order by submission.capturedAt desc, submission.id desc
             """)
     Page<StockCountSubmission> searchByTenant(
@@ -42,17 +40,13 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             @Param("filterByWorkflowStatus") boolean filterByWorkflowStatus,
             @Param("workflowStatus") StockWorkflowStatus workflowStatus,
             @Param("rejectedStatus") StockWorkflowStatus rejectedStatus,
-            @Param("filterByFrom") boolean filterByFrom,
-            @Param("fromInclusive") Instant fromInclusive,
-            @Param("filterByTo") boolean filterByTo,
-            @Param("toExclusive") Instant toExclusive,
             Pageable pageable
     );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select submission from StockCountSubmission submission where submission.tenant.id = :tenantId and submission.sku.id = :skuId")
-    Optional<StockCountSubmission> findLockedByTenantIdAndSkuId(
-            @Param("tenantId") UUID tenantId, @Param("skuId") UUID skuId
+    @Query("select submission from StockCountSubmission submission where submission.tenant.id = :tenantId and submission.sku.id in :skuIds")
+    List<StockCountSubmission> findAllLockedByTenantIdAndSkuIds(
+            @Param("tenantId") UUID tenantId, @Param("skuIds") Collection<UUID> skuIds
     );
 
     @Modifying

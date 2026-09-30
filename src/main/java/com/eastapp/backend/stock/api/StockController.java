@@ -12,7 +12,6 @@ import com.eastapp.backend.stock.service.StockSkuCsvService;
 import com.eastapp.backend.stock.service.StockSupplierCsvService;
 import com.eastapp.backend.stock.service.StockTagCsvService;
 import jakarta.validation.Valid;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -31,7 +30,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.time.LocalDate;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -246,12 +244,10 @@ public class StockController {
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(defaultValue = "false") boolean mine,
             @RequestParam(required = false) StockWorkflowStatus workflowStatus,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
-        return stockService.listCounts(principal, mine, workflowStatus, from, to, page, size);
+        return stockService.listCounts(principal, mine, workflowStatus, page, size);
     }
 
     @GetMapping("/receivables")
@@ -259,12 +255,10 @@ public class StockController {
     PageResponse<StockReceivableResponse> receivables(
             @AuthenticationPrincipal AuthenticatedUser principal,
             @RequestParam(required = false) StockWorkflowStatus workflowStatus,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
-        return stockService.listReceivables(principal, workflowStatus, from, to, page, size);
+        return stockService.listReceivables(principal, workflowStatus, page, size);
     }
 
     @PostMapping("/tags")
@@ -414,6 +408,15 @@ public class StockController {
             @Valid @RequestBody CreateStockCountRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED).body(stockService.createCount(principal, request));
+    }
+
+    @PostMapping("/counts/batch")
+    ResponseEntity<List<StockCountSubmissionResponse>> createCounts(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody CreateStockCountsRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(stockService.createCounts(principal, request));
     }
 
     @PatchMapping("/counts/{submissionId}/review")
