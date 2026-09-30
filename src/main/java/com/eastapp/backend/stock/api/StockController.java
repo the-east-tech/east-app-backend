@@ -402,14 +402,6 @@ public class StockController {
         return stockService.reviewSkuChange(principal, requestId, request);
     }
 
-    @PostMapping("/counts")
-    ResponseEntity<StockCountSubmissionResponse> createCount(
-            @AuthenticationPrincipal AuthenticatedUser principal,
-            @Valid @RequestBody CreateStockCountRequest request
-    ) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(stockService.createCount(principal, request));
-    }
-
     @PostMapping("/counts/batch")
     ResponseEntity<List<StockCountSubmissionResponse>> createCounts(
             @AuthenticationPrincipal AuthenticatedUser principal,
