@@ -7,6 +7,12 @@ applies the single Flyway V1, then creates development users from one private JS
 Flyway contains schema and non-personal reference data only. Jenssen, Nicky, and future
 users all use the same bootstrap mechanism.
 
+During this reset-per-release phase, `railway.json` disables Railway's deployment
+healthcheck and container overlap. Railway must stop the previous backend before the
+replacement runs `flyway.clean()`; otherwise the old backend can retain PostgreSQL
+locks and deadlock the reset. Re-enable `/actuator/health` only after reset-on-start is
+permanently disabled and schema changes use append-only migrations.
+
 ## 1. Create the private user list locally
 
 Run once:

@@ -395,11 +395,11 @@ The current release policy deliberately resets the database for each release. Ke
 
 ## Railway deployment
 
-Railway uses Railpack and checks:
-
-```text
-/actuator/health
-```
+Railway uses Railpack. While the disposable reset-per-release policy is active,
+`railway.json` disables the deployment healthcheck and container overlap. This stops
+the previous backend before the replacement runs `flyway.clean()` and prevents the
+old backend from deadlocking the schema reset. Restore `/actuator/health` only after
+reset-on-start is permanently disabled and schema changes use append-only migrations.
 
 Core Railway settings:
 
