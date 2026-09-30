@@ -36,11 +36,8 @@ import java.util.UUID;
 
 @Service
 public class StockTagCsvService {
-    private static final String FORMAT = "EASTAPP_TAG_CSV";
-    private static final int VERSION = 1;
     private static final List<String> HEADERS = List.of(
-            "eastapp_format", "format_version", "languages", "tag",
-            "assigned_employee_ids", "active"
+            "tag", "assigned_employee_ids", "active"
     );
     private final StockTagRepository tagRepository;
     private final StockTagAssigneeRepository assigneeRepository;
@@ -83,11 +80,12 @@ public class StockTagCsvService {
                     .setRecordSeparator("\r\n")
                     .get())) {
                 for (StockTag tag : tags) {
-                    printer.printRecord(FORMAT, VERSION, "ENGLISH|CHINESE", tag.getTag(),
+                    printer.printRecord(tag.getTag(),
                             String.join("|", assignees.getOrDefault(tag.getId(), List.of())), tag.isActive());
                 }
             }
-            return new CsvExport("eastapp-tags-" + LocalDate.now(ZoneId.of("Asia/Kuala_Lumpur")) + ".csv",
+            return new CsvExport(CsvSupport.exportFileName(
+                            principal.tenantCode(), "tags", LocalDate.now(ZoneId.of("Asia/Kuala_Lumpur"))),
                     writer.toString().getBytes(StandardCharsets.UTF_8));
         } catch (IOException exception) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "TAG_CSV_EXPORT_FAILED", "The Tag CSV could not be generated.");
@@ -123,7 +121,7 @@ public class StockTagCsvService {
         Set<String> seen = new HashSet<>();
         int invalid = 0;
         int duplicates = 0;
-        List<CSVRecord> records = CsvSupport.records(file, HEADERS, FORMAT, VERSION);
+        List<CSVRecord> records = CsvSupport.records(file, HEADERS);
         for (CSVRecord record : records) {
             int line = Math.toIntExact(record.getRecordNumber() + 1);
             try {
@@ -160,6 +158,6 @@ public class StockTagCsvService {
     public record CsvExport(String fileName, byte[] bytes) {}
     private record ParsedTag(String tag, List<UUID> userIds, boolean active) {}
     private record Analysis(int total, List<ParsedTag> ready, int duplicates, int invalid, List<String> errors) {
-        CsvPreviewResponse preview() { return new CsvPreviewResponse(FORMAT, VERSION, total, ready.size(), duplicates, invalid(), errors); }
+        CsvPreviewResponse preview() { return new CsvPreviewResponse(total, ready.size(), duplicates, invalid(), errors); }
     }
 }
