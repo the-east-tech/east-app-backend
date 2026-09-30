@@ -73,8 +73,6 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             @Param("toDate") java.time.LocalDate toDate
     );
 
-    boolean existsByTenant_IdAndSku_Id(UUID tenantId, UUID skuId);
-
     @Query("""
             select distinct submission.sku.id from StockCountSubmission submission
             where submission.tenant.id = :tenantId and submission.workflowStatus = :status
@@ -86,16 +84,9 @@ public interface StockCountSubmissionRepository extends JpaRepository<StockCount
             @Param("skuIds") Collection<UUID> skuIds
     );
 
-    boolean existsByTenant_IdAndSku_IdAndWorkflowStatus(
-            UUID tenantId, UUID skuId, StockWorkflowStatus workflowStatus
-    );
-
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = {"tenant", "sku", "submittedBy", "reviewedBy"})
     List<StockCountSubmission> findAllByTenant_IdAndIdIn(UUID tenantId, List<UUID> ids);
-
-    @EntityGraph(attributePaths = {"tenant", "sku", "submittedBy", "reviewedBy"})
-    Optional<StockCountSubmission> findByIdAndTenant_Id(UUID id, UUID tenantId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select submission from StockCountSubmission submission where submission.id = :id and submission.tenant.id = :tenantId")

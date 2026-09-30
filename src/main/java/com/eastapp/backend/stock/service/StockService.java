@@ -830,17 +830,6 @@ public class StockService {
     }
 
     @Transactional
-    public StockCountSubmissionResponse createCount(
-            AuthenticatedUser principal,
-            CreateStockCountRequest request
-    ) {
-        return createCounts(
-                principal,
-                new CreateStockCountsRequest(List.of(request))
-        ).getFirst();
-    }
-
-    @Transactional
     public List<StockCountSubmissionResponse> createCounts(
             AuthenticatedUser principal,
             CreateStockCountsRequest request

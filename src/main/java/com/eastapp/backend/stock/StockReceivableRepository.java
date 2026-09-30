@@ -34,9 +34,6 @@ public interface StockReceivableRepository extends JpaRepository<StockReceivable
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"tenant", "supplier", "receivedBy", "reviewedBy", "items", "items.sku"})
-    Optional<StockReceivable> findByIdAndTenant_Id(UUID id, UUID tenantId);
-
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select receivable from StockReceivable receivable where receivable.id = :id and receivable.tenant.id = :tenantId")
     Optional<StockReceivable> findLockedByIdAndTenantId(
@@ -50,10 +47,6 @@ public interface StockReceivableRepository extends JpaRepository<StockReceivable
             @Param("supplierId") UUID supplierId
     );
 
-    boolean existsByTenant_IdAndSupplier_Id(UUID tenantId, UUID supplierId);
-
-    boolean existsByTenant_IdAndItems_Sku_Id(UUID tenantId, UUID skuId);
-
     @Query("""
             select distinct item.sku.id from StockReceivable receivable join receivable.items item
             where receivable.tenant.id = :tenantId and receivable.workflowStatus = :status
@@ -63,19 +56,6 @@ public interface StockReceivableRepository extends JpaRepository<StockReceivable
             @Param("tenantId") UUID tenantId,
             @Param("status") StockWorkflowStatus status,
             @Param("skuIds") Collection<UUID> skuIds
-    );
-
-    @Query("""
-            select count(receivable) > 0
-            from StockReceivable receivable join receivable.items item
-            where receivable.tenant.id = :tenantId
-              and item.sku.id = :skuId
-              and receivable.workflowStatus = :status
-            """)
-    boolean hasSkuAwaitingReview(
-            @Param("tenantId") UUID tenantId,
-            @Param("skuId") UUID skuId,
-            @Param("status") StockWorkflowStatus status
     );
 
     long countByTenant_IdAndCapturedAtGreaterThanEqualAndCapturedAtLessThan(
