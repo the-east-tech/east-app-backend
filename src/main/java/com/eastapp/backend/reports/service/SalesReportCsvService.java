@@ -38,11 +38,9 @@ import java.util.UUID;
 
 @Service
 public class SalesReportCsvService {
-    private static final String FORMAT = "EASTAPP_SALES_REPORT_CSV";
-    private static final int VERSION = 1;
     private static final Set<SystemRole> CASH_ROLES = Set.of(SystemRole.OWNER, SystemRole.HEAD, SystemRole.MANAGER);
     private static final List<String> HEADERS = List.of(
-            "eastapp_format", "format_version", "languages", "report_date", "workflow_status",
+            "report_date", "workflow_status",
             "cash_total_rm", "cash_received_by_employee_id", "cash_received_by",
             "food_delivery_sales_rm", "ewallet_total_rm", "staff_on_duty", "total_sales_rm",
             "void_total_rm", "void_bill_count"
@@ -76,14 +74,15 @@ public class SalesReportCsvService {
                     .get())) {
                 for (SalesReportResponse report : reports) {
                     printer.printRecord(
-                            FORMAT, VERSION, "ENGLISH|CHINESE", report.reportDate(), report.workflowStatus(),
+                            report.reportDate(), report.workflowStatus(),
                             report.cashTotalRm(), employeeIds.getOrDefault(report.cashReceivedByUserId(), ""), report.cashReceivedBy(),
                             report.foodDeliverySalesRm(), report.ewalletTotalRm(), report.staffOnDuty(), report.totalSalesRm(),
                             report.voidTotalRm(), report.voidBills().size()
                     );
                 }
             }
-            return new CsvExport("eastapp-sales-reports-" + LocalDate.now(ZoneId.of("Asia/Kuala_Lumpur")) + ".csv",
+            return new CsvExport(CsvSupport.exportFileName(
+                            principal.tenantCode(), "sales-reports", LocalDate.now(ZoneId.of("Asia/Kuala_Lumpur"))),
                     writer.toString().getBytes(StandardCharsets.UTF_8));
         } catch (IOException exception) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SALES_CSV_EXPORT_FAILED", "The Sales Report CSV could not be generated.");
@@ -117,7 +116,7 @@ public class SalesReportCsvService {
         List<String> errors = new ArrayList<>();
         int invalid = 0;
         int duplicates = 0;
-        List<CSVRecord> records = CsvSupport.records(file, HEADERS, FORMAT, VERSION);
+        List<CSVRecord> records = CsvSupport.records(file, HEADERS);
         for (CSVRecord record : records) {
             int line = Math.toIntExact(record.getRecordNumber() + 1);
             try {
@@ -165,6 +164,6 @@ public class SalesReportCsvService {
     public record CsvExport(String fileName, byte[] bytes) {}
     private record ParsedSales(LocalDate date, BigDecimal cash, UUID receiverId, BigDecimal delivery, BigDecimal ewallet, int staff) {}
     private record Analysis(int total, List<ParsedSales> ready, int duplicates, int invalid, List<String> errors) {
-        CsvPreviewResponse preview() { return new CsvPreviewResponse(FORMAT, VERSION, total, ready.size(), duplicates, invalid, errors); }
+        CsvPreviewResponse preview() { return new CsvPreviewResponse(total, ready.size(), duplicates, invalid, errors); }
     }
 }

@@ -38,10 +38,8 @@ import java.util.Set;
 
 @Service
 public class UserCsvService {
-    private static final String FORMAT = "EASTAPP_USER_CSV";
-    private static final int VERSION = 1;
     private static final List<String> HEADERS = List.of(
-            "eastapp_format", "format_version", "languages", "employee_id", "full_name",
+            "employee_id", "full_name",
             "phone_e164", "role", "initial_password", "birth_date", "start_date", "end_date", "active"
     );
     private final UserAccountRepository userRepository;
@@ -78,13 +76,14 @@ public class UserCsvService {
                     .get())) {
                 for (UserAccount user : users) {
                     printer.printRecord(
-                            FORMAT, VERSION, "ENGLISH|CHINESE", user.getEmployeeId(), user.getFullName(),
+                            user.getEmployeeId(), user.getFullName(),
                             user.getPhoneE164(), user.getRole().getSystemKey().name(), "",
                             date(user.getBirthDate()), date(user.getStartDate()), date(user.getEndDate()), user.isActive()
                     );
                 }
             }
-            return new CsvExport("eastapp-users-" + LocalDate.now(ZoneId.of("Asia/Kuala_Lumpur")) + ".csv",
+            return new CsvExport(CsvSupport.exportFileName(
+                            principal.tenantCode(), "users", LocalDate.now(ZoneId.of("Asia/Kuala_Lumpur"))),
                     writer.toString().getBytes(StandardCharsets.UTF_8));
         } catch (IOException exception) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "USER_CSV_EXPORT_FAILED", "The User CSV could not be generated.");
@@ -134,7 +133,7 @@ public class UserCsvService {
         List<String> errors = new ArrayList<>();
         int invalid = 0;
         int duplicates = 0;
-        List<CSVRecord> records = CsvSupport.records(file, HEADERS, FORMAT, VERSION);
+        List<CSVRecord> records = CsvSupport.records(file, HEADERS);
         for (CSVRecord record : records) {
             int line = Math.toIntExact(record.getRecordNumber() + 1);
             try {
@@ -194,6 +193,6 @@ public class UserCsvService {
     private record ParsedUser(String employeeId, String fullName, String phone, Role role, String password, LocalDate birthDate,
                               LocalDate startDate, LocalDate endDate, boolean active) {}
     private record Analysis(int total, List<ParsedUser> ready, int duplicates, int invalid, List<String> errors) {
-        CsvPreviewResponse preview() { return new CsvPreviewResponse(FORMAT, VERSION, total, ready.size(), duplicates, invalid, errors); }
+        CsvPreviewResponse preview() { return new CsvPreviewResponse(total, ready.size(), duplicates, invalid, errors); }
     }
 }

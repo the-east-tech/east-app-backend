@@ -12,6 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.List;
 
 public final class CsvSupport {
@@ -23,9 +24,7 @@ public final class CsvSupport {
 
     public static List<CSVRecord> records(
             MultipartFile file,
-            List<String> expectedHeaders,
-            String formatName,
-            int formatVersion
+            List<String> expectedHeaders
     ) {
         if (file == null || file.isEmpty()) {
             throw badRequest("CSV_FILE_REQUIRED", "Choose a non-empty CSV file.");
@@ -44,20 +43,12 @@ public final class CsvSupport {
             if (!parser.getHeaderNames().equals(expectedHeaders)) {
                 throw badRequest(
                         "CSV_HEADERS_INVALID",
-                        "CSV headers do not match the EastApp template. Export a fresh template and try again."
+                        "CSV headers do not match the expected template. Export a fresh CSV and try again."
                 );
             }
             List<CSVRecord> records = parser.getRecords();
             if (records.size() > MAX_ROWS) {
                 throw badRequest("CSV_TOO_MANY_ROWS", "CSV imports are limited to 1,000 rows.");
-            }
-            for (CSVRecord record : records) {
-                if (!formatName.equals(record.get("eastapp_format").trim())) {
-                    throw badRequest("CSV_FORMAT_INVALID", "This CSV belongs to a different EastApp import.");
-                }
-                if (!Integer.toString(formatVersion).equals(record.get("format_version").trim())) {
-                    throw badRequest("CSV_VERSION_INVALID", "Export a fresh EastApp CSV template and try again.");
-                }
             }
             return records;
         } catch (IOException | IllegalArgumentException exception) {
@@ -74,6 +65,15 @@ public final class CsvSupport {
         if (value.equalsIgnoreCase("true")) return true;
         if (value.equalsIgnoreCase("false")) return false;
         throw new IllegalArgumentException(column + " must be true or false");
+    }
+
+    public static String exportFileName(String businessCode, String exportName, LocalDate date) {
+        String safeBusinessCode = businessCode == null ? "" : businessCode.trim()
+                .replaceAll("[^A-Za-z0-9_-]", "-")
+                .replaceAll("-{2,}", "-")
+                .replaceAll("^-|-$", "");
+        if (safeBusinessCode.isBlank()) safeBusinessCode = "business";
+        return safeBusinessCode + "-" + exportName + "-" + date + ".csv";
     }
 
     private static String decode(MultipartFile file) {

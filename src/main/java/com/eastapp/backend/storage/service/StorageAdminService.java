@@ -479,8 +479,8 @@ public class StorageAdminService {
             case "stock_count_submissions" -> "Latest stock count records";
             case "stock_count_submission_checks" -> "Daily count checklist results";
             case "stock_count_submission_remarks" -> "Daily count remarks";
-            case "stock_receivables" -> "Receivable history and review status";
-            case "stock_receivable_items" -> "SKU quantities in each receivable";
+            case "stock_receivables" -> "Latest supplier receivable and review status";
+            case "stock_receivable_items" -> "SKU quantities in the latest receivable";
             case "knowledge_sops" -> "SOP content";
             case "knowledge_sop_watch_sessions" -> "SOP video viewing analytics";
             case "translation_cache" -> "Reusable translated content";
