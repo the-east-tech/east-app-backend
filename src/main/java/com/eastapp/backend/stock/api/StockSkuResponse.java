@@ -28,6 +28,7 @@ public record StockSkuResponse(
         StockCheckSchedule stockCheckSchedule,
         Integer stockCheckDay,
         Integer stockCheckDay2,
+        List<Integer> stockCheckDays,
         LocalDate stockCheckDate,
         String lastUpdatedAt,
         String lastUpdatedBy,
@@ -51,7 +52,8 @@ public record StockSkuResponse(
                 item.getSuppliers().stream().map(supplier -> supplier.getId()).toList(),
                 photoPath, List.copyOf(item.getAssignedStaffNames()),
                 List.copyOf(item.getReceivableChecklist()),
-                item.getStockCheckSchedule(), item.getStockCheckDay(), item.getStockCheckDay2(), item.getStockCheckDate(),
+                item.getStockCheckSchedule(), item.getStockCheckDay(), item.getStockCheckDay2(),
+                item.getStockCheckDays(), item.getStockCheckDate(),
                 StockResponseSupport.label(item.getUpdatedAt()),
                 StockResponseSupport.employeeId(item.getLastUpdatedBy()), item.isActive(), item.isCoolingPeriod(), approvalHoldReason
         );

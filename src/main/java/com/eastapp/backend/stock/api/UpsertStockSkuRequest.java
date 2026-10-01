@@ -31,6 +31,7 @@ public record UpsertStockSkuRequest(
         @NotNull StockCheckSchedule stockCheckSchedule,
         Integer stockCheckDay,
         Integer stockCheckDay2,
+        @Size(max = 7) List<@Min(1) @Max(7) Integer> stockCheckDays,
         LocalDate stockCheckDate,
         boolean active,
         boolean coolingPeriod
