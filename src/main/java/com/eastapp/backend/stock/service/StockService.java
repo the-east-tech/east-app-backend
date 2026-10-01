@@ -648,7 +648,8 @@ public class StockService {
                 suppliers(principal.tenantId(), request.supplierIds(), Set.of()),
                 thumbnail, request.assignedStaffNames(),
                 request.receivableChecklist(), request.stockCheckSchedule(),
-                request.stockCheckDay(), request.stockCheckDay2(), request.stockCheckDate(),
+                request.stockCheckDay(), request.stockCheckDay2(), request.stockCheckDays(),
+                request.stockCheckDate(),
                 request.active(), request.coolingPeriod(), actor
         ));
     }
@@ -689,7 +690,8 @@ public class StockService {
                 suppliers(principal.tenantId(), request.supplierIds(), existingSupplierIds),
                 thumbnail, csvImport ? List.copyOf(sku.getAssignedStaffNames()) : request.assignedStaffNames(),
                 request.receivableChecklist(), request.stockCheckSchedule(),
-                request.stockCheckDay(), request.stockCheckDay2(), request.stockCheckDate(),
+                request.stockCheckDay(), request.stockCheckDay2(), request.stockCheckDays(),
+                request.stockCheckDate(),
                 request.active(), request.coolingPeriod(),
                 actor(principal)
         );
@@ -735,7 +737,7 @@ public class StockService {
         addChange(details, "Receivable checklist", previous.getReceivableChecklist(), proposed.receivableChecklist());
         addChange(details, "Stock check schedule", previous.getStockCheckSchedule(), proposed.stockCheckSchedule());
         addChange(details, "Stock check day", previous.getStockCheckDay(), proposed.stockCheckDay());
-        addChange(details, "Second stock check day", previous.getStockCheckDay2(), proposed.stockCheckDay2());
+        addChange(details, "Weekly stock check days", previous.getStockCheckDays(), requestedStockCheckDays(proposed));
         addChange(details, "Stock check date", previous.getStockCheckDate(), proposed.stockCheckDate());
         addChange(details, "Active", previous.isActive(), proposed.active());
         addChange(details, "Cooling period", previous.isCoolingPeriod(), proposed.coolingPeriod());
@@ -749,6 +751,17 @@ public class StockService {
         if (!Objects.equals(before, after)) {
             details.add(label + ": " + String.valueOf(before) + " -> " + String.valueOf(after));
         }
+    }
+
+    private static List<Integer> requestedStockCheckDays(UpsertStockSkuRequest request) {
+        if (request.stockCheckSchedule() != StockCheckSchedule.WEEKLY) return List.of();
+        if (request.stockCheckDays() != null) {
+            return request.stockCheckDays().stream().sorted().toList();
+        }
+        return java.util.stream.Stream.of(request.stockCheckDay(), request.stockCheckDay2())
+                .filter(Objects::nonNull)
+                .sorted()
+                .toList();
     }
 
     private static String balanceDetail(BigDecimal before, BigDecimal after) {
@@ -1556,11 +1569,10 @@ public class StockService {
         LocalDate cycleDate = switch (sku.getStockCheckSchedule()) {
             case AD_HOC -> sku.getStockCheckDate();
             case DAILY -> today;
-            case WEEKLY -> today.minusDays(Math.min(
-                    Math.floorMod(today.getDayOfWeek().getValue() - sku.getStockCheckDay(), 7),
-                    sku.getStockCheckDay2() == null ? 7 : Math.floorMod(
-                            today.getDayOfWeek().getValue() - sku.getStockCheckDay2(), 7)
-            ));
+            case WEEKLY -> today.minusDays(sku.getStockCheckDays().stream()
+                    .mapToInt(day -> Math.floorMod(today.getDayOfWeek().getValue() - day, 7))
+                    .min()
+                    .orElse(0));
             case MONTHLY -> {
                 int day = sku.getStockCheckDay() == null ? 31 : sku.getStockCheckDay();
                 YearMonth month = YearMonth.from(today);

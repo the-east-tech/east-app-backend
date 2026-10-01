@@ -59,6 +59,7 @@ public class StockSkuCsvService {
     private static final int MAX_MESSAGES = 20;
     private static final ZoneId ZONE_ID = ZoneId.of("Asia/Kuala_Lumpur");
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {};
+    private static final TypeReference<List<Integer>> INTEGER_LIST = new TypeReference<>() {};
     private static final byte[] TRANSPARENT_PNG = Base64.getDecoder().decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
     );
@@ -80,7 +81,8 @@ public class StockSkuCsvService {
             "stock_check_date",
             "active",
             "cooling_period",
-            "stock_check_day_2"
+            "stock_check_day_2",
+            "stock_check_days"
     );
 
     private final TenantRepository tenantRepository;
@@ -147,7 +149,9 @@ public class StockSkuCsvService {
                             sku.getStockCheckDate() == null ? "" : sku.getStockCheckDate(),
                             sku.isActive(),
                             sku.isCoolingPeriod(),
-                            sku.getStockCheckDay2() == null ? "" : sku.getStockCheckDay2()
+                            sku.getStockCheckDay2() == null ? "" : sku.getStockCheckDay2(),
+                            sku.getStockCheckSchedule() == StockCheckSchedule.WEEKLY
+                                    ? objectMapper.writeValueAsString(sku.getStockCheckDays()) : ""
                     );
                 }
             }
@@ -274,6 +278,7 @@ public class StockSkuCsvService {
                     row.stockCheckSchedule(),
                     row.stockCheckDay(),
                     row.stockCheckDay2(),
+                    row.stockCheckDays(),
                     row.stockCheckDate(),
                     row.active(),
                     row.coolingPeriod()
@@ -415,6 +420,7 @@ public class StockSkuCsvService {
         String dateText = text(record, "stock_check_date");
         Integer stockCheckDay = null;
         Integer stockCheckDay2 = null;
+        List<Integer> stockCheckDays = List.of();
         LocalDate stockCheckDate = null;
         switch (stockCheckSchedule) {
             case AD_HOC -> {
@@ -429,13 +435,22 @@ public class StockSkuCsvService {
                 }
             }
             case WEEKLY -> {
-                stockCheckDay = integer(record, "stock_check_day", 1, 7);
-                if (record.isMapped("stock_check_day_2")
-                        && !text(record, "stock_check_day_2").isEmpty()) {
-                    stockCheckDay2 = integer(record, "stock_check_day_2", 1, 7);
-                    if (stockCheckDay2.equals(stockCheckDay)) {
-                        throw invalid("stock_check_day_2 must differ from stock_check_day.");
+                if (record.isMapped("stock_check_days")
+                        && !text(record, "stock_check_days").isEmpty()) {
+                    stockCheckDays = integerList(record, "stock_check_days");
+                    stockCheckDay = stockCheckDays.get(0);
+                    stockCheckDay2 = stockCheckDays.size() > 1 ? stockCheckDays.get(1) : null;
+                } else {
+                    stockCheckDay = integer(record, "stock_check_day", 1, 7);
+                    if (record.isMapped("stock_check_day_2")
+                            && !text(record, "stock_check_day_2").isEmpty()) {
+                        stockCheckDay2 = integer(record, "stock_check_day_2", 1, 7);
+                        if (stockCheckDay2.equals(stockCheckDay)) {
+                            throw invalid("stock_check_day_2 must differ from stock_check_day.");
+                        }
                     }
+                    stockCheckDays = stockCheckDay2 == null
+                            ? List.of(stockCheckDay) : List.of(stockCheckDay, stockCheckDay2);
                 }
                 if (!dateText.isEmpty()) {
                     throw invalid("stock_check_date must be blank for WEEKLY.");
@@ -455,6 +470,11 @@ public class StockSkuCsvService {
                 && !text(record, "stock_check_day_2").isEmpty()) {
             throw invalid("stock_check_day_2 is only valid for WEEKLY.");
         }
+        if (stockCheckSchedule != StockCheckSchedule.WEEKLY
+                && record.isMapped("stock_check_days")
+                && !text(record, "stock_check_days").isEmpty()) {
+            throw invalid("stock_check_days is only valid for WEEKLY.");
+        }
         return new ParsedSku(
                 name,
                 tag1,
@@ -471,6 +491,7 @@ public class StockSkuCsvService {
                 stockCheckSchedule,
                 stockCheckDay,
                 stockCheckDay2,
+                stockCheckDays,
                 stockCheckDate,
                 bool(record, "active"),
                 bool(record, "cooling_period")
@@ -508,6 +529,22 @@ public class StockSkuCsvService {
             throw exception;
         } catch (IOException exception) {
             throw invalid(header + " must be a JSON text list, for example [\"Item 1\"].");
+        }
+    }
+
+    private List<Integer> integerList(CSVRecord record, String header) {
+        try {
+            List<Integer> raw = objectMapper.readValue(text(record, header), INTEGER_LIST);
+            if (raw == null || raw.isEmpty() || raw.size() > 7
+                    || raw.stream().anyMatch(day -> day == null || day < 1 || day > 7)
+                    || raw.stream().distinct().count() != raw.size()) {
+                throw invalid(header + " must contain between 1 and 7 unique weekdays.");
+            }
+            return raw.stream().sorted().toList();
+        } catch (RowValidationException exception) {
+            throw exception;
+        } catch (IOException exception) {
+            throw invalid(header + " must be a JSON number list, for example [1,3,5].");
         }
     }
 
@@ -551,7 +588,8 @@ public class StockSkuCsvService {
     private static void validateHeaders(List<String> headers) {
         List<String> requiredHeaders = HEADERS.stream()
                 .filter(name -> !name.equals("current_balance")
-                        && !name.equals("stock_check_day_2")).toList();
+                        && !name.equals("stock_check_day_2")
+                        && !name.equals("stock_check_days")).toList();
         if (headers.size() != new LinkedHashSet<>(headers).size()
                 || !headers.containsAll(requiredHeaders)
                 || !HEADERS.containsAll(headers)) {
@@ -681,6 +719,7 @@ public class StockSkuCsvService {
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
             Integer stockCheckDay2,
+            List<Integer> stockCheckDays,
             LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod

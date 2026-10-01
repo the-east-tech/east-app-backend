@@ -113,6 +113,21 @@ public class StockSku {
     @Column(name = "stock_check_day_2")
     private Integer stockCheckDay2;
 
+    @Column(name = "stock_check_day_3")
+    private Integer stockCheckDay3;
+
+    @Column(name = "stock_check_day_4")
+    private Integer stockCheckDay4;
+
+    @Column(name = "stock_check_day_5")
+    private Integer stockCheckDay5;
+
+    @Column(name = "stock_check_day_6")
+    private Integer stockCheckDay6;
+
+    @Column(name = "stock_check_day_7")
+    private Integer stockCheckDay7;
+
     @Column(name = "stock_check_date")
     private LocalDate stockCheckDate;
 
@@ -160,6 +175,7 @@ public class StockSku {
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
             Integer stockCheckDay2,
+            List<Integer> stockCheckDays,
             LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod,
@@ -172,7 +188,8 @@ public class StockSku {
                 minimumBalanceValue, maximumBalanceValue, currentBalanceValue,
                 recoveryPercent, minimumPriceRm, maximumPriceRm,
                 suppliers, thumbnailMedia, assignedStaffNames, receivableChecklist,
-                stockCheckSchedule, stockCheckDay, stockCheckDay2, stockCheckDate, active, coolingPeriod, actor
+                stockCheckSchedule, stockCheckDay, stockCheckDay2, stockCheckDays,
+                stockCheckDate, active, coolingPeriod, actor
         );
     }
 
@@ -194,6 +211,7 @@ public class StockSku {
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
             Integer stockCheckDay2,
+            List<Integer> stockCheckDays,
             LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod,
@@ -204,7 +222,8 @@ public class StockSku {
                 minimumBalanceValue, maximumBalanceValue, currentBalanceValue,
                 recoveryPercent, minimumPriceRm, maximumPriceRm,
                 suppliers, thumbnailMedia, assignedStaffNames, receivableChecklist,
-                stockCheckSchedule, stockCheckDay, stockCheckDay2, stockCheckDate, active, coolingPeriod, actor
+                stockCheckSchedule, stockCheckDay, stockCheckDay2, stockCheckDays,
+                stockCheckDate, active, coolingPeriod, actor
         );
     }
 
@@ -226,6 +245,7 @@ public class StockSku {
             StockCheckSchedule stockCheckSchedule,
             Integer stockCheckDay,
             Integer stockCheckDay2,
+            List<Integer> stockCheckDays,
             LocalDate stockCheckDate,
             boolean active,
             boolean coolingPeriod,
@@ -274,12 +294,27 @@ public class StockSku {
                 stockCheckSchedule,
                 "stockCheckSchedule must not be null"
         );
-        this.stockCheckDay = normaliseStockCheckDay(stockCheckSchedule, stockCheckDay);
-        if (stockCheckDay2 != null && (stockCheckSchedule != StockCheckSchedule.WEEKLY
-                || stockCheckDay2 < 1 || stockCheckDay2 > 7 || stockCheckDay2.equals(this.stockCheckDay))) {
-            throw new IllegalArgumentException("stockCheckDay2 must be a different weekday between 1 and 7");
+        if (stockCheckSchedule == StockCheckSchedule.WEEKLY) {
+            List<Integer> days = normaliseWeeklyDays(stockCheckDays, stockCheckDay, stockCheckDay2);
+            this.stockCheckDay = days.get(0);
+            this.stockCheckDay2 = dayAt(days, 1);
+            this.stockCheckDay3 = dayAt(days, 2);
+            this.stockCheckDay4 = dayAt(days, 3);
+            this.stockCheckDay5 = dayAt(days, 4);
+            this.stockCheckDay6 = dayAt(days, 5);
+            this.stockCheckDay7 = dayAt(days, 6);
+        } else {
+            if (stockCheckDays != null && !stockCheckDays.isEmpty()) {
+                throw new IllegalArgumentException("stockCheckDays is only valid for weekly stock checks");
+            }
+            this.stockCheckDay = normaliseStockCheckDay(stockCheckSchedule, stockCheckDay);
+            this.stockCheckDay2 = null;
+            this.stockCheckDay3 = null;
+            this.stockCheckDay4 = null;
+            this.stockCheckDay5 = null;
+            this.stockCheckDay6 = null;
+            this.stockCheckDay7 = null;
         }
-        this.stockCheckDay2 = stockCheckDay2;
         this.stockCheckDate = normaliseStockCheckDate(stockCheckSchedule, stockCheckDate);
         this.active = active;
         this.coolingPeriod = coolingPeriod;
@@ -319,6 +354,15 @@ public class StockSku {
     public StockCheckSchedule getStockCheckSchedule() { return stockCheckSchedule; }
     public Integer getStockCheckDay() { return stockCheckDay; }
     public Integer getStockCheckDay2() { return stockCheckDay2; }
+    public List<Integer> getStockCheckDays() {
+        if (stockCheckSchedule != StockCheckSchedule.WEEKLY) return List.of();
+        return java.util.stream.Stream.of(
+                        stockCheckDay, stockCheckDay2, stockCheckDay3, stockCheckDay4,
+                        stockCheckDay5, stockCheckDay6, stockCheckDay7
+                )
+                .filter(Objects::nonNull)
+                .toList();
+    }
     public LocalDate getStockCheckDate() { return stockCheckDate; }
     public boolean isActive() { return active; }
     public boolean isCoolingPeriod() { return coolingPeriod; }
@@ -356,6 +400,35 @@ public class StockSku {
             throw new IllegalArgumentException("stockCheckDay must be between 1 and 28 or use last day");
         }
         return day > 28 ? null : day;
+    }
+
+    private static List<Integer> normaliseWeeklyDays(
+            List<Integer> requestedDays,
+            Integer legacyDay,
+            Integer legacyDay2
+    ) {
+        List<Integer> source = requestedDays == null
+                ? java.util.stream.Stream.of(legacyDay, legacyDay2)
+                        .filter(Objects::nonNull)
+                        .toList()
+                : requestedDays;
+        List<Integer> result = source.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+        if (result.isEmpty() || result.size() > 7
+                || result.size() != source.size()
+                || result.stream().anyMatch(day -> day < 1 || day > 7)) {
+            throw new IllegalArgumentException(
+                    "stockCheckDays must contain between 1 and 7 unique weekdays"
+            );
+        }
+        return result;
+    }
+
+    private static Integer dayAt(List<Integer> days, int index) {
+        return index < days.size() ? days.get(index) : null;
     }
 
     private static LocalDate normaliseStockCheckDate(
