@@ -9,6 +9,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.slf4j.MDC;
 
 import com.eastapp.backend.common.logging.RequestLoggingFilter;
@@ -77,6 +78,15 @@ public class ApiExceptionHandler {
                         "DATA_CONFLICT",
                         technicalMessage(exception)
                 ));
+    }
+
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    void handleClientDisconnect(AsyncRequestNotUsableException exception) {
+        log.info(
+                "HTTP client disconnected requestId={} message={}",
+                currentRequestId(),
+                technicalMessage(exception)
+        );
     }
 
     @ExceptionHandler(Exception.class)
