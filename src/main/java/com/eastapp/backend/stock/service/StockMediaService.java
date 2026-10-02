@@ -36,9 +36,9 @@ import java.util.regex.Pattern;
 @Transactional(readOnly = true)
 public class StockMediaService {
     private static final long MAX_IMAGE_BYTES = 5L * 1024L * 1024L;
-    private static final int MAX_SKU_THUMBNAIL_DIMENSION = 640;
-    private static final int MAX_UNNORMALISED_THUMBNAIL_BYTES = 512 * 1024;
-    private static final float SKU_THUMBNAIL_JPEG_QUALITY = 0.82F;
+    private static final int MAX_SKU_THUMBNAIL_DIMENSION = 320;
+    private static final int MAX_UNNORMALISED_THUMBNAIL_BYTES = 128 * 1024;
+    private static final float SKU_THUMBNAIL_JPEG_QUALITY = 0.70F;
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of("image/jpeg", "image/png");
     private static final Pattern STORAGE_KEY_PATTERN = Pattern.compile("[0-9a-fA-F-]{36}\\.(jpg|png)");
 
