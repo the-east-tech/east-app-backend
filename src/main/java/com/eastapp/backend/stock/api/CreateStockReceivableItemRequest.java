@@ -11,6 +11,5 @@ public record CreateStockReceivableItemRequest(
         @NotNull UUID skuId,
         @NotNull @DecimalMin("0") BigDecimal invoiceQuantity,
         @NotNull @DecimalMin("0") BigDecimal receivedQuantity,
-        @Size(max = 80) String condition,
         @Size(max = 1000) String note
 ) {}
