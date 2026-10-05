@@ -45,14 +45,14 @@ public class StockReceivableItem {
 
     public StockReceivableItem(
             StockSku sku, BigDecimal invoiceQuantity, BigDecimal receivedQuantity,
-            String condition, String note
+            String note
     ) {
         this.sku = Objects.requireNonNull(sku);
         this.skuName = sku.getName();
         this.invoiceQuantity = nonNegative(invoiceQuantity);
         this.receivedQuantity = nonNegative(receivedQuantity);
         this.unit = sku.getUnit();
-        this.condition = text(condition);
+        this.condition = deriveCondition(this.invoiceQuantity, this.receivedQuantity);
         this.note = text(note);
     }
 
@@ -70,6 +70,14 @@ public class StockReceivableItem {
     public String getUnit() { return unit; }
     public String getCondition() { return condition; }
     public String getNote() { return note; }
+
+    static String deriveCondition(BigDecimal invoiceQuantity, BigDecimal receivedQuantity) {
+        int comparison = Objects.requireNonNull(receivedQuantity)
+                .compareTo(Objects.requireNonNull(invoiceQuantity));
+        if (comparison == 0) return "Matched";
+        return comparison < 0 ? "Short" : "Excess";
+    }
+
     private static String text(String value) { return value == null ? "" : value.trim(); }
     private static BigDecimal nonNegative(BigDecimal value) { BigDecimal result = Objects.requireNonNull(value); if (result.signum() < 0) throw new IllegalArgumentException("quantity must not be negative"); return result; }
 }

@@ -1159,7 +1159,7 @@ public class StockService {
             }
             receivable.addItem(new StockReceivableItem(
                     sku, itemRequest.invoiceQuantity(), itemRequest.receivedQuantity(),
-                    itemRequest.condition(), itemRequest.note()
+                    itemRequest.note()
             ));
         }
         StockReceivable saved = receivableRepository.save(receivable);

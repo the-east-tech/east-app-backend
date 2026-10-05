@@ -475,7 +475,6 @@ Content-Type: application/json
       "skuId": "{{skuId}}",
       "invoiceQuantity": 10,
       "receivedQuantity": 10,
-      "condition": "Good",
       "note": ""
     }
   ]
