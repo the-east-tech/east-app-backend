@@ -727,10 +727,6 @@ public class StockService {
         addChange(details, "Recovery", previous.getRecoveryPercent(), proposed.recoveryPercent());
         addChange(details, "Minimum price", previous.getMinimumPriceRm(), proposed.minimumPriceRm());
         addChange(details, "Maximum price", previous.getMaximumPriceRm(), proposed.maximumPriceRm());
-        addChange(details, "Suppliers", previous.getSuppliers().stream().map(StockSupplier::getId)
-                .map(UUID::toString).sorted().toList(),
-                proposed.supplierIds() == null ? List.of() : proposed.supplierIds().stream()
-                        .map(UUID::toString).sorted().toList());
         if (!importBalance) {
             addChange(details, "Assigned staff", previous.getAssignedStaffNames(), proposed.assignedStaffNames());
         }
