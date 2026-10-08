@@ -10,7 +10,7 @@ public class ErrorReportProperties {
     private String apiKey = "";
     private String apiUrl = "https://api.resend.com/emails";
     private String recipient = "";
-    private String from = "EastApp <onboarding@resend.dev>";
+    private String from = "Flow <onboarding@resend.dev>";
     private long duplicateWindowSeconds = 300;
 
     public boolean isEnabled() { return enabled; }

@@ -310,13 +310,13 @@ public class UserAccountService {
         loginIdentityRepository.findByPhoneE164(normalised)
                 .filter(existing -> !existing.getId().equals(identityId))
                 .ifPresent(existing -> {
-                    throw conflict("PHONE_ALREADY_USED", "This phone number belongs to another EastApp identity.");
+                    throw conflict("PHONE_ALREADY_USED", "This phone number belongs to another Flow identity.");
                 });
     }
 
     private LoginIdentity reuseIdentity(LoginIdentity identity, CreateUserRequest request, UUID tenantId) {
         if (!identity.isActive()) {
-            throw conflict("IDENTITY_INACTIVE", "This person's EastApp identity is inactive.");
+            throw conflict("IDENTITY_INACTIVE", "This person's Flow identity is inactive.");
         }
         if (userAccountRepository.existsByIdentity_IdAndTenant_Id(identity.getId(), tenantId)) {
             throw conflict("USER_ALREADY_IN_BUSINESS", "This person already has an employee ID in the current business.");

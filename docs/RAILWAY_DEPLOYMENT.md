@@ -1,6 +1,6 @@
-# EastApp Railway deployment — disposable development database
+# Flow Railway deployment — disposable development database
 
-EastApp currently treats development data as disposable. While
+Flow currently treats development data as disposable. While
 `EASTAPP_DATABASE_RESET_ON_START=true`, every backend startup cleans the database,
 applies the single Flyway V1, then creates development users from one private JSON list.
 

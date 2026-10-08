@@ -10,9 +10,9 @@
     </parent>
     <groupId>com.eastapp</groupId>
     <artifactId>east-app</artifactId>
-    <version>0.0.163-SNAPSHOT</version>
-    <name>east-app</name>
-    <description>east-app</description>
+    <version>0.0.164-SNAPSHOT</version>
+    <name>Flow backend</name>
+    <description>Flow operations backend</description>
     <url/>
     <licenses>
         <license/>

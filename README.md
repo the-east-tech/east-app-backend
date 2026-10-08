@@ -1,6 +1,6 @@
-# EastApp Backend
+# Flow Backend
 
-Backend API for **EastApp**, a multi-business operations application covering identity, access control, attendance, stock, knowledge, points, tenants and Google business locations.
+Backend API for **Flow**, a multi-business operations application covering identity, access control, attendance, stock, knowledge, points, tenants and Google business locations.
 
 ## Current development model
 
@@ -136,17 +136,17 @@ EASTAPP_CLOUDFLARE_ACCOUNT_ID=<Cloudflare account ID>
 EASTAPP_CLOUDFLARE_API_TOKEN=<Workers AI token>
 ```
 
-When the provider is disabled or its credentials are absent, EastApp can still reuse stored translations. A cache miss returns a provider-disabled response without calling Cloudflare.
+When the provider is disabled or its credentials are absent, Flow can still reuse stored translations. A cache miss returns a provider-disabled response without calling Cloudflare.
 
 ### Error reporting email
 
-EastApp sends user-confirmed frontend reports and automatic unhandled backend reports through the Resend HTTPS API. The recipient address and API key stay on the backend and are never returned to Flutter.
+Flow sends user-confirmed frontend reports and automatic unhandled backend reports through the Resend HTTPS API. The recipient address and API key stay on the backend and are never returned to Flutter.
 
 ```text
 EASTAPP_ERROR_REPORT_ENABLED=true
 EASTAPP_RESEND_API_KEY=<Resend API key>
 EASTAPP_ERROR_REPORT_RECIPIENT=<private recipient address>
-EASTAPP_ERROR_REPORT_FROM=EastApp <onboarding@resend.dev>
+EASTAPP_ERROR_REPORT_FROM=Flow <onboarding@resend.dev>
 ```
 
 Use `onboarding@resend.dev` while testing with the Resend account owner address. Use a sender on a verified Resend domain when sending to other recipients. `EASTAPP_RESEND_API_URL` and `EASTAPP_ERROR_REPORT_DUPLICATE_WINDOW_SECONDS` are optional.
@@ -167,7 +167,7 @@ Use `onboarding@resend.dev` while testing with the Resend account owner address.
 - Place details and coordinates
 - Google Maps URL
 - Google rating and review count
-- Tenant-specific rating display in EastApp
+- Tenant-specific rating display in Flow
 - Configurable rating cache
 
 The current development shortcut keeps the Google Places server key in one Java constant:
@@ -234,7 +234,7 @@ Expected response:
 On an empty database:
 
 1. Start the backend
-2. Open EastApp Flutter
+2. Open Flow Flutter
 3. Copy the Setup Code from the one-time popup
 4. Complete Initial Setup using the copied code
 5. Select the tenant's Google business location
@@ -300,7 +300,7 @@ Authenticated endpoints use:
 Authorization: Bearer <opaque-session-token>
 ```
 
-EastApp currently uses opaque session tokens rather than JWT.
+Flow currently uses opaque session tokens rather than JWT.
 
 ## Access summary
 
@@ -334,11 +334,11 @@ No Redis or general backend data cache is added at this stage.
 - Translation uses PostgreSQL rather than Redis so identical tenant content survives restarts and does not consume AI again
 - Flutter caches tenant and authentication-context lists in memory for five minutes and invalidates them after tenant, user, login/logout or context changes
 - Consider Caffeine first when repeated backend computation becomes measurable
-- Consider Redis only when EastApp runs multiple backend instances or requires shared distributed cache/session behaviour
+- Consider Redis only when Flow runs multiple backend instances or requires shared distributed cache/session behaviour
 
 ## Database and Flyway
 
-EastApp `v106` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
+Flow `v106` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
 
 1. Code gate: `DATABASE_RESET_ALLOWED_BY_CODE`
 2. Environment gate: `EASTAPP_DATABASE_RESET_ON_START`
@@ -413,7 +413,7 @@ EASTAPP_CLOUDFLARE_API_TOKEN=<Workers AI token>
 EASTAPP_ERROR_REPORT_ENABLED=true
 EASTAPP_RESEND_API_KEY=<Resend API key>
 EASTAPP_ERROR_REPORT_RECIPIENT=<private recipient address>
-EASTAPP_ERROR_REPORT_FROM=EastApp <onboarding@resend.dev>
+EASTAPP_ERROR_REPORT_FROM=Flow <onboarding@resend.dev>
 ```
 
 Datasource variables should reference the Railway PostgreSQL service:

@@ -1,4 +1,4 @@
-# EastApp Backend Rules
+# Flow Backend Rules
 
 ## Execution
 
@@ -18,6 +18,13 @@
 - If that PR is merged or closed, always create a new branch from the latest `main` and open a new PR. Never reuse its old branch.
 - A different task gets one new branch and one PR. Never create branches or commits per file, attempt or minor correction.
 - Default delivery is a feature branch plus PR. Never push directly to `main`, merge, deploy or reset a database unless explicitly requested.
+
+## Brand identity
+
+- Customer-facing product name is `Flow`.
+- Parent company is `Sequosal`; keep it in publisher/company metadata, not Flow user-facing messages.
+- Never expose `EastApp`, `Nic's Kitchen`, or a tenant name as product branding.
+- Keep legacy package names, environment keys, headers and database identifiers where renaming would break compatibility.
 
 ## Scope
 
@@ -45,7 +52,7 @@
 
 - Git/PR is the default. Create a ZIP only when explicitly requested; do not provide both unless requested.
 - ZIP delivery does not create a branch, commit or PR unless explicitly requested.
-- Name it `east_app_vNNN_src.zip`.
+- Name it `flow_vNNN_src.zip`.
 - The ZIP is extracted at the project root. Do not add a wrapper directory inside it.
 - Include every changed top-level folder as its complete final tree so macOS Finder Replace does not remove unchanged files. Include required changed root files individually.
 - Omit unchanged root files, generated files, caches and unrelated content.

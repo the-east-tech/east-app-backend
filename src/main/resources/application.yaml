@@ -41,7 +41,7 @@ eastapp:
     api-key: ${EASTAPP_RESEND_API_KEY:}
     api-url: ${EASTAPP_RESEND_API_URL:https://api.resend.com/emails}
     recipient: ${EASTAPP_ERROR_REPORT_RECIPIENT:}
-    from: ${EASTAPP_ERROR_REPORT_FROM:EastApp <onboarding@resend.dev>}
+    from: ${EASTAPP_ERROR_REPORT_FROM:Flow <onboarding@resend.dev>}
     duplicate-window-seconds: ${EASTAPP_ERROR_REPORT_DUPLICATE_WINDOW_SECONDS:300}
 
   database:
