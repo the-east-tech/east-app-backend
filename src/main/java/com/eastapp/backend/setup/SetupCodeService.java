@@ -48,7 +48,7 @@ public class SetupCodeService {
                 code,
                 Timestamp.from(expiresAt)
         );
-        log.warn("EastApp initial setup code: {} (valid for 1 hour)", code);
+        log.warn("Flow initial setup code: {} (valid for 1 hour)", code);
         return new ActiveSetupCode(code, expiresAt);
     }
 

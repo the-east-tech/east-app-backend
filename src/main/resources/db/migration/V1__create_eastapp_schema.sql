@@ -1,5 +1,5 @@
--- EastApp clean reset-per-release schema (v146).
--- This V1 contains the complete schema for a brand-new EastApp database.
+-- Flow clean reset-per-release schema (v146).
+-- This V1 contains the complete schema for a brand-new Flow database.
 -- While the reset-per-release policy is active, merge every schema change into
 -- this file, keep V1 as the only migration, and reset the database each release.
 -- PostgreSQL owns only structural integrity: keys, relationships and essential

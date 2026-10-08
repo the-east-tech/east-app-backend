@@ -50,7 +50,7 @@ public class FirebasePushGateway {
         Message message = Message.builder()
                 .setToken(token)
                 .setNotification(Notification.builder()
-                        .setTitle("EastApp · " + event.getModule())
+                        .setTitle("Flow · " + event.getModule())
                         .setBody(event.summary())
                         .build())
                 .setAndroidConfig(AndroidConfig.builder()

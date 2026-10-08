@@ -65,7 +65,7 @@ public class InitialSetupService {
         if (isSetupRequired()) {
             setupCodeService.ensureActiveCode();
         } else {
-            log.info("EastApp initial setup is already complete");
+            log.info("Flow initial setup is already complete");
         }
     }
 
@@ -154,7 +154,7 @@ public class InitialSetupService {
         );
 
         setupCodeService.invalidate();
-        log.info("EastApp initial setup completed businessCode={} employeeId={}",
+        log.info("Flow initial setup completed businessCode={} employeeId={}",
                 provisioned.tenant().getCompanyCode(), provisioned.creator().getEmployeeId());
         return new CompleteInitialSetupResponse(
                 AdminLogin.COMPANY_ID,

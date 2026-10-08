@@ -46,7 +46,7 @@ public class ErrorReportService {
     public void sendUserReport(AuthenticatedUser principal, ErrorReportRequest request) {
         requireConfigured();
         String body = """
-                EastApp user error report
+                Flow user error report
 
                 Received: %s
                 Reporter: %s (%s)
@@ -69,7 +69,7 @@ public class ErrorReportService {
                 request.debugReport().trim()
         );
         try {
-            send("[EastApp User Error] " + request.reference().trim(), body);
+            send("[Flow User Error] " + request.reference().trim(), body);
         } catch (RuntimeException exception) {
             log.error("User error report email failed reference={}", request.reference(), exception);
             ApiException apiException = new ApiException(
@@ -97,9 +97,9 @@ public class ErrorReportService {
         Thread.startVirtualThread(() -> {
             try {
                 send(
-                        "[EastApp System Error] " + cleanSubject(source),
+                        "[Flow System Error] " + cleanSubject(source),
                         limit("""
-                                EastApp automatic system error report
+                                Flow automatic system error report
 
                                 Occurred: %s
                                 Source: %s
