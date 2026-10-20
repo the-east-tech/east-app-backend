@@ -1,6 +1,7 @@
 package com.eastapp.backend.activity.service;
 
 import com.eastapp.backend.activity.ActivityEvent;
+import com.eastapp.backend.activity.PushDevice;
 import com.eastapp.backend.activity.UserNotification;
 import com.eastapp.backend.activity.config.NotificationProperties;
 import com.eastapp.backend.support.service.ErrorReportService;
@@ -44,11 +45,11 @@ public class FirebasePushGateway {
         return properties.canQueuePush();
     }
 
-    public Result send(UserNotification userNotification, String token) {
+    public Result send(UserNotification userNotification, PushDevice device) {
         if (!isEnabled()) return Result.RETRYABLE_FAILURE;
         ActivityEvent event = userNotification.getActivityEvent();
         Message message = Message.builder()
-                .setToken(token)
+                .setToken(device.getToken())
                 .setNotification(Notification.builder()
                         .setTitle("Flow · " + event.getModule())
                         .setBody(event.summary())
@@ -74,16 +75,43 @@ public class FirebasePushGateway {
             return Result.SENT;
         } catch (FirebaseMessagingException exception) {
             MessagingErrorCode code = exception.getMessagingErrorCode();
-            if (code == MessagingErrorCode.UNREGISTERED
-                    || code == MessagingErrorCode.INVALID_ARGUMENT) {
+            if (code == MessagingErrorCode.SENDER_ID_MISMATCH) {
+                errorReportService.reportSystemErrorAlways(
+                        pushDeliverySource(device, code),
+                        exception
+                );
+            } else if (shouldReport(code)) {
+                errorReportService.reportSystemError(pushDeliverySource(device, code), exception);
+            }
+            if (isInvalidToken(code)) {
                 return Result.INVALID_TOKEN;
             }
-            errorReportService.reportSystemError("Firebase push delivery", exception);
             return Result.RETRYABLE_FAILURE;
         } catch (RuntimeException | IOException exception) {
-            errorReportService.reportSystemError("Firebase push delivery", exception);
+            errorReportService.reportSystemError(pushDeliverySource(device, null), exception);
             return Result.RETRYABLE_FAILURE;
         }
+    }
+
+    static boolean isInvalidToken(MessagingErrorCode code) {
+        return code == MessagingErrorCode.UNREGISTERED
+                || code == MessagingErrorCode.INVALID_ARGUMENT
+                || code == MessagingErrorCode.SENDER_ID_MISMATCH;
+    }
+
+    static boolean shouldReport(MessagingErrorCode code) {
+        return code != MessagingErrorCode.UNREGISTERED;
+    }
+
+    static String pushDeliverySource(PushDevice device, MessagingErrorCode code) {
+        String error = code == MessagingErrorCode.SENDER_ID_MISMATCH
+                ? ": sender ID mismatch"
+                : "";
+        return "Firebase push delivery" + error
+                + " | Flow " + device.getAppVersion()
+                + " | " + device.getPlatform()
+                + " | userId=" + device.getUserId()
+                + " | deviceId=" + device.getId();
     }
 
     private FirebaseMessaging messaging() throws IOException {

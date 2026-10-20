@@ -17,6 +17,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "push_devices")
 public class PushDevice {
+    public static final String LEGACY_APP_VERSION = "legacy build (version not reported)";
+
     @Id
     @Generated
     @ColumnDefault("uuidv7()")
@@ -37,6 +39,9 @@ public class PushDevice {
 
     @Column(nullable = false, length = 16)
     private String platform;
+
+    @Column(name = "app_version", nullable = false, length = 40)
+    private String appVersion;
 
     @Column(nullable = false)
     private boolean active = true;
@@ -61,9 +66,10 @@ public class PushDevice {
             UUID sessionId,
             String token,
             String platform,
+            String appVersion,
             Instant now
     ) {
-        reassign(tenantId, userId, sessionId, platform, now);
+        reassign(tenantId, userId, sessionId, platform, appVersion, now);
         this.token = requireText(token, "token");
     }
 
@@ -73,6 +79,7 @@ public class PushDevice {
     public UUID getSessionId() { return sessionId; }
     public String getToken() { return token; }
     public String getPlatform() { return platform; }
+    public String getAppVersion() { return appVersion; }
     public boolean isActive() { return active; }
     public Instant getLastSeenAt() { return lastSeenAt; }
 
@@ -81,12 +88,16 @@ public class PushDevice {
             UUID userId,
             UUID sessionId,
             String platform,
+            String appVersion,
             Instant now
     ) {
         this.tenantId = Objects.requireNonNull(tenantId, "tenantId must not be null");
         this.userId = Objects.requireNonNull(userId, "userId must not be null");
         this.sessionId = Objects.requireNonNull(sessionId, "sessionId must not be null");
         this.platform = requireText(platform, "platform").toUpperCase(Locale.ROOT);
+        this.appVersion = appVersion == null || appVersion.isBlank()
+                ? LEGACY_APP_VERSION
+                : requireText(appVersion, "appVersion");
         this.lastSeenAt = Objects.requireNonNull(now, "now must not be null");
         this.active = true;
     }

@@ -83,16 +83,26 @@ public class ErrorReportService {
     }
 
     public void reportSystemError(String source, Throwable error) {
+        reportSystemError(source, error, true);
+    }
+
+    public void reportSystemErrorAlways(String source, Throwable error) {
+        reportSystemError(source, error, false);
+    }
+
+    private void reportSystemError(String source, Throwable error, boolean suppressDuplicates) {
         if (!properties.isConfigured()) {
             log.error("System error email is not configured source={}", source, error);
             return;
         }
 
-        String fingerprint = source + '|' + error.getClass().getName() + '|' + rootMessage(error);
         Instant now = Instant.now();
-        Instant duplicateCutoff = now.minusSeconds(properties.getDuplicateWindowSeconds());
-        Instant previous = lastSystemReports.put(fingerprint, now);
-        if (previous != null && previous.isAfter(duplicateCutoff)) return;
+        if (suppressDuplicates) {
+            String fingerprint = source + '|' + error.getClass().getName() + '|' + rootMessage(error);
+            Instant duplicateCutoff = now.minusSeconds(properties.getDuplicateWindowSeconds());
+            Instant previous = lastSystemReports.put(fingerprint, now);
+            if (previous != null && previous.isAfter(duplicateCutoff)) return;
+        }
 
         Thread.startVirtualThread(() -> {
             try {

@@ -70,7 +70,7 @@ public class PushOutboxDispatcher {
             }
             FirebasePushGateway.Result result = pushGateway.send(
                     delivery.getNotification(),
-                    device.getToken()
+                    device
             );
             switch (result) {
                 case SENT -> delivery.sent(now);
