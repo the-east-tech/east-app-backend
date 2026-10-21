@@ -93,6 +93,7 @@ public class NotificationService {
                         principal.sessionId(),
                         token,
                         request.platform(),
+                        request.appVersion(),
                         now
                 ));
         device.reassign(
@@ -100,6 +101,7 @@ public class NotificationService {
                 principal.userId(),
                 principal.sessionId(),
                 request.platform(),
+                request.appVersion(),
                 now
         );
         deviceRepository.save(device);

@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Size;
 
 public record RegisterPushDeviceRequest(
         @NotBlank @Size(max = 2048) String token,
-        @NotBlank @Pattern(regexp = "ANDROID|IOS") String platform
+        @NotBlank @Pattern(regexp = "ANDROID|IOS") String platform,
+        @Size(max = 40) String appVersion
 ) {
 }
