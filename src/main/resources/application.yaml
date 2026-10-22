@@ -36,6 +36,16 @@ management:
 
 
 eastapp:
+  app-version:
+    android:
+      latest-version: ${EASTAPP_APP_VERSION_ANDROID_LATEST_VERSION:1.0.1}
+      latest-build-number: ${EASTAPP_APP_VERSION_ANDROID_LATEST_BUILD_NUMBER:4}
+      update-url: ${EASTAPP_APP_VERSION_ANDROID_UPDATE_URL:https://play.google.com/store/apps/details?id=com.sequosal.flow}
+    ios:
+      latest-version: ${EASTAPP_APP_VERSION_IOS_LATEST_VERSION:1.0.1}
+      latest-build-number: ${EASTAPP_APP_VERSION_IOS_LATEST_BUILD_NUMBER:4}
+      update-url: ${EASTAPP_APP_VERSION_IOS_UPDATE_URL:}
+
   error-report:
     enabled: ${EASTAPP_ERROR_REPORT_ENABLED:false}
     api-key: ${EASTAPP_RESEND_API_KEY:}
