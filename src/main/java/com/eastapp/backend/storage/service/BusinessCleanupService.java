@@ -505,7 +505,7 @@ public class BusinessCleanupService {
         try (ByteArrayOutputStream output = new ByteArrayOutputStream();
              ZipOutputStream zip = new ZipOutputStream(output, StandardCharsets.UTF_8)) {
             Map<String, Object> manifest = new LinkedHashMap<>();
-            manifest.put("format", "EASTAPP_BUSINESS_BACKUP");
+            manifest.put("format", "FLOW_BUSINESS_BACKUP");
             manifest.put("formatVersion", 1);
             manifest.put("runId", runId);
             manifest.put("tenantId", principal.tenantId());

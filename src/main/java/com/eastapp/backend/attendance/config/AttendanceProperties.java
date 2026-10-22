@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 import java.time.ZoneId;
 
 @Component
-@ConfigurationProperties(prefix = "eastapp.attendance")
+@ConfigurationProperties(prefix = "flow.attendance")
 public class AttendanceProperties {
 
     private String timeZone = "Asia/Kuala_Lumpur";

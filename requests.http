@@ -1,17 +1,17 @@
-### EastApp API requests
+### Flow API requests
 ### IntelliJ HTTP Client file. Run Initial setup once on an empty database, then run Login.
-### Login stores eastappToken automatically.
+### Login stores flowToken automatically.
 
 @baseUrl = http://localhost:8080
 @googlePlaceId = REPLACE_WITH_GOOGLE_PLACE_ID
-@companyCode = EAST
-@businessName = The East
+@companyCode = FLOW
+@businessName = Flow Demo
 @employeeIdPrefix = E
 @setupCode = ABCDE23456
 @setupPhoneE164 = +60123456789
 @setupPassword = change-me
 @employeeId = E0001
-@password = {{$processEnv EASTAPP_HTTP_PASSWORD}}
+@password = {{$processEnv FLOW_HTTP_PASSWORD}}
 @anchorDate = 2026-07-26
 @fromDate = 2026-07-01
 @toDate = 2026-07-31
@@ -69,24 +69,24 @@ Content-Type: application/json
 }
 
 > {%
-  client.global.set("eastappToken", response.body.token);
+  client.global.set("flowToken", response.body.token);
 %}
 
 ### Current session
 GET {{baseUrl}}/api/v1/auth/me
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Logout
 POST {{baseUrl}}/api/v1/auth/logout
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Available business contexts — Owner only
 GET {{baseUrl}}/api/v1/auth/contexts
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Switch business context — Owner only
 POST {{baseUrl}}/api/v1/auth/context
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -95,11 +95,11 @@ Content-Type: application/json
 
 ### Current business details — Owner or Head; always active context only
 GET {{baseUrl}}/api/v1/tenants
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Create tenant and assign every existing Owner — Owner only
 POST {{baseUrl}}/api/v1/tenants
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -111,7 +111,7 @@ Content-Type: application/json
 
 ### Update active business — Owner only; switch context before editing another business
 PATCH {{baseUrl}}/api/v1/tenants/{{tenantId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -122,16 +122,16 @@ Content-Type: application/json
 
 ### Search users — paged, active only, optional visible role filter
 GET {{baseUrl}}/api/v1/users?search=&active=true&role=MANAGER&page=0&size=20
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Get user
 GET {{baseUrl}}/api/v1/users/{{userId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Create user in active business — Owner / Head / Manager, limited by role hierarchy
-### Password may be null only when phoneE164 already belongs to an existing EastApp identity.
+### Password may be null only when phoneE164 already belongs to an existing Flow identity.
 POST {{baseUrl}}/api/v1/users
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -147,7 +147,7 @@ Content-Type: application/json
 
 ### Update user
 PATCH {{baseUrl}}/api/v1/users/{{userId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -163,7 +163,7 @@ Content-Type: application/json
 
 ### Reset user password
 PUT {{baseUrl}}/api/v1/users/{{userId}}/password
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -172,19 +172,19 @@ Content-Type: application/json
 
 ### List fixed visible roles for current tenant
 GET {{baseUrl}}/api/v1/roles
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Lightweight assignable fixed roles for Create User — active business only, no usage counts
 GET {{baseUrl}}/api/v1/roles/assignable
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Attendance today — loaded only when Attendance → Check In / Out is opened
 GET {{baseUrl}}/api/v1/attendance/today
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Generate 30-minute Check In QR — Owner / Head / Manager only
 POST {{baseUrl}}/api/v1/attendance/qr-codes
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -195,7 +195,7 @@ Content-Type: application/json
 
 ### Generate 30-minute Check Out QR — Owner / Head / Manager only
 POST {{baseUrl}}/api/v1/attendance/qr-codes
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -208,7 +208,7 @@ Content-Type: application/json
 # Backend determines the next legal daily event.
 # Use a Check In QR when no event exists today, or a Check Out QR after Check In.
 POST {{baseUrl}}/api/v1/attendance/events
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -220,28 +220,28 @@ Content-Type: application/json
   "qrPayload": "{{attendanceCheckInQrPayload}}",
   "devicePlatform": "ANDROID",
   "deviceOsVersion": "Android",
-  "appVersion": "east_app_v300"
+  "appVersion": "flow_v300"
 }
 
 ### Tenant-wide attendance audit
 GET {{baseUrl}}/api/v1/attendance/audit?period=DAY&anchor={{anchorDate}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Employee-specific attendance audit — deferred and paged
 GET {{baseUrl}}/api/v1/attendance/users/{{userId}}?period=MONTH&anchor={{anchorDate}}&page=0&size=20
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Stock snapshot
 GET {{baseUrl}}/api/v1/stock/snapshot
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### List source SKUs for cross-business copy — Owner only
 GET {{baseUrl}}/api/v1/stock/skus/copy-source?tenantId={{tenantId}}&search=&active=true&page=0&size=50
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Copy selected SKUs, tags and suppliers into current tenant — Owner only
 POST {{baseUrl}}/api/v1/stock/skus/copy
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -251,11 +251,11 @@ Content-Type: application/json
 
 ### List stock tags — paged
 GET {{baseUrl}}/api/v1/stock/tags?search=&page=0&size=50
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Create stock tag
 POST {{baseUrl}}/api/v1/stock/tags
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -265,7 +265,7 @@ Content-Type: application/json
 
 ### Update stock tag
 PATCH {{baseUrl}}/api/v1/stock/tags/{{tagId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -275,15 +275,15 @@ Content-Type: application/json
 
 ### Delete stock tag
 DELETE {{baseUrl}}/api/v1/stock/tags/{{tagId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### List suppliers — paged
 GET {{baseUrl}}/api/v1/stock/suppliers?search=&page=0&size=50
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Create supplier
 POST {{baseUrl}}/api/v1/stock/suppliers
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -304,7 +304,7 @@ Content-Type: application/json
 
 ### Update supplier
 PATCH {{baseUrl}}/api/v1/stock/suppliers/{{supplierId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -325,11 +325,11 @@ Content-Type: application/json
 
 ### Delete supplier
 DELETE {{baseUrl}}/api/v1/stock/suppliers/{{supplierId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Update supplier balance
 PATCH {{baseUrl}}/api/v1/stock/suppliers/{{supplierId}}/balance
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -338,28 +338,28 @@ Content-Type: application/json
 
 ### Upload SKU thumbnail
 POST {{baseUrl}}/api/v1/stock/media/sku-thumbnails
-Authorization: Bearer {{eastappToken}}
-Content-Type: multipart/form-data; boundary=EastAppBoundary
+Authorization: Bearer {{flowToken}}
+Content-Type: multipart/form-data; boundary=FlowBoundary
 
---EastAppBoundary
+--FlowBoundary
 Content-Disposition: form-data; name="file"; filename="sku-thumbnail.jpg"
 Content-Type: image/jpeg
 
 < {{thumbnailFile}}
---EastAppBoundary--
+--FlowBoundary--
 
 ### Download SKU thumbnail
 GET {{baseUrl}}/api/v1/stock/media/sku-thumbnails/{{thumbnailKey}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Accept: image/jpeg,image/png
 
 ### List SKUs — paged
 GET {{baseUrl}}/api/v1/stock/skus?search=&active=true&assigned=true&page=0&size=50
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Create SKU
 POST {{baseUrl}}/api/v1/stock/skus
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -385,7 +385,7 @@ Content-Type: application/json
 
 ### Update SKU
 PATCH {{baseUrl}}/api/v1/stock/skus/{{skuId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -411,7 +411,7 @@ Content-Type: application/json
 
 ### Update SKU balance
 PATCH {{baseUrl}}/api/v1/stock/skus/{{skuId}}/balance
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -420,15 +420,15 @@ Content-Type: application/json
 
 ### List my stock counts — paged
 GET {{baseUrl}}/api/v1/stock/counts?mine=true&from={{fromDate}}&to={{toDate}}&page=0&size=50
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### List review stock counts — paged
 GET {{baseUrl}}/api/v1/stock/counts?mine=false&reviewStatus=Pending%20Review&from={{fromDate}}&to={{toDate}}&page=0&size=50
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Submit daily stock count
 POST {{baseUrl}}/api/v1/stock/counts
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -448,7 +448,7 @@ Content-Type: application/json
 
 ### Review stock count
 PATCH {{baseUrl}}/api/v1/stock/counts/{{countId}}/review
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -458,11 +458,11 @@ Content-Type: application/json
 
 ### List receiving records — paged
 GET {{baseUrl}}/api/v1/stock/receivings?reviewStatus=Pending%20Review&from={{fromDate}}&to={{toDate}}&page=0&size=50
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Submit receiving
 POST {{baseUrl}}/api/v1/stock/receivings
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -482,7 +482,7 @@ Content-Type: application/json
 
 ### Review receiving
 PATCH {{baseUrl}}/api/v1/stock/receivings/{{receivingId}}/review
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -492,31 +492,31 @@ Content-Type: application/json
 
 ### Stock audit — full tenant trail for Owner or Head
 GET {{baseUrl}}/api/v1/stock/audit?from={{fromDate}}&to={{toDate}}&mine=false&page=0&size=50
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Stock audit — current logged-in user's five latest activities for Home
 GET {{baseUrl}}/api/v1/stock/audit?from={{fromDate}}&to={{toDate}}&mine=true&page=0&size=5
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Today's combined Daily Count and Receiving review summary — Owner, Head or Manager
 GET {{baseUrl}}/api/v1/stock/reviews/today-summary
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### List Knowledge SOPs for active business
 GET {{baseUrl}}/api/v1/knowledge/sops?search=&page=0&size=50
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### List Knowledge SOPs by Stock tag
 GET {{baseUrl}}/api/v1/knowledge/sops?tagId={{tagId}}&page=0&size=50
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Get Knowledge SOP
 GET {{baseUrl}}/api/v1/knowledge/sops/{{sopId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Create Knowledge SOP — Owner, Head or Manager only
 POST {{baseUrl}}/api/v1/knowledge/sops
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -530,7 +530,7 @@ Content-Type: application/json
 
 ### Create and link the Myanmar video to an existing English SOP — Owner, Head or Manager only
 POST {{baseUrl}}/api/v1/knowledge/sops
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -545,7 +545,7 @@ Content-Type: application/json
 
 ### Update Knowledge SOP — shared fields update every linked version; video/language update this version only
 PUT {{baseUrl}}/api/v1/knowledge/sops/{{sopId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -559,7 +559,7 @@ Content-Type: application/json
 
 ### Delete multiple Knowledge SOP groups — linked language versions are deleted together
 POST {{baseUrl}}/api/v1/knowledge/sops/bulk-delete
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -568,11 +568,11 @@ Content-Type: application/json
 
 ### Translation provider status
 GET {{baseUrl}}/api/v1/translations/status
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Translation cost preview — database cache check only; never calls Cloudflare
 POST {{baseUrl}}/api/v1/translations/preview
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -586,7 +586,7 @@ Content-Type: application/json
 
 ### Translate user content — the companion language is cached in the same request
 POST {{baseUrl}}/api/v1/translations
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -610,25 +610,25 @@ Accept: application/json
 ### Google Places - authenticated autocomplete (Owner/Head)
 GET {{baseUrl}}/api/v1/google-places/autocomplete?query=June%20Coffee
 Accept: application/json
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Google Places - authenticated details (Owner/Head)
 GET {{baseUrl}}/api/v1/google-places/details/{{googlePlaceId}}
 Accept: application/json
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Google rating for current business
 GET {{baseUrl}}/api/v1/google-places/current-rating
 Accept: application/json
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Current-business leaderboard — active users only; competition ranking for ties
 GET {{baseUrl}}/api/v1/points/leaderboard
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Add points — Owner or Head only; pointsDelta must be 1 to 10
 POST {{baseUrl}}/api/v1/points/adjustments
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -639,7 +639,7 @@ Content-Type: application/json
 
 ### Deduct points — Owner or Head only; pointsDelta must be -1 to -10
 POST {{baseUrl}}/api/v1/points/adjustments
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -651,37 +651,37 @@ Content-Type: application/json
 
 ### Report dashboard — current business; staff responses are privacy-reduced
 GET {{baseUrl}}/api/v1/reports/dashboard?days=7
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Upload report evidence photo
 POST {{baseUrl}}/api/v1/reports/media
-Authorization: Bearer {{eastappToken}}
-Content-Type: multipart/form-data; boundary=EastAppReportBoundary
+Authorization: Bearer {{flowToken}}
+Content-Type: multipart/form-data; boundary=FlowReportBoundary
 
---EastAppReportBoundary
+--FlowReportBoundary
 Content-Disposition: form-data; name="file"; filename="report-photo.jpg"
 Content-Type: image/jpeg
 
 < {{reportPhotoFile}}
---EastAppReportBoundary--
+--FlowReportBoundary--
 
 ### Download report evidence photo for the active business
 GET {{baseUrl}}/api/v1/reports/media/{{reportMediaKey}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Accept: image/jpeg,image/png
 
 ### List submitted Sales reports for a selected date range — management only; maximum 30 days
 GET {{baseUrl}}/api/v1/reports/sales/history?from={{fromDate}}&to={{toDate}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Read daily Sales report — management only
 GET {{baseUrl}}/api/v1/reports/sales?date={{reportDate}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Create or update daily Sales report — management only
 # foodDeliverySalesRm is the gross platform amount; 60% contributes to Total Sales.
 PUT {{baseUrl}}/api/v1/reports/sales
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -695,7 +695,7 @@ Content-Type: application/json
 
 ### Add Void Bill — any active user; photo key must belong to the logged-in uploader
 POST {{baseUrl}}/api/v1/reports/sales/void-bills
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -708,11 +708,11 @@ Content-Type: application/json
 
 ### Submit Sales report for approval — management only
 POST {{baseUrl}}/api/v1/reports/sales/{{reportId}}/submit
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Create Waste report — any active user
 POST {{baseUrl}}/api/v1/reports/waste
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -728,15 +728,15 @@ Content-Type: application/json
 
 ### List Waste reports
 GET {{baseUrl}}/api/v1/reports/waste?from={{fromDate}}&to={{toDate}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Read Daily Photos — omit userId for own batch; management may specify a user
 GET {{baseUrl}}/api/v1/reports/daily-photos?date={{reportDate}}&userId={{userId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Add Daily Photo — photo key must belong to the logged-in uploader
 POST {{baseUrl}}/api/v1/reports/daily-photos
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -746,19 +746,19 @@ Content-Type: application/json
 
 ### Submit Daily Photo batch after minimum evidence count
 POST {{baseUrl}}/api/v1/reports/daily-photos/{{reportId}}/submit
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Daily Task overview — Owner / Head / Manager see all; other roles see assigned Tags
 GET {{baseUrl}}/api/v1/daily-tasks/overview?date={{reportDate}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### List Daily Task templates — Owner / Head / Manager only
 GET {{baseUrl}}/api/v1/daily-tasks/templates
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Create Daily Task template — one shared record per active template and date
 POST {{baseUrl}}/api/v1/daily-tasks/templates
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -776,7 +776,7 @@ Content-Type: application/json
 
 ### Update Daily Task template — changes apply to future task records
 PATCH {{baseUrl}}/api/v1/daily-tasks/templates/{{dailyTaskTemplateId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -794,16 +794,16 @@ Content-Type: application/json
 
 ### Load shared Daily Task history — maximum 30 days; filters are optional
 GET {{baseUrl}}/api/v1/daily-tasks/records?dateFrom={{fromDate}}&dateTo={{toDate}}&tagId={{tagId}}&status=PENDING&submittedByMe=false
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Read one shared Daily Task record
 GET {{baseUrl}}/api/v1/daily-tasks/records/{{dailyTaskRecordId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Submit final Daily Task evidence in one operation
 ### Use every checklist item ID, comma-separated, and repeat the photos part for each final photo.
 POST {{baseUrl}}/api/v1/daily-tasks/records/{{dailyTaskRecordId}}/submit
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: multipart/form-data; boundary=DailyTaskBoundary
 
 --DailyTaskBoundary
@@ -819,7 +819,7 @@ Content-Type: image/jpeg
 
 ### Rate a submitted Daily Task — higher rank required, except unrestricted Owner
 POST {{baseUrl}}/api/v1/daily-tasks/records/{{dailyTaskRecordId}}/rate
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -829,7 +829,7 @@ Content-Type: application/json
 
 ### Create Complaint report — any active user
 POST {{baseUrl}}/api/v1/reports/complaints
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -846,11 +846,11 @@ Content-Type: application/json
 
 ### List Complaint reports
 GET {{baseUrl}}/api/v1/reports/complaints?from={{fromDate}}&to={{toDate}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Update Complaint resolution — management only
 PATCH {{baseUrl}}/api/v1/reports/complaints/{{reportId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -861,11 +861,11 @@ Content-Type: application/json
 
 ### Pending Report approvals — Owner, Head or Manager only
 GET {{baseUrl}}/api/v1/reports/approvals
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Approve Report — Owner, Head or Manager only; Manager cannot self-review
 POST {{baseUrl}}/api/v1/reports/{{reportId}}/review
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -875,7 +875,7 @@ Content-Type: application/json
 
 ### Reject Report — rejection reason is compulsory
 POST {{baseUrl}}/api/v1/reports/{{reportId}}/review
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -886,24 +886,24 @@ Content-Type: application/json
 
 ### Upload real Receiving photo — Owner, Head or Manager
 POST {{baseUrl}}/api/v1/stock/media/receiving-photos
-Authorization: Bearer {{eastappToken}}
-Content-Type: multipart/form-data; boundary=EastAppReceivingBoundary
+Authorization: Bearer {{flowToken}}
+Content-Type: multipart/form-data; boundary=FlowReceivingBoundary
 
---EastAppReceivingBoundary
+--FlowReceivingBoundary
 Content-Disposition: form-data; name="file"; filename="receiving-photo.jpg"
 Content-Type: image/jpeg
 
 < {{receivingPhotoFile}}
---EastAppReceivingBoundary--
+--FlowReceivingBoundary--
 
 ### Download Receiving photo for the active business
 GET {{baseUrl}}/api/v1/stock/media/receiving-photos/{{receivingPhotoKey}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Accept: image/jpeg,image/png
 
 ### Atomically approve selected Daily Count records — all succeed or none change
 PATCH {{baseUrl}}/api/v1/stock/counts/bulk-review
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -917,7 +917,7 @@ Content-Type: application/json
 
 ### Submit Daily Sales Directly (no draft step)
 POST {{baseUrl}}/api/v1/reports/sales/submit
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -932,15 +932,15 @@ Content-Type: application/json
 
 ### Active advertisements (all authenticated users)
 GET {{baseUrl}}/api/v1/advertisements/active
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Advertisement management list (Owner only)
 GET {{baseUrl}}/api/v1/advertisements
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 
 ### Create advertisement (Owner only)
 POST {{baseUrl}}/api/v1/advertisements
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -954,7 +954,7 @@ Content-Type: application/json
 
 ### Update advertisement (Owner only)
 PUT {{baseUrl}}/api/v1/advertisements/{{advertisementId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}
 Content-Type: application/json
 
 {
@@ -967,4 +967,4 @@ Content-Type: application/json
 
 ### Delete advertisement (Owner only)
 DELETE {{baseUrl}}/api/v1/advertisements/{{advertisementId}}
-Authorization: Bearer {{eastappToken}}
+Authorization: Bearer {{flowToken}}

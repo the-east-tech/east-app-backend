@@ -1,7 +1,7 @@
 # Flow Railway deployment — disposable development database
 
 Flow currently treats development data as disposable. While
-`EASTAPP_DATABASE_RESET_ON_START=true`, every backend startup cleans the database,
+`FLOW_DATABASE_RESET_ON_START=true`, every backend startup cleans the database,
 applies the single Flyway V1, then creates development users from one private JSON list.
 
 Flyway contains schema and non-personal reference data only. Jenssen, Nicky, and future
@@ -28,7 +28,7 @@ memberships need to change.
 ## 2. Local fresh run
 
 ```bash
-EASTAPP_DATABASE_RESET_ON_START=true ./scripts/run-local.sh
+FLOW_DATABASE_RESET_ON_START=true ./scripts/run-local.sh
 ```
 
 The backend resets local PostgreSQL only when its code gate is also enabled, applies Flyway V1, and bootstraps every user
@@ -46,7 +46,7 @@ In the Railway backend service, create one sealed/private variable and paste tha
 complete output as its value:
 
 ```text
-EASTAPP_BOOTSTRAP_USERS_JSON=<complete compact JSON>
+FLOW_BOOTSTRAP_USERS_JSON=<complete compact JSON>
 ```
 
 Required backend variables:
@@ -54,9 +54,9 @@ Required backend variables:
 ```text
 RAILPACK_JDK_VERSION=25
 SPRING_DOCKER_COMPOSE_ENABLED=false
-EASTAPP_DATABASE_RESET_ON_START=true
-EASTAPP_BOOTSTRAP_ENABLED=true
-EASTAPP_BOOTSTRAP_USERS_JSON=<sealed compact JSON>
+FLOW_DATABASE_RESET_ON_START=true
+FLOW_BOOTSTRAP_ENABLED=true
+FLOW_BOOTSTRAP_USERS_JSON=<sealed compact JSON>
 ```
 
 Datasource references:
@@ -68,7 +68,7 @@ SPRING_DATASOURCE_PASSWORD=${{Postgres.PGPASSWORD}}
 SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=5
 ```
 
-The backend gives `EASTAPP_BOOTSTRAP_USERS_JSON` precedence over the local file path,
+The backend gives `FLOW_BOOTSTRAP_USERS_JSON` precedence over the local file path,
 so Railway does not require a file upload.
 
 ## 4. Add or change users during development
@@ -76,7 +76,7 @@ so Railway does not require a file upload.
 1. Edit `config/bootstrap-users.local.json`.
 2. Run locally and verify login/context switching.
 3. Run `./scripts/print-railway-bootstrap-users.sh`.
-4. Replace the Railway `EASTAPP_BOOTSTRAP_USERS_JSON` value.
+4. Replace the Railway `FLOW_BOOTSTRAP_USERS_JSON` value.
 5. Redeploy the backend.
 
 Each user has one login identity and one or more business memberships. Passwords are
@@ -88,8 +88,8 @@ never written to Flyway, Git-tracked configuration, application logs, or changel
 Before retaining production data:
 
 ```text
-EASTAPP_DATABASE_RESET_ON_START=false
-EASTAPP_BOOTSTRAP_ENABLED=false
+FLOW_DATABASE_RESET_ON_START=false
+FLOW_BOOTSTRAP_ENABLED=false
 ```
 
 After that point, create normal employees through People → User and use append-only

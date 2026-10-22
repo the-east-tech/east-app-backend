@@ -15,13 +15,13 @@ public class DevelopmentDatabaseResetConfiguration {
 
     /*
      * A destructive reset is allowed only when BOTH this code gate and
-     * EASTAPP_DATABASE_RESET_ON_START are true. If either is false, data is preserved.
+     * FLOW_DATABASE_RESET_ON_START are true. If either is false, data is preserved.
      */
     private static final boolean DATABASE_RESET_ALLOWED_BY_CODE = true;
 
     @Bean
-    FlywayConfigurationCustomizer eastAppFlywayConfigurationCustomizer(
-            @Value("${eastapp.database.reset-on-start:false}") boolean resetOnStart
+    FlywayConfigurationCustomizer flowFlywayConfigurationCustomizer(
+            @Value("${flow.database.reset-on-start:false}") boolean resetOnStart
     ) {
         return configuration -> {
             // V1 is intentionally mutable during development. Do not let an old
@@ -34,19 +34,19 @@ public class DevelopmentDatabaseResetConfiguration {
     }
 
     @Bean
-    FlywayMigrationStrategy eastAppFlywayMigrationStrategy(
-            @Value("${eastapp.database.reset-on-start:false}") boolean resetOnStart
+    FlywayMigrationStrategy flowFlywayMigrationStrategy(
+            @Value("${flow.database.reset-on-start:false}") boolean resetOnStart
     ) {
         return flyway -> {
             if (databaseResetApproved(resetOnStart)) {
                 log.warn(
                         "Database reset approved by BOTH code gate and "
-                                + "EASTAPP_DATABASE_RESET_ON_START; deleting all database objects."
+                                + "FLOW_DATABASE_RESET_ON_START; deleting all database objects."
                 );
                 flyway.clean();
             } else {
                 log.info(
-                        "Database reset disabled (codeGate={}, EASTAPP_DATABASE_RESET_ON_START={}); "
+                        "Database reset disabled (codeGate={}, FLOW_DATABASE_RESET_ON_START={}); "
                                 + "preserving data.",
                         DATABASE_RESET_ALLOWED_BY_CODE,
                         resetOnStart

@@ -8,7 +8,7 @@ spring:
       max-file-size: 5MB
       max-request-size: 205MB
   application:
-    name: east-app
+    name: flow-backend
 
   docker:
     compose:
@@ -35,31 +35,31 @@ management:
         include: health
 
 
-eastapp:
+flow:
   app-version:
     android:
-      latest-version: ${EASTAPP_APP_VERSION_ANDROID_LATEST_VERSION:1.0.0}
-      latest-build-number: ${EASTAPP_APP_VERSION_ANDROID_LATEST_BUILD_NUMBER:6}
-      update-url: ${EASTAPP_APP_VERSION_ANDROID_UPDATE_URL:https://play.google.com/store/apps/details?id=com.sequosal.flow}
+      latest-version: ${FLOW_APP_VERSION_ANDROID_LATEST_VERSION:1.0.0}
+      latest-build-number: ${FLOW_APP_VERSION_ANDROID_LATEST_BUILD_NUMBER:7}
+      update-url: ${FLOW_APP_VERSION_ANDROID_UPDATE_URL:https://play.google.com/store/apps/details?id=com.sequosal.flow}
     ios:
-      latest-version: ${EASTAPP_APP_VERSION_IOS_LATEST_VERSION:1.0.0}
-      latest-build-number: ${EASTAPP_APP_VERSION_IOS_LATEST_BUILD_NUMBER:6}
-      update-url: ${EASTAPP_APP_VERSION_IOS_UPDATE_URL:}
+      latest-version: ${FLOW_APP_VERSION_IOS_LATEST_VERSION:1.0.0}
+      latest-build-number: ${FLOW_APP_VERSION_IOS_LATEST_BUILD_NUMBER:7}
+      update-url: ${FLOW_APP_VERSION_IOS_UPDATE_URL:}
 
   error-report:
-    enabled: ${EASTAPP_ERROR_REPORT_ENABLED:false}
-    api-key: ${EASTAPP_RESEND_API_KEY:}
-    api-url: ${EASTAPP_RESEND_API_URL:https://api.resend.com/emails}
-    recipient: ${EASTAPP_ERROR_REPORT_RECIPIENT:}
-    from: ${EASTAPP_ERROR_REPORT_FROM:Flow <onboarding@resend.dev>}
-    duplicate-window-seconds: ${EASTAPP_ERROR_REPORT_DUPLICATE_WINDOW_SECONDS:300}
+    enabled: ${FLOW_ERROR_REPORT_ENABLED:false}
+    api-key: ${FLOW_RESEND_API_KEY:}
+    api-url: ${FLOW_RESEND_API_URL:https://api.resend.com/emails}
+    recipient: ${FLOW_ERROR_REPORT_RECIPIENT:}
+    from: ${FLOW_ERROR_REPORT_FROM:Flow <onboarding@resend.dev>}
+    duplicate-window-seconds: ${FLOW_ERROR_REPORT_DUPLICATE_WINDOW_SECONDS:300}
 
   database:
     # Environment gate. A wipe also requires DATABASE_RESET_ALLOWED_BY_CODE=true.
-    reset-on-start: ${EASTAPP_DATABASE_RESET_ON_START:false}
+    reset-on-start: ${FLOW_DATABASE_RESET_ON_START:false}
 
   attendance:
-    time-zone: ${EASTAPP_ATTENDANCE_TIME_ZONE:Asia/Kuala_Lumpur}
+    time-zone: ${FLOW_ATTENDANCE_TIME_ZONE:Asia/Kuala_Lumpur}
 
   google-places:
     region-code: MY
@@ -67,20 +67,20 @@ eastapp:
     rating-cache-minutes: 60
 
   reports:
-    time-zone: ${EASTAPP_REPORT_TIME_ZONE:Asia/Kuala_Lumpur}
+    time-zone: ${FLOW_REPORT_TIME_ZONE:Asia/Kuala_Lumpur}
     daily-photo-minimum: 5
 
   notifications:
     # In-app notifications work without Firebase. Enable native push only after
     # the Firebase project and service credentials are configured in Railway.
-    push-enabled: ${EASTAPP_NOTIFICATION_PUSH_ENABLED:false}
-    firebase-project-id: ${EASTAPP_FIREBASE_PROJECT_ID:}
-    firebase-service-account-json: ${EASTAPP_FIREBASE_SERVICE_ACCOUNT_JSON:}
-    dispatch-delay-ms: ${EASTAPP_NOTIFICATION_DISPATCH_DELAY_MS:5000}
+    push-enabled: ${FLOW_NOTIFICATION_PUSH_ENABLED:false}
+    firebase-project-id: ${FLOW_FIREBASE_PROJECT_ID:}
+    firebase-service-account-json: ${FLOW_FIREBASE_SERVICE_ACCOUNT_JSON:}
+    dispatch-delay-ms: ${FLOW_NOTIFICATION_DISPATCH_DELAY_MS:5000}
 
   translation:
-    provider-enabled: ${EASTAPP_TRANSLATION_PROVIDER_ENABLED:false}
-    cloudflare-account-id: ${EASTAPP_CLOUDFLARE_ACCOUNT_ID:}
-    cloudflare-api-token: ${EASTAPP_CLOUDFLARE_API_TOKEN:}
+    provider-enabled: ${FLOW_TRANSLATION_PROVIDER_ENABLED:false}
+    cloudflare-account-id: ${FLOW_CLOUDFLARE_ACCOUNT_ID:}
+    cloudflare-api-token: ${FLOW_CLOUDFLARE_API_TOKEN:}
     model: "@cf/meta/m2m100-1.2b"
     maximum-parallel-requests: 6

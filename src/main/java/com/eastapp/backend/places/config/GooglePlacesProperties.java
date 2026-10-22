@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "eastapp.google-places")
+@ConfigurationProperties(prefix = "flow.google-places")
 public class GooglePlacesProperties {
 
     // Development setup: replace this single value with the Google Maps server key.

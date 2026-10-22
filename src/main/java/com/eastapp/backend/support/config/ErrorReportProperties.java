@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "eastapp.error-report")
+@ConfigurationProperties(prefix = "flow.error-report")
 public class ErrorReportProperties {
     private boolean enabled;
     private String apiKey = "";
