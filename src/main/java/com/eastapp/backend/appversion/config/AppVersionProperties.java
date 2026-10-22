@@ -31,8 +31,8 @@ public class AppVersionProperties {
     }
 
     public static class Release {
-        private String latestVersion = "1.0.1";
-        private long latestBuildNumber = 4;
+        private String latestVersion = "1.0.0";
+        private long latestBuildNumber = 5;
         private String updateUrl = "";
 
         public String getLatestVersion() {
