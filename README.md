@@ -131,9 +131,9 @@ Cross-business copying duplicates the selected SKUs together with their tags and
 Enable translation with:
 
 ```text
-EASTAPP_TRANSLATION_PROVIDER_ENABLED=true
-EASTAPP_CLOUDFLARE_ACCOUNT_ID=<Cloudflare account ID>
-EASTAPP_CLOUDFLARE_API_TOKEN=<Workers AI token>
+FLOW_TRANSLATION_PROVIDER_ENABLED=true
+FLOW_CLOUDFLARE_ACCOUNT_ID=<Cloudflare account ID>
+FLOW_CLOUDFLARE_API_TOKEN=<Workers AI token>
 ```
 
 When the provider is disabled or its credentials are absent, Flow can still reuse stored translations. A cache miss returns a provider-disabled response without calling Cloudflare.
@@ -143,13 +143,13 @@ When the provider is disabled or its credentials are absent, Flow can still reus
 Flow sends user-confirmed frontend reports and automatic unhandled backend reports through the Resend HTTPS API. The recipient address and API key stay on the backend and are never returned to Flutter.
 
 ```text
-EASTAPP_ERROR_REPORT_ENABLED=true
-EASTAPP_RESEND_API_KEY=<Resend API key>
-EASTAPP_ERROR_REPORT_RECIPIENT=<private recipient address>
-EASTAPP_ERROR_REPORT_FROM=Flow <onboarding@resend.dev>
+FLOW_ERROR_REPORT_ENABLED=true
+FLOW_RESEND_API_KEY=<Resend API key>
+FLOW_ERROR_REPORT_RECIPIENT=<private recipient address>
+FLOW_ERROR_REPORT_FROM=Flow <onboarding@resend.dev>
 ```
 
-Use `onboarding@resend.dev` while testing with the Resend account owner address. Use a sender on a verified Resend domain when sending to other recipients. `EASTAPP_RESEND_API_URL` and `EASTAPP_ERROR_REPORT_DUPLICATE_WINDOW_SECONDS` are optional.
+Use `onboarding@resend.dev` while testing with the Resend account owner address. Use a sender on a verified Resend domain when sending to other recipients. `FLOW_RESEND_API_URL` and `FLOW_ERROR_REPORT_DUPLICATE_WINDOW_SECONDS` are optional.
 
 ### Home data
 
@@ -201,7 +201,7 @@ From the repository root:
 
 The script:
 
-1. Reads `EASTAPP_DATABASE_RESET_ON_START` and defaults it to `false`
+1. Reads `FLOW_DATABASE_RESET_ON_START` and defaults it to `false`
 2. Starts PostgreSQL 18
 3. Resets the database only when both independent reset gates are `true`
 4. Starts Spring Boot
@@ -210,7 +210,7 @@ The script:
 To request a reset, use the same script:
 
 ```bash
-EASTAPP_DATABASE_RESET_ON_START=true ./scripts/run-local.sh
+FLOW_DATABASE_RESET_ON_START=true ./scripts/run-local.sh
 ```
 
 There is no repair step. When reset is not approved, Flyway checksum validation is skipped and the existing database is preserved.
@@ -290,7 +290,7 @@ It contains requests for:
 - Home Stock activity and review summary
 - Knowledge SOPs
 
-The Login request stores `eastappToken` automatically for authenticated requests.
+The Login request stores `flowToken` automatically for authenticated requests.
 
 ## Authentication
 
@@ -341,7 +341,7 @@ No Redis or general backend data cache is added at this stage.
 Flow `v106` protects destructive database reset with two independent gates. `flyway.clean()` can run only when **both** are true:
 
 1. Code gate: `DATABASE_RESET_ALLOWED_BY_CODE`
-2. Environment gate: `EASTAPP_DATABASE_RESET_ON_START`
+2. Environment gate: `FLOW_DATABASE_RESET_ON_START`
 
 Current code gate in this package:
 
@@ -351,7 +351,7 @@ DATABASE_RESET_ALLOWED_BY_CODE=true
 
 Truth table:
 
-| Code gate | EASTAPP_DATABASE_RESET_ON_START | Reset |
+| Code gate | FLOW_DATABASE_RESET_ON_START | Reset |
 |---|---|---|
 | false | false | No |
 | false | true | No |
@@ -369,13 +369,13 @@ Normal local start, preserving all database data:
 Without an environment value, `run-local.sh` defaults to:
 
 ```text
-EASTAPP_DATABASE_RESET_ON_START=false
+FLOW_DATABASE_RESET_ON_START=false
 ```
 
 Local reset request using the same script:
 
 ```bash
-EASTAPP_DATABASE_RESET_ON_START=true ./scripts/run-local.sh
+FLOW_DATABASE_RESET_ON_START=true ./scripts/run-local.sh
 ```
 
 The script never deletes the PostgreSQL Docker volume directly. The backend resets only when the code gate is also `true`. Otherwise it preserves the database and skips checksum validation. Flyway repair is never run.
@@ -385,7 +385,7 @@ The script never deletes the PostgreSQL Docker volume directly. The backend rese
 Keep the existing Railway variable:
 
 ```text
-EASTAPP_DATABASE_RESET_ON_START=false
+FLOW_DATABASE_RESET_ON_START=false
 ```
 
 For a deliberate Railway reset, the source-code gate and Railway variable must both be `true`. Return the Railway variable to `false` after the reset deployment.
@@ -406,14 +406,14 @@ Core Railway settings:
 ```text
 RAILPACK_JDK_VERSION=25
 SPRING_DOCKER_COMPOSE_ENABLED=false
-EASTAPP_DATABASE_RESET_ON_START=false
-EASTAPP_TRANSLATION_PROVIDER_ENABLED=true
-EASTAPP_CLOUDFLARE_ACCOUNT_ID=<Cloudflare account ID>
-EASTAPP_CLOUDFLARE_API_TOKEN=<Workers AI token>
-EASTAPP_ERROR_REPORT_ENABLED=true
-EASTAPP_RESEND_API_KEY=<Resend API key>
-EASTAPP_ERROR_REPORT_RECIPIENT=<private recipient address>
-EASTAPP_ERROR_REPORT_FROM=Flow <onboarding@resend.dev>
+FLOW_DATABASE_RESET_ON_START=false
+FLOW_TRANSLATION_PROVIDER_ENABLED=true
+FLOW_CLOUDFLARE_ACCOUNT_ID=<Cloudflare account ID>
+FLOW_CLOUDFLARE_API_TOKEN=<Workers AI token>
+FLOW_ERROR_REPORT_ENABLED=true
+FLOW_RESEND_API_KEY=<Resend API key>
+FLOW_ERROR_REPORT_RECIPIENT=<private recipient address>
+FLOW_ERROR_REPORT_FROM=Flow <onboarding@resend.dev>
 ```
 
 Datasource variables should reference the Railway PostgreSQL service:
@@ -502,7 +502,7 @@ The clean V1 baseline includes the tenant-scoped reporting workflow used by the 
 Configuration:
 
 ```yaml
-eastapp:
+flow:
   reports:
     time-zone: Asia/Kuala_Lumpur
     daily-photo-minimum: 5

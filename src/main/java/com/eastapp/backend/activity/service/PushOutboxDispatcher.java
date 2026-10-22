@@ -32,7 +32,7 @@ public class PushOutboxDispatcher {
         this.errorReportService = errorReportService;
     }
 
-    @Scheduled(fixedDelayString = "${eastapp.notifications.dispatch-delay-ms:5000}")
+    @Scheduled(fixedDelayString = "${flow.notifications.dispatch-delay-ms:5000}")
     @Transactional
     public void dispatch() {
         try {

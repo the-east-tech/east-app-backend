@@ -240,8 +240,8 @@ class TranslationServiceTests {
                 UUID.randomUUID(),
                 "E0001",
                 "Owner",
-                "EAST",
-                "The East",
+                "FLOW",
+                "Flow Demo",
                 SystemRole.OWNER
         );
     }

@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "eastapp.translation")
+@ConfigurationProperties(prefix = "flow.translation")
 public class TranslationProperties {
 
     private boolean providerEnabled;

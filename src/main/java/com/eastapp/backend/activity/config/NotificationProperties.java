@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "eastapp.notifications")
+@ConfigurationProperties(prefix = "flow.notifications")
 public class NotificationProperties {
     private boolean pushEnabled;
     private String firebaseProjectId = "";

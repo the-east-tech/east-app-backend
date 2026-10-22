@@ -49,8 +49,8 @@ public class BusinessCleanupController {
                 .contentType(ZIP)
                 .contentLength(backup.bytes().length)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + backup.fileName() + "\"")
-                .header("X-EastApp-Cleanup-Run-Id", backup.runId().toString())
-                .header("X-EastApp-Backup-SHA256", backup.sha256())
+                .header("X-Flow-Cleanup-Run-Id", backup.runId().toString())
+                .header("X-Flow-Backup-SHA256", backup.sha256())
                 .body(backup.bytes());
     }
 

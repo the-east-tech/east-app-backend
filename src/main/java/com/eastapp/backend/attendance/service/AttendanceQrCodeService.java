@@ -26,7 +26,7 @@ import java.util.UUID;
 
 @Service
 public class AttendanceQrCodeService {
-    private static final String PREFIX = "EASTAPP_ATTENDANCE";
+    private static final String PREFIX = "FLOW_ATTENDANCE";
     private static final Duration VALIDITY = Duration.ofMinutes(30);
     private static final int MAX_ACTIVE_PER_TYPE = 3;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();

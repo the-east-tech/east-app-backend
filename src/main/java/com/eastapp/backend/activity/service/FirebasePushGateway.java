@@ -27,7 +27,7 @@ import java.nio.charset.StandardCharsets;
 public class FirebasePushGateway {
     public enum Result { SENT, INVALID_TOKEN, RETRYABLE_FAILURE }
 
-    private static final String APP_NAME = "eastapp-notifications";
+    private static final String APP_NAME = "flow-notifications";
 
     private final NotificationProperties properties;
     private final ErrorReportService errorReportService;

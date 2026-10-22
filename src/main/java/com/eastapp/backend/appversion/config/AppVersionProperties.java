@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "eastapp.app-version")
+@ConfigurationProperties(prefix = "flow.app-version")
 public class AppVersionProperties {
     private Release android = new Release();
     private Release ios = new Release();
@@ -32,7 +32,7 @@ public class AppVersionProperties {
 
     public static class Release {
         private String latestVersion = "1.0.0";
-        private long latestBuildNumber = 6;
+        private long latestBuildNumber = 7;
         private String updateUrl = "";
 
         public String getLatestVersion() {

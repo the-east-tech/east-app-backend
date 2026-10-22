@@ -81,8 +81,8 @@ class RolePermissionPolicyTests {
                 UUID.randomUUID(),
                 "EMP001",
                 "Manager",
-                "EAST",
-                "The East",
+                "FLOW",
+                "Flow Demo",
                 SystemRole.MANAGER
         );
 

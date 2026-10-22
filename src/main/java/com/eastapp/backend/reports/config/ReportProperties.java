@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 import java.time.ZoneId;
 
 @Component
-@ConfigurationProperties(prefix = "eastapp.reports")
+@ConfigurationProperties(prefix = "flow.reports")
 public class ReportProperties {
     private String timeZone = "Asia/Kuala_Lumpur";
     private int dailyPhotoMinimum = 5;

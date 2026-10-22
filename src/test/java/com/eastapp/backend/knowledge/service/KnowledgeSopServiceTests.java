@@ -337,8 +337,8 @@ class KnowledgeSopServiceTests {
                 UUID.randomUUID(),
                 "E0001",
                 "Manager",
-                "EAST",
-                "The East",
+                "FLOW",
+                "Flow Demo",
                 SystemRole.MANAGER
         );
     }

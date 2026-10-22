@@ -138,8 +138,8 @@ class KnowledgeSopAuditServiceTests {
                 UUID.randomUUID(),
                 "EMP001",
                 "Employee",
-                "EAST",
-                "The East",
+                "FLOW",
+                "Flow Demo",
                 systemRole
         );
     }
