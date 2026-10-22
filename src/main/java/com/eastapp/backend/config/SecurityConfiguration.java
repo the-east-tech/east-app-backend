@@ -1,5 +1,7 @@
 package com.eastapp.backend.config;
 
+import com.eastapp.backend.appversion.AppBuildEnforcementFilter;
+import com.eastapp.backend.appversion.config.AppVersionProperties;
 import com.eastapp.backend.auth.security.ApiAccessDeniedHandler;
 import com.eastapp.backend.auth.security.ApiAuthenticationEntryPoint;
 import com.eastapp.backend.auth.service.AuthenticationService;
@@ -46,7 +48,10 @@ public class SecurityConfiguration {
         configuration.setAllowedHeaders(List.of(
                 "Accept",
                 "Authorization",
-                "Content-Type"
+                "Content-Type",
+                AppBuildEnforcementFilter.APP_VERSION_HEADER,
+                AppBuildEnforcementFilter.APP_BUILD_HEADER,
+                AppBuildEnforcementFilter.APP_PLATFORM_HEADER
         ));
 
         var source = new UrlBasedCorsConfigurationSource();
@@ -60,7 +65,8 @@ public class SecurityConfiguration {
             AuthenticationService authenticationService,
             ApiAuthenticationEntryPoint authenticationEntryPoint,
             ApiAccessDeniedHandler accessDeniedHandler,
-            CorsConfigurationSource corsConfigurationSource
+            CorsConfigurationSource corsConfigurationSource,
+            AppVersionProperties appVersionProperties
     ) throws Exception {
         return http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
@@ -89,8 +95,12 @@ public class SecurityConfiguration {
                         UsernamePasswordAuthenticationFilter.class
                 )
                 .addFilterBefore(
-                        new RequestLoggingFilter(),
+                        new AppBuildEnforcementFilter(appVersionProperties),
                         OpaqueSessionAuthenticationFilter.class
+                )
+                .addFilterBefore(
+                        new RequestLoggingFilter(),
+                        AppBuildEnforcementFilter.class
                 )
                 .build();
     }
