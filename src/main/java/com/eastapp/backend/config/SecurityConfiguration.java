@@ -78,6 +78,7 @@ public class SecurityConfiguration {
                         .requestMatchers(
                                 "/actuator/health/**",
                                 "/api/v1/auth/login",
+                                "/api/v1/app-version/**",
                                 "/api/v1/setup/**",
                                 "/stitch-gadget",
                                 "/stitch-gadget/**"
