@@ -20,6 +20,7 @@ public class AppBuildEnforcementFilter extends OncePerRequestFilter {
     public static final String APP_PLATFORM_HEADER = "X-Flow-App-Platform";
 
     private static final String POLICY_PATH = "/api/v1/app-version/policy";
+    private static final String ERROR_REPORT_PATH = "/api/v1/support/error-reports";
     private static final String UPDATE_REQUIRED_RESPONSE = """
             {"code":"APP_UPDATE_REQUIRED","message":"Update Flow to the latest version to continue."}
             """;
@@ -35,6 +36,7 @@ public class AppBuildEnforcementFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return !path.startsWith("/api/")
                 || POLICY_PATH.equals(path)
+                || ERROR_REPORT_PATH.equals(path)
                 || "OPTIONS".equalsIgnoreCase(request.getMethod());
     }
 
