@@ -10,7 +10,7 @@
     </parent>
     <groupId>com.sequosal</groupId>
     <artifactId>flow-backend</artifactId>
-    <version>0.0.171-SNAPSHOT</version>
+    <version>0.0.172-SNAPSHOT</version>
     <name>Flow backend</name>
     <description>Flow operations backend</description>
     <url/>
