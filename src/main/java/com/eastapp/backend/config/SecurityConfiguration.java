@@ -85,9 +85,7 @@ public class SecurityConfiguration {
                                 "/actuator/health/**",
                                 "/api/v1/auth/login",
                                 "/api/v1/app-version/**",
-                                "/api/v1/setup/**",
-                                "/stitch-gadget",
-                                "/stitch-gadget/**"
+                                "/api/v1/setup/**"
                         ).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(
